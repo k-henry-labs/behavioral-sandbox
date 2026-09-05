@@ -190,7 +190,8 @@ pub(crate) fn settings(app: &App) -> Element<'_, Message> {
                 Message::SetTheme
             )
             .text_size(BODY)
-            .width(Length::Fixed(240.0))
+            .width(Length::Fixed(254.0))
+            .padding(PICK)
             .menu_height(Length::Fixed(MENU))
             .menu_style(picker_menu)
             .style(picker),
@@ -205,7 +206,8 @@ pub(crate) fn settings(app: &App) -> Element<'_, Message> {
                 Message::SetScale
             )
             .text_size(BODY)
-            .width(Length::Fixed(240.0))
+            .width(Length::Fixed(254.0))
+            .padding(PICK)
             .menu_style(picker_menu)
             .style(picker),
         ]
@@ -226,7 +228,8 @@ pub(crate) fn settings(app: &App) -> Element<'_, Message> {
             text("open on").size(BODY).width(LABEL),
             pick_list(&crate::OPENS[..], Some(app.opens_on), Message::SetOpensOn)
                 .text_size(BODY)
-                .width(Length::Fixed(240.0))
+                .width(Length::Fixed(254.0))
+                .padding(PICK)
                 .menu_style(picker_menu)
                 .style(picker),
         ]
@@ -289,6 +292,15 @@ const FLOAT: iced::Shadow = iced::Shadow {
 };
 /// An open picker menu's height: enough for eight rows, short of any window edge.
 const MENU: f32 = 360.0;
+
+/// The pickers' padding: the default, with the right side also clearing the open menu's
+/// scroller, which floats over the rows and is not reachable through the picker to restyle.
+const PICK: iced::Padding = iced::Padding {
+    top: 5.0,
+    bottom: 5.0,
+    right: 24.0,
+    left: 10.0,
+};
 
 /// The one call to action on a screen: solid in the palette's primary, dimmed under the pointer.
 fn primary(theme: &iced::Theme, status: button::Status) -> button::Style {
