@@ -10,7 +10,7 @@
   <p>
     <a href="https://github.com/kendricklawton/behavioral-sandbox/actions/workflows/ci.yml"><img src="https://github.com/kendricklawton/behavioral-sandbox/actions/workflows/ci.yml/badge.svg" alt="build status" /></a>
     <img src="https://img.shields.io/badge/status-pre--release-orange.svg" alt="pre-release" />
-    <img src="https://img.shields.io/badge/rustc-1.97%2B-green.svg" alt="supported rustc 1.97+" />
+    <img src="https://img.shields.io/badge/rustc-1.98%2B-green.svg" alt="supported rustc 1.98+" />
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="Apache-2.0" /></a>
   </p>
 

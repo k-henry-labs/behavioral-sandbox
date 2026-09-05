@@ -27,7 +27,7 @@ edition = "2024"
 # toolchain pinned in `rust-toolchain.toml`, so local, CI, and this floor are one Rust version and a
 # lint can't pass locally yet fail CI. The project tracks current stable with deliberate bumps (no
 # back-support burden this early), never incidental drift; a support window is revisited at v0.1.0.
-rust-version = "1.97"
+rust-version = "1.98"
 license = "Apache-2.0"
 authors = ["Kendrick Lawton"]
 repository = "https://github.com/kendricklawton/behavioral-sandbox"
