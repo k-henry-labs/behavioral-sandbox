@@ -141,7 +141,7 @@ fn tilde(home: Option<&str>, path: &std::path::Path) -> String {
     }
 }
 
-/// The notebook's own knobs. One section today; a later knob is a later heading block.
+/// The notebook's own knobs, one heading block per area; a later knob joins its block.
 pub(crate) fn settings(app: &App) -> Element<'_, Message> {
     let bar = row![
         button(text("← menu")).style(ghost).on_press(Message::Menu),
@@ -165,6 +165,19 @@ pub(crate) fn settings(app: &App) -> Element<'_, Message> {
         ]
         .spacing(10)
         .align_y(iced::alignment::Vertical::Center),
+        row![
+            text("scale").size(BODY).width(LABEL),
+            pick_list(
+                &crate::SCALES[..],
+                Some(crate::Scale(app.scale)),
+                Message::SetScale
+            )
+            .text_size(BODY)
+            .width(Length::Fixed(240.0))
+            .menu_style(picker_menu),
+        ]
+        .spacing(10)
+        .align_y(iced::alignment::Vertical::Center),
     ]
     .spacing(8);
     if app.theme_overridden {
@@ -174,9 +187,27 @@ pub(crate) fn settings(app: &App) -> Element<'_, Message> {
             SMALL,
         ));
     }
+    let startup = column![
+        heading("STARTUP"),
+        row![
+            text("open on").size(BODY).width(LABEL),
+            pick_list(&crate::OPENS[..], Some(app.opens_on), Message::SetOpensOn)
+                .text_size(BODY)
+                .width(Length::Fixed(240.0))
+                .menu_style(picker_menu),
+        ]
+        .spacing(10)
+        .align_y(iced::alignment::Vertical::Center),
+        muted_line(
+            "what a plain launch shows; --open and a named run outrank it".to_string(),
+            SMALL,
+        ),
+    ]
+    .spacing(8);
     let mut page = column![
         bar,
         container(appearance).style(card).padding(14).width(Fill),
+        container(startup).style(card).padding(14).width(Fill),
     ]
     .spacing(14)
     .padding(18);

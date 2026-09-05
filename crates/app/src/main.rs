@@ -113,6 +113,44 @@ impl OpenScreen {
             Self::Settings => Screen::Settings,
         }
     }
+
+    /// The screen a saved `open` line names, through the flag's own parser.
+    fn from_name(name: &str) -> Option<Self> {
+        <Self as clap::ValueEnum>::from_str(name, true).ok()
+    }
+}
+
+/// The flag's spelling, so the state file and `--open` share one grammar.
+impl std::fmt::Display for OpenScreen {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Menu => "menu",
+            Self::List => "list",
+            Self::New => "new",
+            Self::Settings => "settings",
+        })
+    }
+}
+
+/// The screens Settings offers a plain launch: the ones that need no run to name.
+const OPENS: [OpenScreen; 3] = [OpenScreen::Menu, OpenScreen::List, OpenScreen::New];
+
+/// An interface scale Settings offers, in percent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Scale(pub(crate) u16);
+
+impl std::fmt::Display for Scale {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}%", self.0)
+    }
+}
+
+/// The scales Settings offers.
+const SCALES: [Scale; 4] = [Scale(90), Scale(100), Scale(110), Scale(125)];
+
+/// Where a plain launch lands: the `--open` flag, else the saved pick, else the menu.
+fn landing(flag: Option<OpenScreen>, saved: Option<OpenScreen>) -> OpenScreen {
+    flag.or(saved).unwrap_or(OpenScreen::Menu)
 }
 
 fn main() -> ExitCode {
@@ -121,7 +159,8 @@ fn main() -> ExitCode {
     // answering it should not cost a GPU handle first.
     let asked = theme::asked_for(cli.theme.as_deref(), theme::from_env());
     let theme_overridden = asked.is_some();
-    let (theme, theme_note) = match theme::startup(asked.as_deref(), state::load().as_deref()) {
+    let saved = state::load();
+    let (theme, theme_note) = match theme::startup(asked.as_deref(), saved.theme.as_deref()) {
         Ok(pair) => pair,
         Err(why) => {
             eprintln!("bsx-app: {why}");
@@ -147,6 +186,8 @@ fn main() -> ExitCode {
     let log = cli.log.clone();
     let exit_with_lease = cli.exit_with_lease;
     let open = cli.open;
+    let scale = saved.scale.unwrap_or(100);
+    let opens_on = saved.open.as_deref().and_then(OpenScreen::from_name);
     let boot = move || {
         let mut app = App::new(
             store.clone(),
@@ -157,11 +198,13 @@ fn main() -> ExitCode {
         );
         app.theme = theme.clone();
         app.theme_overridden = theme_overridden;
+        app.scale = scale;
+        app.opens_on = opens_on.unwrap_or(OpenScreen::Menu);
         if app.status.is_none() {
             app.status = theme_note.clone();
         }
-        if let Some(open) = open {
-            app.set_screen(open.screen());
+        if opening.is_none() {
+            app.set_screen(landing(open, opens_on).screen());
         }
         app
     };
@@ -169,6 +212,7 @@ fn main() -> ExitCode {
         .subscription(App::subscription)
         .title(|app: &App| app.title())
         .theme(|app: &App| app.theme.clone())
+        .scale_factor(|app: &App| f32::from(app.scale) / 100.0)
         .window_size(Size::new(1100.0, 720.0))
         .run();
     match ran {
@@ -402,6 +446,10 @@ pub(crate) enum Message {
     Keyboard(iced::keyboard::Event),
     /// Draw in this palette from now on, and remember it.
     SetTheme(iced::Theme),
+    /// Draw at this scale from now on, and remember it.
+    SetScale(Scale),
+    /// Open the next plain launch on this screen, and remember it.
+    SetOpensOn(OpenScreen),
     NewRun,
     Field(Field, String),
     Switch(Switch, bool),
@@ -465,6 +513,10 @@ pub(crate) struct App {
     theme: iced::Theme,
     /// Whether --theme or $BSX_THEME set it, which outranks a pick at the next launch.
     theme_overridden: bool,
+    /// The interface scale in percent; Settings changes it live.
+    scale: u16,
+    /// The screen a plain launch opens on: the saved pick Settings shows and writes.
+    opens_on: OpenScreen,
     /// Whether the list is asking "really clear the history?". Leaving the list disarms it.
     confirm_clear: bool,
 }
@@ -502,6 +554,8 @@ impl App {
             exit_with_lease,
             theme: theme::default_theme(),
             theme_overridden: false,
+            scale: 100,
+            opens_on: OpenScreen::Menu,
             confirm_clear: false,
         };
         app.refresh();
@@ -660,6 +714,15 @@ impl App {
         self.forget_unwatched();
     }
 
+    /// What Settings persists, gathered whole so every save writes every knob.
+    fn saved(&self) -> state::Saved {
+        state::Saved {
+            theme: Some(self.theme.to_string()),
+            scale: Some(self.scale),
+            open: Some(self.opens_on.to_string()),
+        }
+    }
+
     /// Drops what was mapped for a run this window no longer leases, so a display left behind
     /// does not keep its memfd, its input session or its history alive.
     fn forget_unwatched(&mut self) {
@@ -711,12 +774,31 @@ impl App {
             }
             Message::SetTheme(theme) => {
                 self.theme = theme;
-                self.status = match state::save(&self.theme) {
+                self.status = match state::save(&self.saved()) {
                     Ok(()) => Some(format!("drawing in {}", self.theme)),
                     Err(e) => Some(format!(
                         "drawing in {} for this window; not saved: {e}",
                         self.theme
                     )),
+                };
+                Task::none()
+            }
+            Message::SetScale(Scale(pct)) => {
+                self.scale = pct;
+                self.status = match state::save(&self.saved()) {
+                    Ok(()) => Some(format!("drawn at {}", Scale(pct))),
+                    Err(e) => Some(format!(
+                        "drawn at {} for this window; not saved: {e}",
+                        Scale(pct)
+                    )),
+                };
+                Task::none()
+            }
+            Message::SetOpensOn(open) => {
+                self.opens_on = open;
+                self.status = match state::save(&self.saved()) {
+                    Ok(()) => Some(format!("a plain launch now opens on the {open} screen")),
+                    Err(e) => Some(format!("not saved: {e}")),
                 };
                 Task::none()
             }
@@ -1181,6 +1263,43 @@ mod tests {
         assert_eq!(app.screen, Screen::Menu, "nothing asked, so the menu");
         let app = App::new(store, Some("opened".to_string()), None, sinks, false);
         assert_eq!(app.screen, Screen::Run(RunId::of(&record)));
+    }
+
+    /// A saved `open` line is spelled exactly as the flag spells it, and parses back through the
+    /// flag's own parser, so the state file and `--open` share one grammar.
+    #[test]
+    fn the_open_names_share_the_flag_grammar() {
+        for open in [
+            OpenScreen::Menu,
+            OpenScreen::List,
+            OpenScreen::New,
+            OpenScreen::Settings,
+        ] {
+            let flag = clap::ValueEnum::to_possible_value(&open).expect("every screen is a value");
+            assert_eq!(open.to_string(), flag.get_name(), "one spelling");
+            assert_eq!(OpenScreen::from_name(&open.to_string()), Some(open));
+        }
+        assert_eq!(OpenScreen::from_name("nowhere"), None);
+    }
+
+    #[test]
+    fn a_scale_is_spelled_in_percent() {
+        assert_eq!(Scale(110).to_string(), "110%");
+    }
+
+    #[test]
+    fn a_plain_launch_lands_on_the_flag_then_the_saved_pick() {
+        assert_eq!(
+            landing(Some(OpenScreen::List), Some(OpenScreen::New)),
+            OpenScreen::List,
+            "the flag wins"
+        );
+        assert_eq!(
+            landing(None, Some(OpenScreen::New)),
+            OpenScreen::New,
+            "else the saved pick"
+        );
+        assert_eq!(landing(None, None), OpenScreen::Menu);
     }
 
     /// Every screen the flag can name maps to itself, so `--open list` is the list.
