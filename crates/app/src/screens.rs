@@ -192,7 +192,8 @@ pub(crate) fn settings(app: &App) -> Element<'_, Message> {
             .text_size(BODY)
             .width(Length::Fixed(240.0))
             .menu_height(Length::Fixed(MENU))
-            .menu_style(picker_menu),
+            .menu_style(picker_menu)
+            .style(picker),
         ]
         .spacing(10)
         .align_y(iced::alignment::Vertical::Center),
@@ -205,7 +206,8 @@ pub(crate) fn settings(app: &App) -> Element<'_, Message> {
             )
             .text_size(BODY)
             .width(Length::Fixed(240.0))
-            .menu_style(picker_menu),
+            .menu_style(picker_menu)
+            .style(picker),
         ]
         .spacing(10)
         .align_y(iced::alignment::Vertical::Center),
@@ -225,7 +227,8 @@ pub(crate) fn settings(app: &App) -> Element<'_, Message> {
             pick_list(&crate::OPENS[..], Some(app.opens_on), Message::SetOpensOn)
                 .text_size(BODY)
                 .width(Length::Fixed(240.0))
-                .menu_style(picker_menu),
+                .menu_style(picker_menu)
+                .style(picker),
         ]
         .spacing(10)
         .align_y(iced::alignment::Vertical::Center),
@@ -251,9 +254,39 @@ pub(crate) fn settings(app: &App) -> Element<'_, Message> {
         .into()
 }
 
-/// The corner an action takes; a surface takes [`CARD_RADIUS`].
-const RADIUS: f32 = 0.0;
-const CARD_RADIUS: f32 = 8.0;
+/// The corner an action takes; a surface takes [`CARD_RADIUS`], a field [`FIELD_RADIUS`].
+const RADIUS: f32 = 10.0;
+const CARD_RADIUS: f32 = 12.0;
+const FIELD_RADIUS: f32 = 8.0;
+
+/// The hairline every surface is held by: the palette's own text at a tenth, so it reads as an
+/// edge catching light on any theme.
+fn hairline(theme: &iced::Theme) -> iced::Color {
+    theme
+        .extended_palette()
+        .background
+        .base
+        .text
+        .scale_alpha(0.1)
+}
+
+/// The soft shadow that lifts a surface off the page; a floating layer takes a deeper one.
+const LIFT: iced::Shadow = iced::Shadow {
+    color: iced::Color {
+        a: 0.12,
+        ..iced::Color::BLACK
+    },
+    offset: iced::Vector::new(0.0, 2.0),
+    blur_radius: 8.0,
+};
+const FLOAT: iced::Shadow = iced::Shadow {
+    color: iced::Color {
+        a: 0.25,
+        ..iced::Color::BLACK
+    },
+    offset: iced::Vector::new(0.0, 8.0),
+    blur_radius: 24.0,
+};
 /// An open picker menu's height: enough for eight rows, short of any window edge.
 const MENU: f32 = 360.0;
 
@@ -277,7 +310,7 @@ fn secondary(theme: &iced::Theme, status: button::Status) -> button::Style {
     role(
         surface.color,
         palette.background.base.text,
-        palette.background.weak.color,
+        hairline(theme),
         status,
     )
 }
@@ -328,14 +361,14 @@ fn picker_menu(theme: &iced::Theme) -> iced::widget::overlay::menu::Style {
     iced::widget::overlay::menu::Style {
         background: iced::Background::Color(palette.background.weakest.color),
         border: iced::Border {
-            color: palette.background.weak.color,
+            color: hairline(theme),
             width: 1.0,
             radius: CARD_RADIUS.into(),
         },
         text_color: palette.background.base.text,
         selected_text_color: palette.primary.base.text,
         selected_background: iced::Background::Color(palette.primary.base.color),
-        shadow: iced::Shadow::default(),
+        shadow: FLOAT,
     }
 }
 
@@ -345,12 +378,27 @@ fn card(theme: &iced::Theme) -> container::Style {
     container::Style {
         background: Some(iced::Background::Color(palette.background.weakest.color)),
         border: iced::Border {
-            color: palette.background.weak.color,
+            color: hairline(theme),
             width: 1.0,
             radius: CARD_RADIUS.into(),
         },
+        shadow: LIFT,
         ..container::Style::default()
     }
+}
+
+/// A text entry as macOS draws one: the default look on a rounded corner.
+fn entry(theme: &iced::Theme, status: text_input::Status) -> text_input::Style {
+    let mut style = text_input::default(theme, status);
+    style.border.radius = FIELD_RADIUS.into();
+    style
+}
+
+/// A closed picker, shaped like [`entry`].
+fn picker(theme: &iced::Theme, status: pick_list::Status) -> pick_list::Style {
+    let mut style = pick_list::default(theme, status);
+    style.border.radius = FIELD_RADIUS.into();
+    style
 }
 
 /// The notebook: what is running, then what has run.
@@ -869,6 +917,7 @@ pub(crate) fn new_run<'a>(app: &'a App, form: &'a Form) -> Element<'a, Message> 
         row![
             text(label).width(Length::Fixed(90.0)),
             text_input("", value)
+                .style(entry)
                 .on_input(move |v| Message::Field(which, v))
                 .font(MONO)
                 .width(Fill),
@@ -938,6 +987,7 @@ pub(crate) fn new_run<'a>(app: &'a App, form: &'a Form) -> Element<'a, Message> 
         row![
             switch("display", form.display, Switch::Display),
             text_input("640x480", &form.display_size)
+                .style(entry)
                 .on_input(|v| Message::Field(Field::DisplaySize, v))
                 .font(MONO)
                 .width(Length::Fixed(140.0)),
