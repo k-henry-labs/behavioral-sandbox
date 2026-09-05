@@ -83,51 +83,101 @@ fn lane() -> scrollable::Direction {
     )
 }
 
-/// The door: what to do next, and whether this machine is set up to do it.
-pub(crate) fn menu(app: &App) -> Element<'_, Message> {
+/// The window's own furniture: the sidebar on the left, the open screen beside it.
+pub(crate) fn chrome<'a>(app: &'a App, content: Element<'a, Message>) -> Element<'a, Message> {
+    row![sidebar(app), content].into()
+}
+
+/// The sidebar: where this machine's sandboxes are reached, and what it found to run them with.
+fn sidebar(app: &App) -> Element<'_, Message> {
     let running = app.runs.iter().filter(|r| app.is_live(r)).count();
-    let past = app.runs.len() - running;
-    let actions = column![
-        button(text("New run").size(TITLE).width(Fill).center())
-            .style(primary)
-            .width(Fill)
-            .padding([10, 14])
-            .on_press(Message::NewRun),
-        button(
-            text(format!("Sandboxes · {running} running · {past} past"))
-                .size(TITLE)
-                .width(Fill)
-                .center(),
-        )
-        .style(secondary)
-        .width(Fill)
-        .padding([10, 14])
-        .on_press(Message::List),
-        button(text("Settings").size(TITLE).width(Fill).center())
-            .style(secondary)
-            .width(Fill)
-            .padding([10, 14])
-            .on_press(Message::Settings),
+    let on_list = matches!(app.screen, crate::Screen::List | crate::Screen::Run(_));
+    let nav = column![
+        tab(
+            "Sandboxes",
+            (running > 0).then(|| running.to_string()),
+            on_list,
+            Message::List,
+        ),
+        tab(
+            "New run",
+            None,
+            app.screen == crate::Screen::New,
+            Message::NewRun
+        ),
+        tab(
+            "Settings",
+            None,
+            app.screen == crate::Screen::Settings,
+            Message::Settings,
+        ),
     ]
-    .spacing(10)
-    .width(Length::Fixed(300.0));
-    let mut page = column![
-        text("BSX").font(NAME).size(32),
-        muted_line("sandboxes on this machine".to_string(), BODY),
-        muted_line(format!("version {}", env!("CARGO_PKG_VERSION")), SMALL),
-        space().height(22),
-        actions,
-        space().height(22),
-        muted_line(bsx_line(app), SMALL),
-        muted_line(root_line(app), SMALL),
-    ]
-    .spacing(6)
-    .align_x(iced::alignment::Horizontal::Center);
-    if let Some(status) = &app.status {
-        page = page.push(space().height(10));
-        page = page.push(text(status).size(BODY));
+    .spacing(2);
+    container(
+        column![
+            text("BSX").font(NAME).size(20),
+            muted_line(format!("version {}", env!("CARGO_PKG_VERSION")), SMALL),
+            space().height(14),
+            nav,
+        ]
+        .spacing(4)
+        .height(Fill),
+    )
+    .style(rail)
+    .width(Length::Fixed(SIDEBAR))
+    .height(Fill)
+    .padding(14)
+    .into()
+}
+
+/// One sidebar tab: its name, an optional count, and the pill it wears while its screen is open.
+fn tab<'a>(
+    label: &'a str,
+    count: Option<String>,
+    open: bool,
+    message: Message,
+) -> Element<'a, Message> {
+    let mut line = row![text(label).size(BODY)].spacing(8);
+    line = line.push(space().width(Fill));
+    if let Some(count) = count {
+        line = line.push(text(count).size(SMALL).style(|t| text::Style {
+            color: Some(muted(t)),
+        }));
     }
-    container(page.max_width(PAGE)).center(Fill).into()
+    button(line.align_y(iced::alignment::Vertical::Center))
+        .style(move |t, s| if open { selected_tab(t) } else { ghost(t, s) })
+        .width(Fill)
+        .padding([7, 10])
+        .on_press(message)
+        .into()
+}
+
+/// The pill under the open screen's tab: the sidebar's own fill, no accent, as a source list draws it.
+fn selected_tab(theme: &iced::Theme) -> button::Style {
+    let palette = theme.extended_palette();
+    button::Style {
+        background: Some(iced::Background::Color(palette.background.strong.color)),
+        text_color: palette.background.base.text,
+        border: iced::Border {
+            radius: FIELD_RADIUS.into(),
+            ..iced::Border::default()
+        },
+        ..button::Style::default()
+    }
+}
+
+/// The sidebar's surface: a shade off the page, parted from it by one hairline.
+fn rail(theme: &iced::Theme) -> container::Style {
+    let palette = theme.extended_palette();
+    container::Style {
+        background: Some(iced::Background::Color(palette.background.weak.color)),
+        border: iced::Border {
+            color: hairline(theme),
+            width: 1.0,
+            ..iced::Border::default()
+        },
+        ..container::Style::default()
+    }
 }
 
 /// One muted line of prose, the menu's quiet register.
@@ -174,12 +224,7 @@ fn tilde(home: Option<&str>, path: &std::path::Path) -> String {
 
 /// The notebook's own knobs, one heading block per area; a later knob joins its block.
 pub(crate) fn settings(app: &App) -> Element<'_, Message> {
-    let bar = row![
-        button(text("← menu")).style(ghost).on_press(Message::Menu),
-        text("Settings").size(18),
-    ]
-    .spacing(12)
-    .align_y(iced::alignment::Vertical::Center);
+    let bar = row![text("Settings").size(18)];
     let mut appearance = column![
         heading("APPEARANCE"),
         row![
@@ -222,6 +267,12 @@ pub(crate) fn settings(app: &App) -> Element<'_, Message> {
             SMALL,
         ));
     }
+    let platform = column![
+        heading("THIS MACHINE"),
+        muted_line(bsx_line(app), SMALL),
+        muted_line(root_line(app), SMALL),
+    ]
+    .spacing(6);
     let startup = column![
         heading("STARTUP"),
         row![
@@ -245,6 +296,7 @@ pub(crate) fn settings(app: &App) -> Element<'_, Message> {
         bar,
         container(appearance).style(card).padding(14).width(Fill),
         container(startup).style(card).padding(14).width(Fill),
+        container(platform).style(card).padding(14).width(Fill),
     ]
     .spacing(14)
     .padding(18);
@@ -412,11 +464,7 @@ fn picker(theme: &iced::Theme, status: pick_list::Status) -> pick_list::Style {
 pub(crate) fn list(app: &App) -> Element<'_, Message> {
     let live: Vec<&Record> = app.runs.iter().filter(|r| app.is_live(r)).collect();
     let past: Vec<&Record> = app.runs.iter().filter(|r| !app.is_live(r)).collect();
-    let start = row![
-        button(text("← menu")).style(ghost).on_press(Message::Menu),
-        text("Sandboxes").size(18),
-        space().width(Fill),
-    ];
+    let start = row![text("Sandboxes").size(18), space().width(Fill)];
     let header = if app.confirm_clear {
         start.push(
             row![
@@ -493,6 +541,9 @@ pub(crate) fn list(app: &App) -> Element<'_, Message> {
 
 /// The width a page of cards stops at, in logical pixels.
 const PAGE: f32 = 1000.0;
+
+/// The sidebar's width: the nav labels plus their counts, and no more.
+const SIDEBAR: f32 = 190.0;
 
 /// The one heading style: small, muted and set apart, on a pane and on a section alike.
 fn heading(title: &str) -> Element<'_, Message> {

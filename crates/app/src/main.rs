@@ -97,7 +97,6 @@ struct Cli {
 /// The screens the command line can open on: every one that needs no run to name.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 enum OpenScreen {
-    Menu,
     List,
     New,
     Settings,
@@ -107,7 +106,6 @@ impl OpenScreen {
     /// The [`Screen`] this asks for: the one place the two enums meet.
     fn screen(self) -> Screen {
         match self {
-            Self::Menu => Screen::Menu,
             Self::List => Screen::List,
             Self::New => Screen::New,
             Self::Settings => Screen::Settings,
@@ -124,7 +122,6 @@ impl OpenScreen {
 impl std::fmt::Display for OpenScreen {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
-            Self::Menu => "menu",
             Self::List => "list",
             Self::New => "new",
             Self::Settings => "settings",
@@ -133,7 +130,7 @@ impl std::fmt::Display for OpenScreen {
 }
 
 /// The screens Settings offers a plain launch: the ones that need no run to name.
-const OPENS: [OpenScreen; 3] = [OpenScreen::Menu, OpenScreen::List, OpenScreen::New];
+const OPENS: [OpenScreen; 2] = [OpenScreen::List, OpenScreen::New];
 
 /// An interface scale Settings offers, in percent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -148,9 +145,9 @@ impl std::fmt::Display for Scale {
 /// The scales Settings offers.
 const SCALES: [Scale; 4] = [Scale(90), Scale(100), Scale(110), Scale(125)];
 
-/// Where a plain launch lands: the `--open` flag, else the saved pick, else the menu.
+/// Where a plain launch lands: the `--open` flag, else the saved pick, else the notebook.
 fn landing(flag: Option<OpenScreen>, saved: Option<OpenScreen>) -> OpenScreen {
-    flag.or(saved).unwrap_or(OpenScreen::Menu)
+    flag.or(saved).unwrap_or(OpenScreen::List)
 }
 
 fn main() -> ExitCode {
@@ -199,7 +196,7 @@ fn main() -> ExitCode {
         app.theme = theme.clone();
         app.theme_overridden = theme_overridden;
         app.scale = scale;
-        app.opens_on = opens_on.unwrap_or(OpenScreen::Menu);
+        app.opens_on = opens_on.unwrap_or(OpenScreen::List);
         if app.status.is_none() {
             app.status = theme_note.clone();
         }
@@ -278,8 +275,6 @@ impl std::fmt::Display for RunName {
 /// Which screen the window shows.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Screen {
-    /// The door: what to do, and whether this machine is set up to do it.
-    Menu,
     /// The notebook: every run, newest first.
     List,
     /// One run's record, by id.
@@ -439,7 +434,6 @@ pub(crate) enum Message {
     Tick,
     Open(RunId),
     Back,
-    Menu,
     List,
     Settings,
     /// A keyboard event every widget ignored: what the window's own chords read.
@@ -540,7 +534,7 @@ impl App {
     ) -> Self {
         let mut app = Self {
             store,
-            screen: Screen::Menu,
+            screen: Screen::List,
             runs: Vec::new(),
             live: BTreeSet::new(),
             platform: cli::Platform::default(),
@@ -555,7 +549,7 @@ impl App {
             theme: theme::default_theme(),
             theme_overridden: false,
             scale: 100,
-            opens_on: OpenScreen::Menu,
+            opens_on: OpenScreen::List,
             confirm_clear: false,
         };
         app.refresh();
@@ -576,7 +570,6 @@ impl App {
 
     fn title(&self) -> String {
         match &self.screen {
-            Screen::Menu => "BSX".to_string(),
             Screen::Settings => "BSX › settings".to_string(),
             Screen::List => "BSX › sandboxes".to_string(),
             Screen::New => "BSX › new run".to_string(),
@@ -680,7 +673,7 @@ impl App {
     fn watches(&self) -> Vec<lease::Watch> {
         let open = match &self.screen {
             Screen::Run(id) => self.record(id).map(RunName::of),
-            Screen::Menu | Screen::Settings => return Vec::new(),
+            Screen::Settings => return Vec::new(),
             Screen::List | Screen::New => None,
         };
         let mut watches = Vec::new();
@@ -749,12 +742,6 @@ impl App {
             Message::Back | Message::List => {
                 self.leave();
                 self.set_screen(Screen::List);
-                self.status = None;
-                Task::none()
-            }
-            Message::Menu => {
-                self.leave();
-                self.set_screen(Screen::Menu);
                 self.status = None;
                 Task::none()
             }
@@ -1001,13 +988,13 @@ impl App {
     }
 
     fn view(&self) -> Element<'_, Message> {
-        match &self.screen {
-            Screen::Menu => screens::menu(self),
+        let content = match &self.screen {
             Screen::Settings => screens::settings(self),
             Screen::List => screens::list(self),
             Screen::New => screens::new_run(self, &self.form),
             Screen::Run(id) => screens::run(self, id),
-        }
+        };
+        screens::chrome(self, content)
     }
 
     fn subscription(&self) -> Subscription<Message> {
@@ -1253,14 +1240,14 @@ mod tests {
 
     /// The window opens on the menu; naming a run on the command line skips straight to it.
     #[test]
-    fn the_window_opens_on_the_menu_and_a_deep_link_skips_it() {
+    fn the_window_opens_on_the_notebook_and_a_deep_link_skips_it() {
         let dir = bsx_test_support::ScratchDir::created("app-boot");
         let store = Store::at(dir.path().join("runs")).expect("a store");
         let record = displayed("opened", false);
         store.create(&record).expect("created");
         let sinks = Arc::new(frame::Sinks::open(None, None).expect("sinks"));
         let app = App::new(store.clone(), None, None, Arc::clone(&sinks), false);
-        assert_eq!(app.screen, Screen::Menu, "nothing asked, so the menu");
+        assert_eq!(app.screen, Screen::List, "nothing asked, so the notebook");
         let app = App::new(store, Some("opened".to_string()), None, sinks, false);
         assert_eq!(app.screen, Screen::Run(RunId::of(&record)));
     }
@@ -1269,12 +1256,7 @@ mod tests {
     /// flag's own parser, so the state file and `--open` share one grammar.
     #[test]
     fn the_open_names_share_the_flag_grammar() {
-        for open in [
-            OpenScreen::Menu,
-            OpenScreen::List,
-            OpenScreen::New,
-            OpenScreen::Settings,
-        ] {
+        for open in [OpenScreen::List, OpenScreen::New, OpenScreen::Settings] {
             let flag = clap::ValueEnum::to_possible_value(&open).expect("every screen is a value");
             assert_eq!(open.to_string(), flag.get_name(), "one spelling");
             assert_eq!(OpenScreen::from_name(&open.to_string()), Some(open));
@@ -1299,24 +1281,21 @@ mod tests {
             OpenScreen::New,
             "else the saved pick"
         );
-        assert_eq!(landing(None, None), OpenScreen::Menu);
+        assert_eq!(landing(None, None), OpenScreen::List);
     }
 
     /// Every screen the flag can name maps to itself, so `--open list` is the list.
     #[test]
     fn the_open_flag_maps_to_its_screens() {
-        assert_eq!(OpenScreen::Menu.screen(), Screen::Menu);
         assert_eq!(OpenScreen::List.screen(), Screen::List);
         assert_eq!(OpenScreen::New.screen(), Screen::New);
         assert_eq!(OpenScreen::Settings.screen(), Screen::Settings);
     }
 
-    /// The menu leases nothing: no thumbnail spins up before a screen asks for one.
+    /// Settings leases nothing: no thumbnail spins up behind a screen with no display on it.
     #[test]
-    fn the_menu_leases_no_displays() {
+    fn settings_leases_no_displays() {
         let mut app = app_with(vec![displayed("alpha", true)], &["alpha"]);
-        app.screen = Screen::Menu;
-        assert!(app.watches().is_empty(), "the menu asks for no leases");
         app.screen = Screen::Settings;
         assert!(app.watches().is_empty(), "settings asks for no leases");
     }
@@ -1371,7 +1350,7 @@ mod tests {
         assert_eq!(app.status.as_deref(), Some("removed 2 ended runs"));
 
         let _ = app.update(Message::ClearHistory);
-        app.set_screen(Screen::Menu);
+        app.set_screen(Screen::Settings);
         assert!(!app.confirm_clear, "leaving the list disarms");
         drop(listener);
         let _ = std::fs::remove_file(&sock);
