@@ -3,9 +3,9 @@
 //! - **A theme is a choice, not a restyling.** Every colour in `screens` comes from a semantic role
 //!   on the theme's extended palette (`success.base`, `background.strong.text`) and never from a
 //!   literal, so every theme the toolkit ships already works.
-//! - **The list is the toolkit's plus one.** [`all`] puts the app's own New York palette ahead
-//!   of `iced::Theme::ALL`, read from the toolkit, so a theme iced adds or drops cannot leave a
-//!   copy behind to drift.
+//! - **The list is the toolkit's plus two.** [`all`] puts the app's own macOS and New York
+//!   palettes ahead of `iced::Theme::ALL`, read from the toolkit, so a theme iced adds or drops
+//!   cannot leave a copy behind to drift.
 //! - **A name is refused, never guessed at.** A typo that silently fell back to the default would
 //!   read as "that theme looks like the old one".
 
@@ -13,7 +13,23 @@ use std::fmt::Write as _;
 
 /// What the notebook draws in when nothing asks otherwise.
 pub(crate) fn default_theme() -> iced::Theme {
-    new_york()
+    macos()
+}
+
+/// Apple's system palette, as the platform's own dialogs draw it: the gray window, near-black
+/// text, and the system blue, green, orange and red carrying the meanings they carry there.
+fn macos() -> iced::Theme {
+    iced::Theme::custom(
+        "macOS",
+        iced::theme::Palette {
+            background: iced::Color::from_rgb8(0xF5, 0xF5, 0xF7),
+            text: iced::Color::from_rgb8(0x1D, 0x1D, 0x1F),
+            primary: iced::Color::from_rgb8(0x00, 0x7A, 0xFF),
+            success: iced::Color::from_rgb8(0x34, 0xC7, 0x59),
+            warning: iced::Color::from_rgb8(0xFF, 0x95, 0x00),
+            danger: iced::Color::from_rgb8(0xFF, 0x3B, 0x30),
+        },
+    )
 }
 
 /// The app's own palette: near-black, near-white, and color kept for meaning.
@@ -33,7 +49,8 @@ fn new_york() -> iced::Theme {
 
 /// Every theme the picker offers: the app's own first, then everything the toolkit ships.
 pub(crate) fn all() -> Vec<iced::Theme> {
-    std::iter::once(new_york())
+    [macos(), new_york()]
+        .into_iter()
         .chain(iced::Theme::ALL.iter().cloned())
         .collect()
 }
@@ -135,8 +152,13 @@ mod tests {
             assert_eq!(by_display, theme);
         }
         assert_eq!(
-            resolve(Some("new-york")).expect("the app's own palette"),
+            resolve(Some("mac-os")).expect("the platform's palette"),
             default_theme()
+        );
+        assert_ne!(
+            resolve(Some("new-york")).expect("the app's other palette"),
+            default_theme(),
+            "New York stays in the picker without being the default"
         );
         assert_eq!(resolve(None).expect("nothing asked"), default_theme());
     }
