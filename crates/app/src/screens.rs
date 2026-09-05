@@ -159,7 +159,9 @@ pub(crate) fn settings(app: &App) -> Element<'_, Message> {
                 Message::SetTheme
             )
             .text_size(BODY)
-            .width(Length::Fixed(240.0)),
+            .width(Length::Fixed(240.0))
+            .menu_height(Length::Fixed(MENU))
+            .menu_style(picker_menu),
         ]
         .spacing(10)
         .align_y(iced::alignment::Vertical::Center),
@@ -190,6 +192,8 @@ pub(crate) fn settings(app: &App) -> Element<'_, Message> {
 /// The corner an action takes; a surface takes [`CARD_RADIUS`].
 const RADIUS: f32 = 0.0;
 const CARD_RADIUS: f32 = 8.0;
+/// An open picker menu's height: enough for eight rows, short of any window edge.
+const MENU: f32 = 360.0;
 
 /// The one call to action on a screen: solid in the palette's primary, dimmed under the pointer.
 fn primary(theme: &iced::Theme, status: button::Status) -> button::Style {
@@ -253,6 +257,23 @@ fn role(
             radius: RADIUS.into(),
         },
         ..button::Style::default()
+    }
+}
+
+/// A picker's open menu: a card that scrolls, capped by [`MENU`] so it ends inside the window.
+fn picker_menu(theme: &iced::Theme) -> iced::widget::overlay::menu::Style {
+    let palette = theme.extended_palette();
+    iced::widget::overlay::menu::Style {
+        background: iced::Background::Color(palette.background.weakest.color),
+        border: iced::Border {
+            color: palette.background.weak.color,
+            width: 1.0,
+            radius: CARD_RADIUS.into(),
+        },
+        text_color: palette.background.base.text,
+        selected_text_color: palette.primary.base.text,
+        selected_background: iced::Background::Color(palette.primary.base.color),
+        shadow: iced::Shadow::default(),
     }
 }
 
