@@ -182,7 +182,22 @@ pub(crate) fn settings(app: &App) -> Element<'_, Message> {
     .align_y(iced::alignment::Vertical::Center);
     let mut appearance = column![
         heading("APPEARANCE"),
-        row![text("theme").size(BODY).width(LABEL), theme_chooser(app),].spacing(10),
+        row![
+            text("theme").size(BODY).width(LABEL),
+            pick_list(
+                crate::theme::all(),
+                Some(app.theme.clone()),
+                Message::SetTheme
+            )
+            .text_size(BODY)
+            .width(Length::Fixed(254.0))
+            .padding(PICK)
+            .menu_height(Length::Fixed(MENU))
+            .menu_style(picker_menu)
+            .style(picker),
+        ]
+        .spacing(10)
+        .align_y(iced::alignment::Vertical::Center),
         row![
             text("scale").size(BODY).width(LABEL),
             pick_list(
@@ -191,7 +206,8 @@ pub(crate) fn settings(app: &App) -> Element<'_, Message> {
                 Message::SetScale
             )
             .text_size(BODY)
-            .width(Length::Fixed(240.0))
+            .width(Length::Fixed(254.0))
+            .padding(PICK)
             .menu_style(picker_menu)
             .style(picker),
         ]
@@ -212,7 +228,8 @@ pub(crate) fn settings(app: &App) -> Element<'_, Message> {
             text("open on").size(BODY).width(LABEL),
             pick_list(&crate::OPENS[..], Some(app.opens_on), Message::SetOpensOn)
                 .text_size(BODY)
-                .width(Length::Fixed(240.0))
+                .width(Length::Fixed(254.0))
+                .padding(PICK)
                 .menu_style(picker_menu)
                 .style(picker),
         ]
@@ -273,8 +290,17 @@ const FLOAT: iced::Shadow = iced::Shadow {
     offset: iced::Vector::new(0.0, 8.0),
     blur_radius: 24.0,
 };
-/// The unfolded theme list's height: enough for eight rows, the rest on the lane's scrollbar.
-const THEMES: f32 = 264.0;
+/// An open picker menu's height: enough for eight rows, short of any window edge.
+const MENU: f32 = 360.0;
+
+/// The pickers' padding: the default, with the right side also clearing the open menu's
+/// scroller, which floats over the rows and is not reachable through the picker to restyle.
+const PICK: iced::Padding = iced::Padding {
+    top: 5.0,
+    bottom: 5.0,
+    right: 24.0,
+    left: 10.0,
+};
 
 /// The one call to action on a screen: solid in the palette's primary, dimmed under the pointer.
 fn primary(theme: &iced::Theme, status: button::Status) -> button::Style {
@@ -332,8 +358,7 @@ fn role(surface: iced::Color, text: iced::Color, status: button::Status) -> butt
     }
 }
 
-/// A picker's open menu: a card in the palette's own steps. Only short menus remain on it;
-/// a menu long enough to scroll is the in-card list of [`theme_chooser`] instead.
+/// A picker's open menu: a card that scrolls, capped by [`MENU`] so it ends inside the window.
 fn picker_menu(theme: &iced::Theme) -> iced::widget::overlay::menu::Style {
     let palette = theme.extended_palette();
     iced::widget::overlay::menu::Style {
@@ -370,68 +395,6 @@ fn entry(theme: &iced::Theme, status: text_input::Status) -> text_input::Style {
     let mut style = text_input::default(theme, status);
     style.border.radius = FIELD_RADIUS.into();
     style
-}
-
-/// The theme control: a popup-shaped button unfolding a list inside the card, because the
-/// toolkit's own picker menu scrolls under a floating scrollbar nothing in this crate can
-/// restyle or move off the rows.
-fn theme_chooser(app: &App) -> Element<'_, Message> {
-    let trigger = button(
-        row![
-            text(app.theme.to_string()).size(BODY),
-            space().width(Fill),
-            text("\u{25be}").size(BODY),
-        ]
-        .align_y(iced::alignment::Vertical::Center),
-    )
-    .style(popup)
-    .width(Length::Fixed(240.0))
-    .padding([5, 10])
-    .on_press(Message::BrowseThemes);
-    if !app.browsing_themes {
-        return trigger.into();
-    }
-    let current = app.theme.to_string();
-    let mut rows = column![].spacing(2);
-    for theme in crate::theme::all() {
-        let name = theme.to_string();
-        let picked = name == current;
-        rows = rows.push(
-            button(text(name).size(BODY))
-                .style(move |t, s| if picked { primary(t, s) } else { ghost(t, s) })
-                .width(Fill)
-                .padding([6, 10])
-                .on_press(Message::SetTheme(theme)),
-        );
-    }
-    column![
-        trigger,
-        container(
-            scrollable(rows)
-                .direction(lane())
-                .style(scroll)
-                .height(Length::Fixed(THEMES)),
-        )
-        .style(card)
-        .padding(6)
-        .width(Length::Fixed(240.0)),
-    ]
-    .spacing(6)
-    .into()
-}
-
-/// The popup-shaped trigger: a closed picker's look on a button.
-fn popup(theme: &iced::Theme, _status: button::Status) -> button::Style {
-    let palette = theme.extended_palette();
-    button::Style {
-        background: Some(iced::Background::Color(palette.background.weak.color)),
-        text_color: palette.background.base.text,
-        border: iced::Border {
-            radius: FIELD_RADIUS.into(),
-            ..iced::Border::default()
-        },
-        ..button::Style::default()
-    }
 }
 
 /// A closed picker as macOS draws a popup button: a flat fill, no outline.

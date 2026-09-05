@@ -444,8 +444,6 @@ pub(crate) enum Message {
     Settings,
     /// A keyboard event every widget ignored: what the window's own chords read.
     Keyboard(iced::keyboard::Event),
-    /// Unfold or fold the theme list in Settings.
-    BrowseThemes,
     /// Draw in this palette from now on, and remember it.
     SetTheme(iced::Theme),
     /// Draw at this scale from now on, and remember it.
@@ -519,8 +517,6 @@ pub(crate) struct App {
     scale: u16,
     /// The screen a plain launch opens on: the saved pick Settings shows and writes.
     opens_on: OpenScreen,
-    /// Whether Settings has the theme list unfolded. Leaving the screen folds it.
-    browsing_themes: bool,
     /// Whether the list is asking "really clear the history?". Leaving the list disarms it.
     confirm_clear: bool,
 }
@@ -560,7 +556,6 @@ impl App {
             theme_overridden: false,
             scale: 100,
             opens_on: OpenScreen::Menu,
-            browsing_themes: false,
             confirm_clear: false,
         };
         app.refresh();
@@ -715,7 +710,6 @@ impl App {
     /// Moves to `screen` and settles what is leased for it.
     fn set_screen(&mut self, screen: Screen) {
         self.confirm_clear = false;
-        self.browsing_themes = false;
         self.screen = screen;
         self.forget_unwatched();
     }
@@ -778,12 +772,7 @@ impl App {
                 }
                 Task::none()
             }
-            Message::BrowseThemes => {
-                self.browsing_themes = !self.browsing_themes;
-                Task::none()
-            }
             Message::SetTheme(theme) => {
-                self.browsing_themes = false;
                 self.theme = theme;
                 self.status = match state::save(&self.saved()) {
                     Ok(()) => Some(format!("drawing in {}", self.theme)),
