@@ -255,7 +255,7 @@ pub(crate) fn settings(app: &App) -> Element<'_, Message> {
 }
 
 /// The corner an action takes; a surface takes [`CARD_RADIUS`], a field [`FIELD_RADIUS`].
-const RADIUS: f32 = 10.0;
+const RADIUS: f32 = 8.0;
 const CARD_RADIUS: f32 = 12.0;
 const FIELD_RADIUS: f32 = 8.0;
 
@@ -297,22 +297,17 @@ fn primary(theme: &iced::Theme, status: button::Status) -> button::Style {
         button::Status::Hovered | button::Status::Pressed => palette.primary.strong,
         button::Status::Active | button::Status::Disabled => palette.primary.base,
     };
-    role(pair.color, pair.text, palette.primary.strong.color, status)
+    role(pair.color, pair.text, status)
 }
 
-/// The workhorse: a bordered surface one step off the page, a step brighter under the pointer.
+/// The workhorse: a flat fill one step off the page, a step further under the pointer.
 fn secondary(theme: &iced::Theme, status: button::Status) -> button::Style {
     let palette = theme.extended_palette();
     let surface = match status {
-        button::Status::Hovered | button::Status::Pressed => palette.background.weak,
-        button::Status::Active | button::Status::Disabled => palette.background.weakest,
+        button::Status::Hovered | button::Status::Pressed => palette.background.strong,
+        button::Status::Active | button::Status::Disabled => palette.background.weak,
     };
-    role(
-        surface.color,
-        palette.background.base.text,
-        hairline(theme),
-        status,
-    )
+    role(surface.color, palette.background.base.text, status)
 }
 
 /// Navigation that stays quiet until the pointer finds it.
@@ -322,7 +317,7 @@ fn ghost(theme: &iced::Theme, status: button::Status) -> button::Style {
         button::Status::Hovered | button::Status::Pressed => palette.background.weak.color,
         button::Status::Active | button::Status::Disabled => iced::Color::TRANSPARENT,
     };
-    role(surface, palette.background.base.text, surface, status)
+    role(surface, palette.background.base.text, status)
 }
 
 /// The destructive act: solid in the palette's danger, never the default anything.
@@ -332,24 +327,20 @@ fn destructive(theme: &iced::Theme, status: button::Status) -> button::Style {
         button::Status::Hovered | button::Status::Pressed => palette.danger.strong,
         button::Status::Active | button::Status::Disabled => palette.danger.base,
     };
-    role(pair.color, pair.text, pair.color, status)
+    role(pair.color, pair.text, status)
 }
 
-/// One shape for every role: the radius, the hairline border, and the disabled fade.
-fn role(
-    surface: iced::Color,
-    text: iced::Color,
-    edge: iced::Color,
-    status: button::Status,
-) -> button::Style {
+/// One shape for every role: a borderless fill on the corner, the whole control fading when
+/// disabled, the way a macOS dialog draws its buttons.
+fn role(surface: iced::Color, text: iced::Color, status: button::Status) -> button::Style {
     let faded = matches!(status, button::Status::Disabled);
+    let dim = |color: iced::Color| if faded { color.scale_alpha(0.5) } else { color };
     button::Style {
-        background: Some(iced::Background::Color(surface)),
-        text_color: if faded { text.scale_alpha(0.5) } else { text },
+        background: Some(iced::Background::Color(dim(surface))),
+        text_color: dim(text),
         border: iced::Border {
-            color: edge,
-            width: 1.0,
             radius: RADIUS.into(),
+            ..iced::Border::default()
         },
         ..button::Style::default()
     }
@@ -394,10 +385,14 @@ fn entry(theme: &iced::Theme, status: text_input::Status) -> text_input::Style {
     style
 }
 
-/// A closed picker, shaped like [`entry`].
+/// A closed picker as macOS draws a popup button: a flat fill, no outline.
 fn picker(theme: &iced::Theme, status: pick_list::Status) -> pick_list::Style {
     let mut style = pick_list::default(theme, status);
-    style.border.radius = FIELD_RADIUS.into();
+    style.background = iced::Background::Color(theme.extended_palette().background.weak.color);
+    style.border = iced::Border {
+        radius: FIELD_RADIUS.into(),
+        ..iced::Border::default()
+    };
     style
 }
 
