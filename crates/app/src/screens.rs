@@ -52,6 +52,37 @@ fn muted(theme: &iced::Theme) -> iced::Color {
     theme.extended_palette().background.strong.text
 }
 
+/// The scroll rail as macOS draws it: no rail, a translucent pill in a lane of its own.
+fn scroll(theme: &iced::Theme, status: scrollable::Status) -> scrollable::Style {
+    let mut style = scrollable::default(theme, status);
+    let pill = theme
+        .extended_palette()
+        .background
+        .base
+        .text
+        .scale_alpha(0.25);
+    for rail in [&mut style.vertical_rail, &mut style.horizontal_rail] {
+        rail.background = None;
+        rail.border = iced::Border::default();
+        rail.scroller.background = iced::Background::Color(pill);
+        rail.scroller.border = iced::Border {
+            radius: 3.0.into(),
+            ..iced::Border::default()
+        };
+    }
+    style
+}
+
+/// A scrollbar embedded beside the content, so it can never sit over what it scrolls.
+fn lane() -> scrollable::Direction {
+    scrollable::Direction::Vertical(
+        scrollable::Scrollbar::new()
+            .width(6)
+            .scroller_width(6)
+            .spacing(12),
+    )
+}
+
 /// The door: what to do next, and whether this machine is set up to do it.
 pub(crate) fn menu(app: &App) -> Element<'_, Message> {
     let running = app.runs.iter().filter(|r| app.is_live(r)).count();
@@ -385,9 +416,15 @@ pub(crate) fn list(app: &App) -> Element<'_, Message> {
                 }),
         );
     }
-    let mut page = column![header, scrollable(rows).height(Fill)]
-        .spacing(14)
-        .padding(18);
+    let mut page = column![
+        header,
+        scrollable(rows)
+            .direction(lane())
+            .style(scroll)
+            .height(Fill)
+    ]
+    .spacing(14)
+    .padding(18);
     if let Some(status) = &app.status {
         page = page.push(text(status).size(BODY));
     }
@@ -617,6 +654,8 @@ pub(crate) fn run<'a>(app: &'a App, id: &crate::RunId) -> Element<'a, Message> {
         ]
         .spacing(12),
     )
+    .direction(lane())
+    .style(scroll)
     // A share of the window rather than a fixed width: the panes hold paths, and 340 logical
     // pixels of monospace broke a guest root across two lines on a narrow window.
     .width(Length::FillPortion(2));
@@ -803,7 +842,10 @@ fn output_pane<'a>(app: &'a App, record: &'a Record) -> iced::widget::Container<
     let body = column![
         head,
         text(note).size(12),
-        scrollable(text(&app.output.text).font(MONO).size(13)).height(Fill),
+        scrollable(text(&app.output.text).font(MONO).size(13))
+            .direction(lane())
+            .style(scroll)
+            .height(Fill),
     ]
     .spacing(6)
     .padding(10);
@@ -933,7 +975,7 @@ pub(crate) fn new_run<'a>(app: &'a App, form: &'a Form) -> Element<'a, Message> 
     if let Some(status) = &app.status {
         page = page.push(text(status).size(13));
     }
-    scrollable(page).into()
+    scrollable(page).direction(lane()).style(scroll).into()
 }
 
 /// `n` bytes as a reader wants them.
