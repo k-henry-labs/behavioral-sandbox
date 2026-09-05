@@ -474,7 +474,7 @@ pub(crate) fn composite(frame: &Frame, place: Placement, width: u32, out: &mut [
             return;
         };
         if pw == fw {
-            for (dst, px) in dst_row.iter_mut().zip(src_row.chunks_exact(4)) {
+            for (dst, px) in dst_row.iter_mut().zip(src_row.as_chunks::<4>().0) {
                 *dst = pixel(px);
             }
         } else {
@@ -497,7 +497,7 @@ pub(crate) fn write_ppm(frame: &Frame, path: &Path) -> io::Result<()> {
     })?;
     let mut out = format!("P6\n{} {}\n255\n", frame.width, frame.height).into_bytes();
     out.reserve(frame.pixels.len() / 4 * 3);
-    for px in frame.pixels.chunks_exact(4) {
+    for px in frame.pixels.as_chunks::<4>().0 {
         out.extend_from_slice(&[px[r], px[g], px[b]]);
     }
     let tmp = path.with_extension("ppm.tmp");
