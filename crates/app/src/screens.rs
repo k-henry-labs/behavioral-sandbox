@@ -7,8 +7,8 @@
 //!   the same thing with the same words.
 
 use iced::widget::{
-    button, checkbox, column, container, mouse_area, pick_list, row, rule, scrollable, shader,
-    space, text, text_input,
+    button, checkbox, column, container, mouse_area, row, rule, scrollable, shader, slider, space,
+    text, text_input, toggler,
 };
 use iced::{Element, Fill, Font, Length};
 
@@ -203,8 +203,8 @@ fn muted_line<'a>(line: String, size: f32) -> Element<'a, Message> {
 fn bsx_line(app: &App) -> String {
     let home = std::env::var("HOME").ok();
     match &app.platform.bsx {
-        Some(path) => format!("bsx: {}", tilde(home.as_deref(), path)),
-        None => "bsx: not found (set $BSX_CLI, or put bsx beside bsx-app or on PATH)".to_string(),
+        Some(path) => tilde(home.as_deref(), path),
+        None => "Not found: set $BSX_CLI, or put bsx beside bsx-app or on PATH.".to_string(),
     }
 }
 
@@ -212,11 +212,11 @@ fn bsx_line(app: &App) -> String {
 fn root_line(app: &App) -> String {
     let home = std::env::var("HOME").ok();
     match &app.platform.root {
-        cli::GuestRoot::Present(path) => format!("guest root: {}", tilde(home.as_deref(), path)),
+        cli::GuestRoot::Present(path) => tilde(home.as_deref(), path),
         cli::GuestRoot::Absent(path) => {
-            format!("guest root: {} (absent)", tilde(home.as_deref(), path))
+            format!("{} (nothing there yet)", tilde(home.as_deref(), path))
         }
-        cli::GuestRoot::Unset => "guest root: none (set $BSX_GUEST_ROOT)".to_string(),
+        cli::GuestRoot::Unset => "None: set $BSX_GUEST_ROOT.".to_string(),
     }
 }
 
@@ -233,74 +233,171 @@ fn tilde(home: Option<&str>, path: &std::path::Path) -> String {
 
 /// The notebook's own knobs, one heading block per area; a later knob joins its block.
 pub(crate) fn settings(app: &App) -> Element<'_, Message> {
-    let bar = row![text("Settings").size(HEAD).font(HEADING)];
-    let mut appearance = column![
-        heading("APPEARANCE"),
-        row![
-            text("theme").size(BODY).width(LABEL),
-            pick_list(&crate::theme::MODES[..], Some(app.mode), Message::SetTheme)
-                .text_size(BODY)
-                .width(Length::Fixed(240.0))
-                .menu_style(picker_menu)
-                .style(picker),
-        ]
-        .spacing(10)
-        .align_y(iced::alignment::Vertical::Center),
-        row![
-            text("scale").size(BODY).width(LABEL),
-            pick_list(
-                &crate::SCALES[..],
-                Some(crate::Scale(app.scale)),
-                Message::SetScale
-            )
-            .text_size(BODY)
-            .width(Length::Fixed(240.0))
-            .menu_style(picker_menu)
-            .style(picker),
-        ]
-        .spacing(10)
-        .align_y(iced::alignment::Vertical::Center),
-    ]
-    .spacing(8);
-    if app.theme_overridden {
-        appearance = appearance.push(muted_line(
-            "started with --theme or $BSX_THEME, which outranks this choice at the next launch"
-                .to_string(),
-            SMALL,
-        ));
-    }
-    let platform = column![
-        heading("THIS MACHINE"),
-        muted_line(format!("BSX version {}", env!("CARGO_PKG_VERSION")), SMALL),
-        muted_line(bsx_line(app), SMALL),
-        muted_line(root_line(app), SMALL),
+    let modes = row(crate::theme::MODES.iter().map(|mode| {
+        let on = *mode == app.mode;
+        button(text(mode.to_string()).size(BODY))
+            .style(move |t, s| if on { segment(t) } else { push(t, s) })
+            .padding([5, 14])
+            .on_press(Message::SetTheme(*mode))
+            .into()
+    }))
+    .spacing(6);
+    let theme_note = if app.theme_overridden {
+        "Started with --theme or $BSX_THEME, which outranks this pick at the next launch."
+    } else {
+        "Light, dark, or whichever the desktop is showing."
+    };
+    let at = crate::SCALES
+        .iter()
+        .position(|s| s.0 == app.scale)
+        .and_then(|i| u8::try_from(i).ok())
+        .unwrap_or(1);
+    let steps = u8::try_from(crate::SCALES.len() - 1).unwrap_or(3);
+    let scale = column![
+        slider(0..=steps, at, |i| Message::SetScale(
+            crate::SCALES[usize::from(i)]
+        ))
+        .style(rail_of)
+        .width(Fill),
+        ticks(crate::SCALES.iter().map(ToString::to_string).collect()),
     ]
     .spacing(6);
-    let startup = column![
-        heading("STARTUP"),
-        row![
-            text("open on").size(BODY).width(LABEL),
-            pick_list(&crate::OPENS[..], Some(app.opens_on), Message::SetOpensOn)
-                .text_size(BODY)
-                .width(Length::Fixed(240.0))
-                .menu_style(picker_menu)
-                .style(picker),
-        ]
-        .spacing(10)
-        .align_y(iced::alignment::Vertical::Center),
-        muted_line(
-            "what a plain launch shows; --open and a named run outrank it".to_string(),
-            SMALL,
+    let mut body = column![
+        setting(
+            "BSX",
+            format!("version {}", env!("CARGO_PKG_VERSION")),
+            space().width(0)
         ),
+        setting("Theme", theme_note.to_string(), modes),
+        stacked(
+            "Scale",
+            "How large the notebook draws everything.".to_string(),
+            scale
+        ),
+        setting(
+            "Open on a new run",
+            "A plain launch shows the form instead of the notebook; --open and a named run \
+             outrank it."
+                .to_string(),
+            toggler(app.opens_on == crate::OpenScreen::New)
+                .size(22)
+                .style(switch)
+                .on_toggle(|on| Message::SetOpensOn(if on {
+                    crate::OpenScreen::New
+                } else {
+                    crate::OpenScreen::List
+                })),
+        ),
+        setting("Command line", bsx_line(app), space().width(0)),
+        setting("Guest root", root_line(app), space().width(0)),
+        row![
+            space().width(Fill),
+            button(text("Reset to defaults").size(BODY))
+                .style(push)
+                .padding([6, 14])
+                .on_press(Message::ResetSettings),
+        ],
     ]
-    .spacing(8);
-    let mut body = column![appearance, startup, platform]
-        .spacing(28)
-        .width(Fill);
+    .spacing(28)
+    .width(Fill);
     if let Some(status) = &app.status {
         body = body.push(text(status).size(BODY));
     }
-    framed(bar.into(), body)
+    framed(row![text("Settings").size(HEAD).font(HEADING)].into(), body)
+}
+
+/// One setting as a source-list app lays one out: its name over a grey line of what it does,
+/// and the control at the row's right edge.
+fn setting<'a>(
+    title: &'a str,
+    what: String,
+    control: impl Into<Element<'a, Message>>,
+) -> Element<'a, Message> {
+    row![
+        column![text(title).size(TAB), muted_line(what, BODY)]
+            .spacing(4)
+            .width(Fill),
+        control.into(),
+    ]
+    .spacing(16)
+    .align_y(iced::alignment::Vertical::Center)
+    .into()
+}
+
+/// A setting whose control wants the row's whole width, so it sits under the line instead.
+fn stacked<'a>(
+    title: &'a str,
+    what: String,
+    control: impl Into<Element<'a, Message>>,
+) -> Element<'a, Message> {
+    column![
+        text(title).size(TAB),
+        muted_line(what, BODY),
+        control.into(),
+    ]
+    .spacing(6)
+    .into()
+}
+
+/// The labels under a stepped slider, one per step, the first flush left and the last flush
+/// right so each sits under its notch.
+fn ticks<'a>(labels: Vec<String>) -> Element<'a, Message> {
+    let mut line = row![].width(Fill);
+    let last = labels.len().saturating_sub(1);
+    for (i, label) in labels.into_iter().enumerate() {
+        line = line.push(muted_line(label, SMALL));
+        if i < last {
+            line = line.push(space().width(Fill));
+        }
+    }
+    line.into()
+}
+
+/// The segment that is picked: the same bordered shape as [`push`], a step of grey darker.
+fn segment(theme: &iced::Theme) -> button::Style {
+    let palette = theme.extended_palette();
+    let mut style = role(
+        palette.background.weak.color,
+        palette.background.base.text,
+        Some(hairline(theme)),
+        button::Status::Active,
+    );
+    style.shadow = RAISE;
+    style
+}
+
+/// A slider as macOS draws one on a settings page: a grey rail, a white knob held by a hairline.
+fn rail_of(theme: &iced::Theme, status: slider::Status) -> slider::Style {
+    let palette = theme.extended_palette();
+    let mut style = slider::default(theme, status);
+    let rail = iced::Background::Color(palette.background.weak.color);
+    style.rail.backgrounds = (rail, rail);
+    style.rail.width = 4.0;
+    style.handle = slider::Handle {
+        shape: slider::HandleShape::Circle { radius: 9.0 },
+        background: iced::Background::Color(palette.background.base.color),
+        border_width: 1.0,
+        border_color: hairline(theme),
+    };
+    style
+}
+
+/// A switch as macOS draws one: grey when off, the accent when on, a white knob either way.
+fn switch(theme: &iced::Theme, status: toggler::Status) -> toggler::Style {
+    let palette = theme.extended_palette();
+    let mut style = toggler::default(theme, status);
+    let on = matches!(
+        status,
+        toggler::Status::Active { is_toggled: true }
+            | toggler::Status::Hovered { is_toggled: true }
+    );
+    style.background = iced::Background::Color(if on {
+        palette.primary.base.color
+    } else {
+        palette.background.weak.color
+    });
+    style.foreground = iced::Background::Color(iced::Color::WHITE);
+    style
 }
 
 /// The corner an action takes; a surface takes [`CARD_RADIUS`], a field [`FIELD_RADIUS`].
@@ -327,14 +424,6 @@ const LIFT: iced::Shadow = iced::Shadow {
     },
     offset: iced::Vector::new(0.0, 2.0),
     blur_radius: 8.0,
-};
-const FLOAT: iced::Shadow = iced::Shadow {
-    color: iced::Color {
-        a: 0.25,
-        ..iced::Color::BLACK
-    },
-    offset: iced::Vector::new(0.0, 8.0),
-    blur_radius: 24.0,
 };
 /// The faint shadow under a push button's edge, as macOS sets one on the page.
 const RAISE: iced::Shadow = iced::Shadow {
@@ -403,24 +492,6 @@ fn role(
     }
 }
 
-/// A picker's open menu: a card in the palette's own steps. Every menu here is three or four
-/// rows, so none scrolls and no scroller sits over a row.
-fn picker_menu(theme: &iced::Theme) -> iced::widget::overlay::menu::Style {
-    let palette = theme.extended_palette();
-    iced::widget::overlay::menu::Style {
-        background: iced::Background::Color(palette.background.weakest.color),
-        border: iced::Border {
-            color: hairline(theme),
-            width: 1.0,
-            radius: CARD_RADIUS.into(),
-        },
-        text_color: palette.background.base.text,
-        selected_text_color: palette.background.base.text,
-        selected_background: iced::Background::Color(palette.background.weaker.color),
-        shadow: FLOAT,
-    }
-}
-
 /// A card: the page's own surface a shade lifted, held by a hairline border.
 fn card(theme: &iced::Theme) -> container::Style {
     let palette = theme.extended_palette();
@@ -440,25 +511,6 @@ fn card(theme: &iced::Theme) -> container::Style {
 fn entry(theme: &iced::Theme, status: text_input::Status) -> text_input::Style {
     let mut style = text_input::default(theme, status);
     style.border.radius = FIELD_RADIUS.into();
-    style
-}
-
-/// A closed picker as macOS draws a popup button: the same edge and page as [`push`].
-fn picker(theme: &iced::Theme, status: pick_list::Status) -> pick_list::Style {
-    let palette = theme.extended_palette();
-    let mut style = pick_list::default(theme, status);
-    style.background = iced::Background::Color(match status {
-        pick_list::Status::Hovered | pick_list::Status::Opened { .. } => {
-            palette.background.weaker.color
-        }
-        pick_list::Status::Active => palette.background.base.color,
-    });
-    style.text_color = palette.background.base.text;
-    style.border = iced::Border {
-        color: hairline(theme),
-        width: 1.0,
-        radius: FIELD_RADIUS.into(),
-    };
     style
 }
 

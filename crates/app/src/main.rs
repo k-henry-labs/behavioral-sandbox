@@ -128,9 +128,6 @@ impl std::fmt::Display for OpenScreen {
     }
 }
 
-/// The screens Settings offers a plain launch: the ones that need no run to name.
-const OPENS: [OpenScreen; 2] = [OpenScreen::List, OpenScreen::New];
-
 /// An interface scale Settings offers, in percent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Scale(pub(crate) u16);
@@ -447,6 +444,8 @@ pub(crate) enum Message {
     SetScale(Scale),
     /// Open the next plain launch on this screen, and remember it.
     SetOpensOn(OpenScreen),
+    /// Every setting back to what a fresh install has, and remembered so.
+    ResetSettings,
     NewRun,
     Field(Field, String),
     Switch(Switch, bool),
@@ -770,6 +769,16 @@ impl App {
                 self.status = match state::save(&self.saved()) {
                     Ok(()) => Some(format!("drawing in {mode}")),
                     Err(e) => Some(format!("drawing in {mode} for this window; not saved: {e}")),
+                };
+                Task::none()
+            }
+            Message::ResetSettings => {
+                self.mode = theme::Mode::default();
+                self.scale = 100;
+                self.opens_on = OpenScreen::List;
+                self.status = match state::save(&self.saved()) {
+                    Ok(()) => Some("settings reset".to_string()),
+                    Err(e) => Some(format!("settings reset for this window; not saved: {e}")),
                 };
                 Task::none()
             }
