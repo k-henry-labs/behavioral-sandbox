@@ -46,10 +46,10 @@ as a sealed memfd and a record per present (4.9), and `bsx-app` shows one in an 
 a wgpu texture upload (4.10), and its keyboard and pointer reach the guest as lines down an `input`
 session on that socket (4.11). Every run leaves a record under the local data dir (posture, captured
 output, the guest's `/results`), which `bsx ls --all`, `show`, `rm` and `export` (one ustar file
-per run) read (4.12), and `bsx-app` is the notebook of those runs: a menu naming the `bsx` and
-guest root it found, the list, one run's record with its display and output, a start form whose
-posture sentence is confirmed before anything boots, stop, re-run, delete, export, clearing the
-ended runs behind an inline confirm, a Settings screen whose theme pick persists beside the runs
+per run) read (4.12), and `bsx-app` is the notebook of those runs: a sidebar over the
+list, one run's record with its display and output, a start form whose posture sentence is
+confirmed before anything boots, stop, re-run, delete, export, clearing the ended runs behind an
+inline confirm, a Settings screen whose palette, scale and landing screen persist beside the runs
 directory, and a shell through `bsx exec --tty` in the operator's terminal (4.13). Frame pacing
 through the app on this panel is measured (4.14). On macOS ARM64 (phase 6) the tree builds, signs
 (`cargo xtask sign`) and boots the same sandboxes under Hypervisor.framework; this platform's
@@ -161,6 +161,7 @@ anything that needs a signed `bsx` should sign rather than assume.
 cargo xtask setup            # what this host can and cannot do
 cargo xtask ci               # the gate (and signs what it built, on macOS)
 cargo xtask sign             # macOS only: re-entitle the built `bsx` after any other build
+cargo xtask bundle           # macOS only: assemble artifacts/BSX.app from the built pair
 cargo xtask build-rootfs     # the guest image (Alpine + the GUEST_PACKAGES runtimes + static agent)
 cargo xtask build-rootfs --desktop   # the desktop image (+ cage, foot, seatd, udev, and bsx-session)
 cargo xtask build-rootfs --arch aarch64   # an image for the other arch, from either Linux builder

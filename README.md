@@ -27,23 +27,25 @@
 
 **Sandboxes run; nothing is released.**
 
-What is here, on a host whose hypervisor answers (`/dev/kvm` on Linux, Hypervisor.framework on
-macOS ARM64) and a guest image the tree builds: `bsx run` runs one command in a sandbox and exits
-with its status, `bsx shell` opens a session on a pty inside the guest, `bsx up` starts a sandbox
-that outlives the command that started it, `bsx ls`, `bsx exec` and `bsx stop` reach a sandbox this
+What is here, on a host whose hypervisor answers (`/dev/kvm` on Linux, Hypervisor.framework on macOS
+ARM64) and a guest image the tree builds: `bsx run` runs one command in a sandbox and exits with its
+status, `bsx shell` opens a session on a pty inside the guest, `bsx up` starts a sandbox that
+outlives the command that started it, `bsx ls`, `bsx exec` and `bsx stop` reach a sandbox this
 process did not start, `bsx show`, `bsx rm` and `bsx export` read, remove and package what a run
 left behind, and `--display WIDTHxHEIGHT` shows a guest's screen in a window whose keyboard and
 pointer go to the guest, and the desktop image boots to a terminal in a Wayland session there, with
 `--sound` for audio. `bsx-app` is the notebook: every run on the machine, live and past, with its
-posture, output and results; a live run's display in the window with your keyboard and pointer
-going in; a form that shows a sandbox's posture before it boots. It opens on a menu naming the
-`bsx` and guest root it found, exports a run to one tar file, clears the ended history behind a
-confirm, and keeps a theme pick across launches.
+posture, output and results; a live run's display in the window with your keyboard and pointer going
+in; a form that shows a sandbox's posture before it boots. A sidebar reaches its screens; it exports
+a run to one tar file, clears the ended history behind a confirm, and keeps the palette, the
+interface scale and the screen it opens on across launches.
 
 On macOS ARM64 the same tree builds, signs (`cargo xtask sign`) and boots the same sandboxes under
 Hypervisor.framework. Its libkrun build carries no `--sound` and no guest keyboard or pointer
-backend, and the display helper's own window is compiled out there, so a guest's display on macOS
-is viewed in `bsx-app`. What is not here on any platform: GPU acceleration for the guest.
+backend, and the display helper's own window is compiled out there, so a guest's display on macOS is
+viewed in `bsx-app`, which `cargo xtask bundle` assembles as `BSX.app`. `--gpu` offers a guest the
+3D path (virgl + Venus) where libkrun reports the feature, but no host measured so far carries a
+Venus renderer, so acceleration is unproven everywhere.
 
 There are no users, no installed base, and no release to install. Nothing below is an invitation to
 depend on this yet.
@@ -97,6 +99,7 @@ what executes during the build is `apk.static`, a Linux binary.
 cargo xtask setup            # what this host can and cannot do
 cargo xtask ci               # the gate: fmt, prose drift, clippy, build, test, docs, deny
 cargo xtask sign             # macOS: re-entitle the built bsx after any other build
+cargo xtask bundle           # macOS: assemble artifacts/BSX.app, so the window runs as BSX
 cargo xtask build-rootfs     # the guest image (Alpine + runtimes + the static agent)
 cargo xtask build-rootfs --desktop   # the desktop image (+ a Wayland compositor and a terminal)
 ```
@@ -116,7 +119,7 @@ types. `cargo … -p` takes the package, a path takes the directory.
 | `crates/record` | `bsx-record` | The run record the notebook keeps: posture, captured output, and the guest's `/results`, one directory per run, exportable as one tar file. |
 | `crates/input` | `bsx-input` | The guest's keyboard and pointer: device shapes, reports, and the line grammar the replay file and the control socket feed. |
 | `crates/cli` | `bsx` | The `bsx` CLI and its verbs. The binary on `PATH` is `bsx`. |
-| `crates/app` | `bsx-app` | The GUI application, on iced: the notebook of runs behind a menu, a run's record with its display and output, a start form, stop, re-run, delete, export, clear history, a persisted theme, and a shell in your terminal. |
+| `crates/app` | `bsx-app` | The GUI application, on iced: the notebook of runs reached from a sidebar, a run's record with its display and output, a start form, stop, re-run, delete, export, clear history, a persisted palette, scale and landing screen, and a shell in your terminal. |
 | `crates/test-support` | `bsx-test-support` | Shared test fixtures: a self-reclaiming scratch dir, a log sink, a deterministic generator. Dev-only, never shipped. |
 | `docs` | | This documentation, as an mdBook. |
 | `xtask` | `xtask` | Dev orchestration: `cargo xtask ci`, the guest image build, the vendor mirror. Never shipped. |

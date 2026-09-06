@@ -23,9 +23,9 @@ What is in the tree: the host/guest wire framing (`bsx-channel`), the in-guest a
 scanout landing in host RAM and shown in a window the VM's own process opens, with that window's
 keyboard and pointer going back as two virtio-input devices, a second guest image that boots a
 Wayland compositor on it, and an opt-in virtio-snd card. `bsx-app` is the notebook of those runs:
-a menu, the list, a live run's display and input in the window, a start form that shows the
-posture before boot, export, a clear of the ended history behind a confirm, and a Settings screen
-whose theme pick persists. On macOS ARM64 the tree signs (`cargo xtask sign`) and boots the same
+a sidebar over the list, a live run's display and input in the window, a start form that shows
+the posture before boot, export, a clear of the ended history behind a confirm, and a Settings
+screen whose palette, scale and landing screen persist. On macOS ARM64 the tree signs (`cargo xtask sign`) and boots the same
 sandboxes under Hypervisor.framework; its libkrun builds neither the `--sound` nor the guest input
 backend, and the display helper's own window is compiled out there, so a display on macOS is
 viewed in `bsx-app`. `--gpu` offers a guest the 3D path behind `krun_has_feature`; measured
@@ -75,7 +75,7 @@ types. `cargo … -p` takes the **package**, a path takes the **directory**.
 | `bsx-record` | `crates/record` | The run record: posture, captured output and the guest's `/results`, one directory per run under the local data dir, written by the CLI, read by both binaries, and exported as one ustar file. |
 | `bsx-input` | `crates/input` | The guest's keyboard and pointer: device shapes, reports, and the line grammar the replay file and the control socket's `input` session feed. |
 | `bsx` | `crates/cli` | The `bsx` binary and its verbs. Package, binary, and command all share the name. |
-| `bsx-app` | `crates/app` | The GUI application, on iced: the notebook of runs from `bsx-record` behind a menu, a run's record with its display (leased over the control socket, uploaded to a wgpu texture) and output, a start form, stop, re-run, delete, export, a clear of the ended history, a persisted theme, and a shell in the operator's terminal through `bsx`. |
+| `bsx-app` | `crates/app` | The GUI application, on iced: the notebook of runs from `bsx-record` reached from a sidebar, a run's record with its display (leased over the control socket, uploaded to a wgpu texture) and output, a start form, stop, re-run, delete, export, a clear of the ended history, a persisted palette, scale and landing screen, and a shell in the operator's terminal through `bsx`. |
 | `bsx-test-support` | `crates/test-support` | Test fixtures: a self-reclaiming scratch dir, a log sink, and the deterministic generator the in-gate fuzz suites use. |
 | `xtask` | `xtask` | Dev orchestration: the gate, the guest image build, the vendor mirror. Never shipped, and never renamed: `cargo xtask` is a `--package xtask` alias. |
 
@@ -93,7 +93,7 @@ the subprocess. Three warmups discarded, then one hundred runs, nearest-rank per
 |---|---|
 | Cold boot, wall clock, n=100 | p50 157 ms, p90 162 ms, p99 169 ms (min 150, max 170) |
 | An idle `bsx up` sandbox, 512 MiB configured | 102 MiB resident, steady over three samples |
-| `bsx-app` idling on the menu | 101 MiB resident |
+| `bsx-app` idling (on the menu screen it had that day) | 101 MiB resident |
 
 Resident is what was touched, not what was granted: the helper holds a 512 MiB guest with a
 102 MiB resident set.

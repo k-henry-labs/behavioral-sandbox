@@ -71,8 +71,7 @@ readable.
 
 ## The notebook
 
-`bsx-app` opens on a menu that names the `bsx` binary and guest root it found, with the run count.
-From there:
+`bsx-app` opens on the notebook, with a sidebar reaching its three screens:
 
 - **The list**: every run, newest first, live ones with a thumbnail of their display. `Clear
   history` removes the ended runs behind an inline confirm; live runs stay.
@@ -80,9 +79,11 @@ From there:
   to the guest), with Stop and Shell while it runs, Re-run and Delete after, and Export always.
 - **The start form**: every posture flag as a field, summarised in the record's own posture
   sentence ("This sandbox will: ..."), confirmed before anything boots.
-- **Settings** (the platform's command with `,`, from any screen): the palette, applied live and
-  kept across launches in a file beside the runs directory. `--theme` and `$BSX_THEME` outrank the
-  saved pick for one launch.
+- **Settings** (the platform's command with `,`, from any screen): the palette and the interface
+  scale, both applied live, the screen a plain launch opens on, and what this machine has to run a
+  sandbox with (the `bsx` binary and guest root it found). The picks are kept across launches in a
+  file beside the runs directory. `--theme` and `$BSX_THEME` outrank the saved palette, and
+  `--open` the saved screen, for one launch.
 
 `bsx-app NAME` opens straight onto a run; `--open list|new|settings` opens a screen. Starting
 and stopping go through
@@ -92,6 +93,8 @@ the `bsx` binary beside the app (`$BSX_CLI` overrides which one).
 
 On macOS ARM64 the same verbs work, but this platform's libkrun builds no `--sound` and no guest
 input backend, and a display is viewed in `bsx-app` rather than a window of the helper's own; sign
-the binary again after any build (`cargo xtask sign`). `--gpu` boots here and the guest sees
+the binary again after any build (`cargo xtask sign`). `cargo xtask bundle` assembles
+`artifacts/BSX.app` from the built pair, which is what makes the window's menu bar say `BSX`
+rather than the file name `bsx-app`; the `bsx` copied inside it is signed there. `--gpu` boots here and the guest sees
 `card0` and `renderD128`; this host's virglrenderer carries no Venus, so the offer ends at the
 device. The [Architecture](./architecture.md) page carries the fuller status and the measurements.

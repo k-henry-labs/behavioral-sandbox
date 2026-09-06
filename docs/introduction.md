@@ -14,18 +14,20 @@ telemetry, no control plane, and nothing that stops working with the network off
 **Sandboxes run, and nothing is released.** BSX runs on
 [libkrun](https://github.com/containers/libkrun), a library that makes the calling process the
 virtual machine monitor. It runs one command in a sandbox (`bsx run`), a session on a guest pty
-(`bsx shell`), and a sandbox that outlives the command that started it (`bsx up`, reached
-afterwards with `ls`, `exec` and `stop`), and shows a guest's display in a window whose keyboard
-and pointer reach the guest (`--display`), with a desktop image that boots to a terminal in a
-Wayland session there, and `--sound` for audio. Every run leaves a record, which `bsx ls --all`,
-`show`, `rm` and `export` read, remove and package (one ustar file per run). `bsx-app` is the
-notebook: every run, live and past, with its posture, output and results, a live run's display with
-your keyboard and pointer going in, and a form that shows a sandbox's posture before it boots. It
-opens on a menu naming the `bsx` and guest root it found, exports a run to one tar file, clears the
-ended history behind a confirm, and keeps a theme pick across launches. On macOS ARM64 the same
+(`bsx shell`), and a sandbox that outlives the command that started it (`bsx up`, reached afterwards
+with `ls`, `exec` and `stop`), and shows a guest's display in a window whose keyboard and pointer
+reach the guest (`--display`), with a desktop image that boots to a terminal in a Wayland session
+there, and `--sound` for audio. Every run leaves a record, which `bsx ls --all`, `show`, `rm` and
+`export` read, remove and package (one ustar file per run). `bsx-app` is the notebook: every run,
+live and past, with its posture, output and results, a live run's display with your keyboard and
+pointer going in, and a form that shows a sandbox's posture before it boots. A sidebar reaches its
+screens, it exports a run to one tar file, clears the ended history behind a confirm, and keeps the
+palette, the interface scale and the screen it opens on across launches. On macOS ARM64 the same
 tree signs (`cargo xtask sign`) and boots the same sandboxes under Hypervisor.framework, without
 `--sound` or the guest input path (its libkrun builds neither backend) and with a guest's display
-viewed in `bsx-app`. GPU acceleration for the guest is not written.
+viewed in `bsx-app`, which `cargo xtask bundle` assembles as `BSX.app`. `--gpu` offers a guest the
+3D path (virgl + Venus) where libkrun reports the feature; no host measured so far carries a Venus
+renderer, so acceleration is unproven everywhere.
 
 This book is short, and deliberately so: it describes the rules the project is built to, the
 crates that are actually in the tree, and how a sandbox is run.
