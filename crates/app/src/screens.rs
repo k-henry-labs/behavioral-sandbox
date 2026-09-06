@@ -1007,11 +1007,10 @@ pub(crate) fn run<'a>(app: &'a App, id: &crate::RunId) -> Element<'a, Message> {
         .height(Fill);
     let mut page = column![
         head_bar(app, bar.into()),
-        rule::horizontal(1),
-        container(body).height(Fill).padding(14),
+        container(body).height(Fill).padding([0.0, GUTTER]),
     ];
     if let Some(status) = &app.status {
-        page = page.push(container(text(status).size(13)).padding([0.0, 14.0]));
+        page = page.push(container(text(status).size(BODY)).padding([0.0, GUTTER]));
     }
     page.into()
 }
@@ -1145,14 +1144,11 @@ fn results_lines(app: &App, record: &Record) -> Vec<(String, String)> {
 fn output_pane<'a>(app: &'a App, record: &'a Record) -> iced::widget::Container<'a, Message> {
     let mut head = row![heading("OUTPUT"), space().width(Fill)].spacing(8);
     for stream in Stream::of(record.verb) {
-        let label = if app.output.stream == Some(*stream) {
-            format!("[{}]", stream.label())
-        } else {
-            stream.label().to_string()
-        };
+        let on = app.output.stream == Some(*stream);
         head = head.push(
-            button(text(label).size(13))
-                .style(button::text)
+            button(text(stream.label()).size(BODY))
+                .style(move |t, s| if on { segment(t) } else { push(t, s) })
+                .padding([4, 10])
                 .on_press(Message::Show(*stream)),
         );
     }
