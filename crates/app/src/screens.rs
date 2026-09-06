@@ -165,11 +165,27 @@ fn sidebar(app: &App) -> Element<'_, Message> {
 
 /// The button that folds the sidebar and brings it back, wearing the glyph macOS gives it.
 fn sidebar_toggle<'a>() -> Element<'a, Message> {
-    button(icons::glyph(icons::PANEL_LEFT, ICON))
-        .style(ghost)
-        .padding(6)
+    button(icons::glyph(icons::PANEL_LEFT, ICON).center().width(TOGGLE))
+        .style(round)
+        .padding(0)
+        .height(TOGGLE)
         .on_press(Message::ToggleSidebar)
         .into()
+}
+
+/// The side of the toggle's hover circle. Square, so [`round`]'s radius reads as a circle.
+const TOGGLE: f32 = 28.0;
+
+/// An icon on its own: nothing until the pointer finds it, then the circle a toolbar icon wears.
+fn round(theme: &iced::Theme, status: button::Status) -> button::Style {
+    let palette = theme.extended_palette();
+    let surface = match status {
+        button::Status::Hovered | button::Status::Pressed => palette.background.weaker.color,
+        button::Status::Active | button::Status::Disabled => iced::Color::TRANSPARENT,
+    };
+    let mut style = role(surface, palette.background.base.text, None, status);
+    style.border.radius = (TOGGLE / 2.0).into();
+    style
 }
 
 /// The room the traffic lights take at the window's top-left corner, over whatever is there.
