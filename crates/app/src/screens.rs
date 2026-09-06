@@ -97,7 +97,16 @@ pub(crate) fn chrome<'a>(app: &'a App, content: Element<'a, Message>) -> Element
     if !app.sidebar_shown {
         // Folded: the toggle keeps the corner the sidebar left, and the pane's head steps aside
         // for it through [`head_inset`].
-        return iced::widget::stack![content, container(sidebar_toggle()).padding(12)].into();
+        return iced::widget::stack![
+            content,
+            container(sidebar_toggle()).padding(iced::Padding {
+                top: 4.0,
+                right: 0.0,
+                bottom: 0.0,
+                left: LIGHTS,
+            }),
+        ]
+        .into();
     }
     row![
         sidebar(app),
@@ -118,18 +127,21 @@ fn sidebar(app: &App) -> Element<'_, Message> {
     let on_list = matches!(app.screen, crate::Screen::List | crate::Screen::Run(_));
     let nav = column![
         tab(
+            grid_glyph(),
             "Sandboxes",
             (running > 0).then(|| running.to_string()),
             on_list,
             Message::List,
         ),
         tab(
+            plus_glyph(),
             "New run",
             None,
             app.screen == crate::Screen::New,
             Message::NewRun
         ),
         tab(
+            sliders_glyph(),
             "Settings",
             None,
             app.screen == crate::Screen::Settings,
@@ -137,12 +149,17 @@ fn sidebar(app: &App) -> Element<'_, Message> {
         ),
     ]
     .spacing(3);
-    let nav = column![row![space().width(Fill), sidebar_toggle()], nav].spacing(8);
+    let nav = column![row![space().width(Fill), sidebar_toggle()], nav].spacing(18);
     container(nav.height(Fill))
         .style(rail)
         .width(Length::Fixed(SIDEBAR))
         .height(Fill)
-        .padding([12, 10])
+        .padding(iced::Padding {
+            top: 4.0,
+            right: 10.0,
+            bottom: 12.0,
+            left: 10.0,
+        })
         .into()
 }
 
@@ -188,8 +205,11 @@ fn ink(theme: &iced::Theme) -> iced::Color {
         .scale_alpha(0.7)
 }
 
-/// The room a folded sidebar's toggle takes at the pane's corner, which a head steps aside for.
-const TOGGLE_ROOM: f32 = 34.0;
+/// The room the traffic lights take at the window's top-left corner, over whatever is there.
+const LIGHTS: f32 = 78.0;
+
+/// The room the lights and a folded sidebar's toggle take together, which a head steps past.
+const TOGGLE_ROOM: f32 = 91.0;
 
 /// Where a pane's head starts: at the gutter, or past the toggle when the sidebar is folded.
 fn head_inset(app: &App) -> f32 {
@@ -202,12 +222,13 @@ fn head_inset(app: &App) -> f32 {
 
 /// One sidebar tab: its name, an optional count, and the pill it wears while its screen is open.
 fn tab<'a>(
+    glyph: Element<'a, Message>,
     label: &'a str,
     count: Option<String>,
     open: bool,
     message: Message,
 ) -> Element<'a, Message> {
-    let mut line = row![text(label).size(TAB)].spacing(8);
+    let mut line = row![glyph, text(label).size(TAB)].spacing(12);
     line = line.push(space().width(Fill));
     if let Some(count) = count {
         line = line.push(text(count).size(SMALL).style(|t| text::Style {
@@ -222,21 +243,100 @@ fn tab<'a>(
         .into()
 }
 
-/// The pill under the open screen's tab: the page's own white lifted off the rail, as a source
-/// list marks its selection.
+/// The pill under the open screen's tab: the rail a step darker, flat, as a source list marks
+/// its row.
 fn selected_tab(theme: &iced::Theme) -> button::Style {
     let palette = theme.extended_palette();
-    button::Style {
-        background: Some(iced::Background::Color(palette.background.base.color)),
-        text_color: palette.background.base.text,
-        border: iced::Border {
-            color: hairline(theme),
-            width: 1.0,
-            radius: FIELD_RADIUS.into(),
-        },
-        shadow: LIFT,
-        ..button::Style::default()
+    role(
+        palette.background.weak.color,
+        palette.background.base.text,
+        None,
+        button::Status::Active,
+    )
+}
+
+/// The side of every glyph in the rail, and the stroke they share.
+const GLYPH: f32 = 15.0;
+const STROKE: f32 = 1.5;
+
+/// A stroked box `side` wide, the piece every rail glyph is built from.
+fn stroked<'a>(side: f32, radius: f32) -> iced::widget::Container<'a, Message> {
+    container(space())
+        .width(Length::Fixed(side))
+        .height(Length::Fixed(side))
+        .style(move |t| container::Style {
+            border: iced::Border {
+                color: ink(t),
+                width: STROKE,
+                radius: radius.into(),
+            },
+            ..container::Style::default()
+        })
+}
+
+/// A bar of the stroke's thickness, `length` long, laid flat or upright.
+fn bar<'a>(length: f32, upright: bool) -> Element<'a, Message> {
+    let style = |t: &iced::Theme| rule::Style {
+        color: ink(t),
+        radius: (STROKE / 2.0).into(),
+        fill_mode: rule::FillMode::Full,
+        snap: false,
+    };
+    if upright {
+        container(rule::vertical(STROKE).style(style))
+            .height(Length::Fixed(length))
+            .into()
+    } else {
+        container(rule::horizontal(STROKE).style(style))
+            .width(Length::Fixed(length))
+            .into()
     }
+}
+
+/// Four small boxes in a square: the notebook's glyph, as a grid of apps is drawn.
+fn grid_glyph<'a>() -> Element<'a, Message> {
+    let cell = (GLYPH - 3.0) / 2.0;
+    let pair = || row![stroked(cell, 1.5), stroked(cell, 1.5)].spacing(3);
+    column![pair(), pair()].spacing(3).into()
+}
+
+/// A plus inside a rounded box: the new run's glyph.
+fn plus_glyph<'a>() -> Element<'a, Message> {
+    let arm = GLYPH - 8.0;
+    iced::widget::stack![
+        stroked(GLYPH, 3.0),
+        container(bar(arm, false)).center(Length::Fixed(GLYPH)),
+        container(bar(arm, true)).center(Length::Fixed(GLYPH)),
+    ]
+    .into()
+}
+
+/// Three sliders with their knobs at different stops: Settings' glyph, as macOS draws it.
+fn sliders_glyph<'a>() -> Element<'a, Message> {
+    let knob = 5.0;
+    let track = |at: f32| {
+        iced::widget::stack![
+            container(bar(GLYPH, false))
+                .width(Length::Fixed(GLYPH))
+                .height(Length::Fixed(knob))
+                .center_y(Length::Fixed(knob)),
+            container(stroked(knob, knob / 2.0).style(move |t| container::Style {
+                background: Some(iced::Background::Color(ink(t))),
+                border: iced::Border {
+                    radius: (knob / 2.0).into(),
+                    ..iced::Border::default()
+                },
+                ..container::Style::default()
+            }))
+            .padding(iced::Padding {
+                left: at,
+                ..iced::Padding::ZERO
+            }),
+        ]
+    };
+    column![track(2.0), track(8.0), track(4.0)]
+        .spacing(1.0)
+        .into()
 }
 
 /// The sidebar's surface: the page tinted one step, which the rule beside it parts from the page.
@@ -672,7 +772,7 @@ fn framed<'a>(
     column![
         container(head)
             .padding(iced::Padding {
-                top: 18.0,
+                top: 8.0,
                 right: GUTTER,
                 bottom: 18.0,
                 left: head_inset(app),

@@ -141,6 +141,24 @@ impl std::fmt::Display for Scale {
 /// The scales Settings offers.
 const SCALES: [Scale; 4] = [Scale(90), Scale(100), Scale(110), Scale(125)];
 
+/// The window as a source-list app opens one: on macOS the title is hidden and the titlebar is
+/// transparent over the content, so the sidebar runs to the top with the traffic lights on it.
+fn window_settings() -> iced::window::Settings {
+    #[cfg(target_os = "macos")]
+    let platform_specific = iced::window::settings::PlatformSpecific {
+        title_hidden: true,
+        titlebar_transparent: true,
+        fullsize_content_view: true,
+    };
+    #[cfg(not(target_os = "macos"))]
+    let platform_specific = iced::window::settings::PlatformSpecific::default();
+    iced::window::Settings {
+        size: Size::new(1360.0, 860.0),
+        platform_specific,
+        ..iced::window::Settings::default()
+    }
+}
+
 /// Where a plain launch lands: the `--open` flag, else the saved pick, else the notebook.
 fn landing(flag: Option<OpenScreen>, saved: Option<OpenScreen>) -> OpenScreen {
     flag.or(saved).unwrap_or(OpenScreen::List)
@@ -208,7 +226,7 @@ fn main() -> ExitCode {
         .title(|app: &App| app.title())
         .theme(|app: &App| theme::theme(app.mode, app.desktop))
         .scale_factor(|app: &App| f32::from(app.scale) / 100.0)
-        .window_size(Size::new(1360.0, 860.0))
+        .window(window_settings())
         .run();
     match ran {
         Ok(()) => ExitCode::SUCCESS,
