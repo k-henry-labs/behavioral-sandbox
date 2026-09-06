@@ -205,7 +205,7 @@ fn head_inset(app: &App) -> f32 {
 
 /// One sidebar tab: its name, an optional count, and the pill it wears while its screen is open.
 fn tab<'a>(
-    icon: char,
+    icon: icons::Icon,
     label: &'a str,
     count: Option<String>,
     open: bool,
@@ -385,7 +385,7 @@ pub(crate) fn settings(app: &App) -> Element<'_, Message> {
 /// One setting as a source-list app lays one out: its name over a grey line of what it does,
 /// and the control at the row's right edge.
 fn setting<'a>(
-    icon: Option<char>,
+    icon: Option<icons::Icon>,
     title: &'a str,
     what: impl text::IntoFragment<'a>,
     control: impl Into<Element<'a, Message>>,
@@ -398,7 +398,7 @@ fn setting<'a>(
 
 /// A setting's name over its line, with its icon at the left where there is one.
 fn labelled<'a>(
-    icon: Option<char>,
+    icon: Option<icons::Icon>,
     title: &'a str,
     what: impl text::IntoFragment<'a>,
 ) -> iced::widget::Row<'a, Message> {
@@ -415,7 +415,7 @@ fn labelled<'a>(
 
 /// A setting whose control wants the row's whole width, so it sits under the line instead.
 fn stacked<'a>(
-    icon: Option<char>,
+    icon: Option<icons::Icon>,
     title: &'a str,
     what: impl text::IntoFragment<'a>,
     control: impl Into<Element<'a, Message>>,
