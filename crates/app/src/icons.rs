@@ -19,7 +19,7 @@ pub(crate) const BYTES: &[u8] = include_bytes!("../fonts/lucide.ttf");
 
 /// One icon: the character it is in the font, and the extent its ink is drawn to, in the font's
 /// own units, which is what [`glyph`] corrects for.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub(crate) struct Icon {
     ch: char,
     ink: u16,

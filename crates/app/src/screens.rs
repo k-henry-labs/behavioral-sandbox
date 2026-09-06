@@ -165,16 +165,24 @@ fn sidebar(app: &App) -> Element<'_, Message> {
 
 /// The button that folds the sidebar and brings it back, wearing the glyph macOS gives it.
 fn sidebar_toggle<'a>() -> Element<'a, Message> {
-    button(icons::glyph(icons::PANEL_LEFT, ICON).center().width(TOGGLE))
-        .style(round)
-        .padding(0)
-        .height(TOGGLE)
-        .on_press(Message::ToggleSidebar)
-        .into()
+    button(
+        icons::glyph(icons::PANEL_LEFT, TOGGLE_ICON)
+            .center()
+            .width(TOGGLE),
+    )
+    .style(round)
+    .padding(0)
+    .height(TOGGLE)
+    .on_press(Message::ToggleSidebar)
+    .into()
 }
 
 /// The side of the toggle's hover circle. Square, so [`round`]'s radius reads as a circle.
 const TOGGLE: f32 = 28.0;
+
+/// The toggle's glyph, drawn larger than a row's: the platform sets this one bigger than the
+/// icons beside a label, and it is the only icon standing on its own.
+const TOGGLE_ICON: f32 = 20.0;
 
 /// An icon on its own: nothing until the pointer finds it, then the circle a toolbar icon wears.
 fn round(theme: &iced::Theme, status: button::Status) -> button::Style {
