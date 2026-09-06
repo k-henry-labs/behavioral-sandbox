@@ -14,7 +14,7 @@ use iced::{Element, Fill, Font, Length};
 
 use bsx_record::{Record, Verb};
 
-use crate::{App, Field, Form, Message, Stream, Switch, cli};
+use crate::{App, Field, Form, Message, Stream, Switch, cli, icons};
 
 /// Identifiers, and only identifiers: a name, a command, a path, an id. Prose is the system's
 /// own sans, so a row reads as a sentence rather than a terminal dump.
@@ -127,21 +127,21 @@ fn sidebar(app: &App) -> Element<'_, Message> {
     let on_list = matches!(app.screen, crate::Screen::List | crate::Screen::Run(_));
     let nav = column![
         tab(
-            grid_glyph(),
+            icons::GRID,
             "Sandboxes",
             (running > 0).then(|| running.to_string()),
             on_list,
             Message::List,
         ),
         tab(
-            plus_glyph(),
+            icons::SQUARE_PLUS,
             "New run",
             None,
             app.screen == crate::Screen::New,
             Message::NewRun
         ),
         tab(
-            sliders_glyph(),
+            icons::SETTINGS,
             "Settings",
             None,
             app.screen == crate::Screen::Settings,
@@ -165,44 +165,11 @@ fn sidebar(app: &App) -> Element<'_, Message> {
 
 /// The button that folds the sidebar and brings it back, wearing the glyph macOS gives it.
 fn sidebar_toggle<'a>() -> Element<'a, Message> {
-    button(sidebar_glyph())
+    button(icons::glyph(icons::PANEL_LEFT, ICON))
         .style(ghost)
         .padding(6)
         .on_press(Message::ToggleSidebar)
         .into()
-}
-
-/// The `sidebar.left` glyph drawn from two widgets: a rounded box with its leading pane marked
-/// off, in the text colour a step quieter.
-fn sidebar_glyph<'a>() -> Element<'a, Message> {
-    let pane = rule::vertical(1).style(|t| rule::Style {
-        color: ink(t),
-        radius: 0.0.into(),
-        fill_mode: rule::FillMode::Full,
-        snap: true,
-    });
-    container(row![space().width(5), pane])
-        .width(Length::Fixed(17.0))
-        .height(Length::Fixed(13.0))
-        .style(|t| container::Style {
-            border: iced::Border {
-                color: ink(t),
-                width: 1.5,
-                radius: 3.0.into(),
-            },
-            ..container::Style::default()
-        })
-        .into()
-}
-
-/// The colour a glyph is drawn in: the text, a step quieter, so it reads as a control.
-fn ink(theme: &iced::Theme) -> iced::Color {
-    theme
-        .extended_palette()
-        .background
-        .base
-        .text
-        .scale_alpha(0.7)
 }
 
 /// The room the traffic lights take at the window's top-left corner, over whatever is there.
@@ -222,13 +189,13 @@ fn head_inset(app: &App) -> f32 {
 
 /// One sidebar tab: its name, an optional count, and the pill it wears while its screen is open.
 fn tab<'a>(
-    glyph: Element<'a, Message>,
+    icon: char,
     label: &'a str,
     count: Option<String>,
     open: bool,
     message: Message,
 ) -> Element<'a, Message> {
-    let mut line = row![glyph, text(label).size(TAB)].spacing(12);
+    let mut line = row![icons::glyph(icon, ICON), text(label).size(TAB)].spacing(12);
     line = line.push(space().width(Fill));
     if let Some(count) = count {
         line = line.push(text(count).size(SMALL).style(|t| text::Style {
@@ -253,90 +220,6 @@ fn selected_tab(theme: &iced::Theme) -> button::Style {
         None,
         button::Status::Active,
     )
-}
-
-/// The side of every glyph in the rail, and the stroke they share.
-const GLYPH: f32 = 15.0;
-const STROKE: f32 = 1.5;
-
-/// A stroked box `side` wide, the piece every rail glyph is built from.
-fn stroked<'a>(side: f32, radius: f32) -> iced::widget::Container<'a, Message> {
-    container(space())
-        .width(Length::Fixed(side))
-        .height(Length::Fixed(side))
-        .style(move |t| container::Style {
-            border: iced::Border {
-                color: ink(t),
-                width: STROKE,
-                radius: radius.into(),
-            },
-            ..container::Style::default()
-        })
-}
-
-/// A bar of the stroke's thickness, `length` long, laid flat or upright.
-fn bar<'a>(length: f32, upright: bool) -> Element<'a, Message> {
-    let style = |t: &iced::Theme| rule::Style {
-        color: ink(t),
-        radius: (STROKE / 2.0).into(),
-        fill_mode: rule::FillMode::Full,
-        snap: false,
-    };
-    if upright {
-        container(rule::vertical(STROKE).style(style))
-            .height(Length::Fixed(length))
-            .into()
-    } else {
-        container(rule::horizontal(STROKE).style(style))
-            .width(Length::Fixed(length))
-            .into()
-    }
-}
-
-/// Four small boxes in a square: the notebook's glyph, as a grid of apps is drawn.
-fn grid_glyph<'a>() -> Element<'a, Message> {
-    let cell = (GLYPH - 3.0) / 2.0;
-    let pair = || row![stroked(cell, 1.5), stroked(cell, 1.5)].spacing(3);
-    column![pair(), pair()].spacing(3).into()
-}
-
-/// A plus inside a rounded box: the new run's glyph.
-fn plus_glyph<'a>() -> Element<'a, Message> {
-    let arm = GLYPH - 8.0;
-    iced::widget::stack![
-        stroked(GLYPH, 3.0),
-        container(bar(arm, false)).center(Length::Fixed(GLYPH)),
-        container(bar(arm, true)).center(Length::Fixed(GLYPH)),
-    ]
-    .into()
-}
-
-/// Three sliders with their knobs at different stops: Settings' glyph, as macOS draws it.
-fn sliders_glyph<'a>() -> Element<'a, Message> {
-    let knob = 5.0;
-    let track = |at: f32| {
-        iced::widget::stack![
-            container(bar(GLYPH, false))
-                .width(Length::Fixed(GLYPH))
-                .height(Length::Fixed(knob))
-                .center_y(Length::Fixed(knob)),
-            container(stroked(knob, knob / 2.0).style(move |t| container::Style {
-                background: Some(iced::Background::Color(ink(t))),
-                border: iced::Border {
-                    radius: (knob / 2.0).into(),
-                    ..iced::Border::default()
-                },
-                ..container::Style::default()
-            }))
-            .padding(iced::Padding {
-                left: at,
-                ..iced::Padding::ZERO
-            }),
-        ]
-    };
-    column![track(2.0), track(8.0), track(4.0)]
-        .spacing(1.0)
-        .into()
 }
 
 /// The sidebar's surface: the page tinted one step, which the rule beside it parts from the page.
@@ -424,17 +307,25 @@ pub(crate) fn settings(app: &App) -> Element<'_, Message> {
     .spacing(6);
     let mut body = column![
         setting(
+            None,
             "BSX",
             format!("version {}", env!("CARGO_PKG_VERSION")),
             space().width(0)
         ),
-        setting("Theme", theme_note.to_string(), modes),
+        setting(
+            Some(icons::SUN_MOON),
+            "Theme",
+            theme_note.to_string(),
+            modes
+        ),
         stacked(
+            Some(icons::SCALING),
             "Scale",
             "How large the notebook draws everything.".to_string(),
             scale
         ),
         setting(
+            Some(icons::ROCKET),
             "Open on a new run",
             "A plain launch shows the form instead of the notebook; --open and a named run \
              outrank it."
@@ -448,8 +339,18 @@ pub(crate) fn settings(app: &App) -> Element<'_, Message> {
                     crate::OpenScreen::List
                 })),
         ),
-        setting("Command line", bsx_line(app), space().width(0)),
-        setting("Guest root", root_line(app), space().width(0)),
+        setting(
+            Some(icons::TERMINAL),
+            "Command line",
+            bsx_line(app),
+            space().width(0)
+        ),
+        setting(
+            Some(icons::FOLDER),
+            "Guest root",
+            root_line(app),
+            space().width(0)
+        ),
         row![
             space().width(Fill),
             button(text("Reset to defaults").size(BODY))
@@ -473,34 +374,44 @@ pub(crate) fn settings(app: &App) -> Element<'_, Message> {
 /// One setting as a source-list app lays one out: its name over a grey line of what it does,
 /// and the control at the row's right edge.
 fn setting<'a>(
+    icon: Option<char>,
     title: &'a str,
     what: String,
     control: impl Into<Element<'a, Message>>,
 ) -> Element<'a, Message> {
-    row![
+    row![labelled(icon, title, what).width(Fill), control.into()]
+        .spacing(16)
+        .align_y(iced::alignment::Vertical::Center)
+        .into()
+}
+
+/// A setting's name over its line, with its icon at the left where there is one.
+fn labelled<'a>(
+    icon: Option<char>,
+    title: &'a str,
+    what: String,
+) -> iced::widget::Row<'a, Message> {
+    let mut line = row![].spacing(12);
+    if let Some(icon) = icon {
+        line = line.push(icons::glyph(icon, ICON));
+    }
+    line.push(
         column![text(title).size(TAB), muted_line(what, BODY)]
             .spacing(4)
             .width(Fill),
-        control.into(),
-    ]
-    .spacing(16)
-    .align_y(iced::alignment::Vertical::Center)
-    .into()
+    )
 }
 
 /// A setting whose control wants the row's whole width, so it sits under the line instead.
 fn stacked<'a>(
+    icon: Option<char>,
     title: &'a str,
     what: String,
     control: impl Into<Element<'a, Message>>,
 ) -> Element<'a, Message> {
-    column![
-        text(title).size(TAB),
-        muted_line(what, BODY),
-        control.into(),
-    ]
-    .spacing(6)
-    .into()
+    column![labelled(icon, title, what), control.into()]
+        .spacing(6)
+        .into()
 }
 
 /// The labels under a stepped slider, one per step, the first flush left and the last flush
@@ -792,6 +703,9 @@ const SIDEBAR: f32 = 200.0;
 
 /// A sidebar row's label, a step up from body text, as a source list sets one.
 const TAB: f32 = 14.0;
+
+/// An icon beside a label, drawn a little larger than the label's text, as macOS sets them.
+const ICON: f32 = 17.0;
 
 /// The one heading style: small, muted and set apart, on a pane and on a section alike.
 fn heading(title: &str) -> Element<'_, Message> {

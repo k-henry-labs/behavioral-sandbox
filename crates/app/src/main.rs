@@ -16,6 +16,7 @@
 
 mod cli;
 mod frame;
+mod icons;
 mod lease;
 mod screens;
 mod state;
@@ -225,6 +226,7 @@ fn main() -> ExitCode {
         .subscription(App::subscription)
         .title(|app: &App| app.title())
         .theme(|app: &App| theme::theme(app.mode, app.desktop))
+        .font(icons::BYTES)
         .scale_factor(|app: &App| f32::from(app.scale) / 100.0)
         .window(window_settings())
         .run();

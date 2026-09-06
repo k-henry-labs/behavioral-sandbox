@@ -29,6 +29,7 @@ rustix = { workspace = true, features = ["time"] }
 
 [dev-dependencies]
 bsx-test-support = { path = "../test-support" }
+ttf-parser = "0.25.1"
 
 [lints]
 workspace = true

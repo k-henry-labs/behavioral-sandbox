@@ -11,6 +11,7 @@ mod bench;
 mod bundle;
 mod drift;
 mod guest_bins;
+mod icons;
 mod lints;
 mod rootfs;
 mod sign;
@@ -52,6 +53,10 @@ enum Cmd {
         #[arg(long)]
         release: bool,
     },
+    /// Cut the pinned Lucide release to the glyphs `crates/app/src/icons.rs` names, writing
+    /// `crates/app/fonts/lucide.ttf`. A dev step: the cut font is committed, since the app
+    /// compiles it in and the gate builds with no network.
+    Icons,
     /// Assemble `artifacts/BSX.app` from the built binaries, so the window runs as `BSX` rather
     /// than as the file name `bsx-app` (macOS). `bsx` is copied in beside it and signed there.
     /// Elsewhere it says there is nothing to bundle and exits.
@@ -172,6 +177,7 @@ fn main() -> Result<()> {
         Cmd::Ci => ci(),
         Cmd::Setup => setup(),
         Cmd::Sign { release } => sign::sign_for_hypervisor(release),
+        Cmd::Icons => icons::cut_icon_font(),
         Cmd::Bundle { release } => bundle::bundle_app(release),
         Cmd::Vendor { dir, verify } => {
             if verify {

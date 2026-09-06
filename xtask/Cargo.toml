@@ -21,6 +21,7 @@ bsx-test-support = { path = "../crates/test-support" }
 # For `KRUNFW_DIR` in the preflight: the same constant the helper is spawned with, so what `setup`
 # reports and what a boot uses cannot disagree.
 bsx-krun = { path = "../crates/krun" }
+oxifont-subset = "0.2.2"
 
 [lints]
 workspace = true
