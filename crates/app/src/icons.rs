@@ -51,14 +51,17 @@ icons! {
     FOLDER = '\u{e0d7}', 918;
 }
 
-/// One icon at `size`, in the text colour, drawn to the same optical size as every other and in
-/// a cell of the nominal width, so a row of them shares one left edge.
+/// One icon at `size`, in the icon grey, drawn to the same optical size as every other and in a
+/// cell of the nominal width, so a row of them shares one left edge.
 pub(crate) fn glyph<'a>(icon: Icon, size: f32) -> iced::widget::Text<'a> {
     iced::widget::text(icon.ch.to_string())
         .font(FONT)
         .size(size * INK / f32::from(icon.ink))
         .width(size)
         .center()
+        .style(|theme| iced::widget::text::Style {
+            color: Some(crate::theme::icon(theme)),
+        })
 }
 
 #[cfg(test)]

@@ -73,6 +73,17 @@ pub(crate) fn raised_hovered(theme: &iced::Theme) -> iced::Color {
     }
 }
 
+/// The grey an icon is drawn in: the text a step back, as macOS sets a symbol beside a label,
+/// so a row's icon does not outweigh its word.
+pub(crate) fn icon(theme: &iced::Theme) -> iced::Color {
+    theme
+        .extended_palette()
+        .background
+        .base
+        .text
+        .scale_alpha(0.7)
+}
+
 /// The step of grey under what is picked: a source list's open row, a segment, a slider's track.
 /// Neutral on purpose, since a generated ramp tints these towards the palette's own hue.
 pub(crate) fn selected(theme: &iced::Theme) -> iced::Color {

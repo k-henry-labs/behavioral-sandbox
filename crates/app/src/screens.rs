@@ -106,10 +106,10 @@ pub(crate) fn chrome<'a>(app: &'a App, content: Element<'a, Message>) -> Element
     iced::widget::stack![
         panes.push(content),
         container(sidebar_toggle()).padding(iced::Padding {
-            top: TOGGLE_TOP,
+            top: TOGGLE_TOP - HALO_OVERHANG,
             right: 0.0,
             bottom: 0.0,
-            left: toggle_at(out),
+            left: toggle_at(out) - HALO_OVERHANG,
         }),
     ]
     // `push_under`, not a first layer: a stack takes its size from the layer it was built on, and
@@ -169,31 +169,38 @@ fn sidebar_toggle<'a>() -> Element<'a, Message> {
     button(
         icons::glyph(icons::PANEL_LEFT, TOGGLE_ICON)
             .center()
-            .width(TOGGLE),
+            .width(HALO),
     )
     .style(round)
     .padding(0)
-    .height(TOGGLE)
+    .height(HALO)
     .on_press(Message::ToggleSidebar)
     .into()
 }
 
-/// The side of the toggle's hover circle. Square, so [`round`]'s radius reads as a circle.
+/// The room the toggle takes in the head's line: what the lights' room and the head's inset
+/// are measured against.
 const TOGGLE: f32 = 28.0;
+
+/// The circle the toggle wears under the pointer, drawn on the same centre as its room and
+/// past it on every side by [`HALO_OVERHANG`], as a toolbar icon's halo is wider than the icon.
+const HALO: f32 = 36.0;
+const HALO_OVERHANG: f32 = (HALO - TOGGLE) / 2.0;
 
 /// The toggle's glyph, drawn larger than a row's: the platform sets this one bigger than the
 /// icons beside a label, and it is the only icon standing on its own.
 const TOGGLE_ICON: f32 = 20.0;
 
-/// An icon on its own: nothing until the pointer finds it, then the circle a toolbar icon wears.
+/// An icon on its own: nothing until the pointer finds it, then the circle a toolbar icon wears,
+/// a step past a row's hover so it reads on the rail as well as on the page.
 fn round(theme: &iced::Theme, status: button::Status) -> button::Style {
     let palette = theme.extended_palette();
     let surface = match status {
-        button::Status::Hovered | button::Status::Pressed => crate::theme::hovered(theme),
+        button::Status::Hovered | button::Status::Pressed => crate::theme::selected(theme),
         button::Status::Active | button::Status::Disabled => iced::Color::TRANSPARENT,
     };
     let mut style = role(surface, palette.background.base.text, None, status);
-    style.border.radius = (TOGGLE / 2.0).into();
+    style.border.radius = (HALO / 2.0).into();
     style
 }
 
