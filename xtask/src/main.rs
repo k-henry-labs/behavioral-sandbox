@@ -8,6 +8,7 @@
 
 mod artifacts;
 mod bench;
+mod bundle;
 mod drift;
 mod guest_bins;
 mod lints;
@@ -48,6 +49,14 @@ enum Cmd {
     /// rather than once. Elsewhere it says there is nothing to sign and exits.
     Sign {
         /// Sign the release build rather than the debug one.
+        #[arg(long)]
+        release: bool,
+    },
+    /// Assemble `artifacts/BSX.app` from the built binaries, so the window runs as `BSX` rather
+    /// than as the file name `bsx-app` (macOS). `bsx` is copied in beside it and signed there.
+    /// Elsewhere it says there is nothing to bundle and exits.
+    Bundle {
+        /// Bundle the release build rather than the debug one.
         #[arg(long)]
         release: bool,
     },
@@ -163,6 +172,7 @@ fn main() -> Result<()> {
         Cmd::Ci => ci(),
         Cmd::Setup => setup(),
         Cmd::Sign { release } => sign::sign_for_hypervisor(release),
+        Cmd::Bundle { release } => bundle::bundle_app(release),
         Cmd::Vendor { dir, verify } => {
             if verify {
                 vendor::verify(&dir.unwrap_or_else(vendor::default_vendor_dir))

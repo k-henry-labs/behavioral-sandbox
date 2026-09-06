@@ -47,13 +47,19 @@ pub(crate) fn sign_for_hypervisor(release: bool) -> Result<()> {
         );
     }
 
+    sign_binary_for_hypervisor(&bin)
+}
+
+/// Signs one built binary, wherever it sits: the copy inside a `.app` needs this as much as the
+/// one under `target/`, and `codesign` writes a new inode, so a signature does not follow a copy.
+pub(crate) fn sign_binary_for_hypervisor(bin: &Path) -> Result<()> {
     let entitlements = workspace_root().join(ENTITLEMENTS);
     if !entitlements.is_file() {
         bail!("no entitlement file at {}", entitlements.display());
     }
 
-    codesign(&bin, &entitlements)?;
-    if !grants_hypervisor(&bin)? {
+    codesign(bin, &entitlements)?;
+    if !grants_hypervisor(bin)? {
         bail!(
             "codesign reported success but {} does not grant {HYPERVISOR_KEY}",
             bin.display()
