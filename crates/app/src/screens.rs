@@ -722,7 +722,7 @@ fn framed<'a>(
             .padding(iced::Padding {
                 top: PAGE_TOP - HEAD_BAR,
                 right: GUTTER,
-                bottom: 0.0,
+                bottom: GUTTER,
                 left: GUTTER,
             }),
     ]
@@ -1028,7 +1028,12 @@ pub(crate) fn run<'a>(app: &'a App, id: &crate::RunId) -> Element<'a, Message> {
         .height(Fill);
     let mut page = column![
         head_bar(app, bar.into()),
-        container(body).height(Fill).padding([0.0, GUTTER]),
+        container(body).height(Fill).padding(iced::Padding {
+            top: 0.0,
+            right: GUTTER,
+            bottom: GUTTER,
+            left: GUTTER,
+        }),
     ];
     if let Some(status) = &app.status {
         page = page.push(container(text(status).size(BODY)).padding([0.0, GUTTER]));
