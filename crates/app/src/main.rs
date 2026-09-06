@@ -237,6 +237,11 @@ fn main() -> ExitCode {
         .subscription(App::subscription)
         .title(|app: &App| app.title())
         .theme(|app: &App| theme::theme(app.mode, app.desktop))
+        // Before `.font`: `settings` replaces the whole set, fonts included.
+        .settings(iced::Settings {
+            default_text_size: iced::Pixels(screens::BODY),
+            ..iced::Settings::default()
+        })
         .font(icons::BYTES)
         .scale_factor(|app: &App| f32::from(app.scale) / 100.0)
         .window(window_settings())

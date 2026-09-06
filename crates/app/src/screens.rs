@@ -37,7 +37,7 @@ const HEADING: Font = Font {
 
 /// The type scale. Three sizes, so a card has a first, second and third thing to read.
 const TITLE: f32 = 15.0;
-const BODY: f32 = 13.0;
+pub(crate) const BODY: f32 = 13.0;
 const SMALL: f32 = 12.0;
 
 /// How a run ended, as a colour: running, ended cleanly, or ended badly. The dot and the state
@@ -99,12 +99,7 @@ pub(crate) fn chrome<'a>(app: &'a App, content: Element<'a, Message>) -> Element
     if out > 0.0 {
         panes = panes
             .push(sidebar(app, SIDEBAR * out))
-            .push(rule::vertical(1).style(|t| rule::Style {
-                color: hairline(t),
-                radius: 0.0.into(),
-                fill_mode: rule::FillMode::Full,
-                snap: true,
-            }));
+            .push(rule::vertical(1).style(divider));
     }
     // The toggle rides over both panes rather than inside either, so that one glyph crosses the
     // window as the sidebar folds instead of two swapping places.
@@ -333,7 +328,7 @@ pub(crate) fn settings(app: &App) -> Element<'_, Message> {
         let on = *mode == app.mode;
         button(text(mode.to_string()).size(BODY))
             .style(move |t, s| if on { segment(t) } else { push(t, s) })
-            .padding([5, 14])
+            .padding(PAGE_PAD)
             .on_press(Message::SetTheme(*mode))
             .into()
     }))
@@ -400,10 +395,7 @@ pub(crate) fn settings(app: &App) -> Element<'_, Message> {
         ),
         row![
             space().width(Fill),
-            button(text("Reset to defaults").size(BODY))
-                .style(push)
-                .padding([6, 14])
-                .on_press(Message::ResetSettings),
+            page_button("Reset to defaults", push).on_press(Message::ResetSettings),
         ],
     ]
     .spacing(28)
@@ -532,6 +524,17 @@ fn hairline(theme: &iced::Theme) -> iced::Color {
         .base
         .text
         .scale_alpha(0.1)
+}
+
+/// A rule between two panes, or across a form: the same hairline a surface is held by, full
+/// length, so nothing on a page is parted by a heavier line than its edges are drawn in.
+fn divider(theme: &iced::Theme) -> rule::Style {
+    rule::Style {
+        color: hairline(theme),
+        radius: 0.0.into(),
+        fill_mode: rule::FillMode::Full,
+        snap: true,
+    }
 }
 
 /// The faint shadow under a push button's edge, as macOS sets one on the page.
@@ -749,8 +752,12 @@ fn small_button<'a>(
 ) -> iced::widget::Button<'a, Message> {
     button(text(label).size(BODY))
         .style(style)
-        .padding([4.0, 10.0])
+        .padding(SMALL_PAD)
 }
+
+/// The room around a control that fits a line, and around a page's action.
+const SMALL_PAD: [f32; 2] = [4.0, 10.0];
+const PAGE_PAD: [f32; 2] = [6.0, 14.0];
 
 /// A page's committing action, at the end of a form: the notebook's own type on the room macOS
 /// gives a dialog's push button, which is more than a control on a line gets.
@@ -760,7 +767,7 @@ fn page_button<'a>(
 ) -> iced::widget::Button<'a, Message> {
     button(text(label).size(BODY))
         .style(style)
-        .padding([6.0, 14.0])
+        .padding(PAGE_PAD)
 }
 
 /// A window's head: one row centred on the line the traffic lights sit on, and clear of them.
@@ -991,13 +998,11 @@ fn posture_tags(record: &Record) -> String {
 /// One run: its record on the left, its display and output on the right.
 pub(crate) fn run<'a>(app: &'a App, id: &crate::RunId) -> Element<'a, Message> {
     let Some(record) = app.record(id) else {
-        return column![
-            small_button("← runs", ghost).on_press(Message::Back),
-            text(format!("the run {id} is no longer in the notebook")),
-        ]
-        .spacing(10)
-        .padding(14)
-        .into();
+        return framed(
+            app,
+            small_button("← runs", ghost).on_press(Message::Back).into(),
+            column![text(format!("the run {id} is no longer in the notebook")).size(BODY)],
+        );
     };
     let live = app.is_live(record);
     let mut bar = row![
@@ -1045,7 +1050,7 @@ pub(crate) fn run<'a>(app: &'a App, id: &crate::RunId) -> Element<'a, Message> {
         let display: Element<'_, Message> =
             match crate::frame_program(app, &crate::RunName::of(record)) {
                 Some(program) => shader(program).width(Fill).height(Fill).into(),
-                None => container(text("leasing the display…").size(14))
+                None => container(text("leasing the display…").size(BODY))
                     .center(Fill)
                     .into(),
             };
@@ -1058,9 +1063,13 @@ pub(crate) fn run<'a>(app: &'a App, id: &crate::RunId) -> Element<'a, Message> {
     }
     right = right.push(output_pane(app, record).height(Length::FillPortion(2)));
 
-    let body = row![left, rule::vertical(1), right.width(Length::FillPortion(3))]
-        .spacing(12)
-        .height(Fill);
+    let body = row![
+        left,
+        rule::vertical(1).style(divider),
+        right.width(Length::FillPortion(3))
+    ]
+    .spacing(12)
+    .height(Fill);
     let mut page = column![
         head_bar(app, bar.into()),
         container(body).height(Fill).padding(iced::Padding {
@@ -1085,14 +1094,20 @@ const FORM_NUMBER: f32 = 96.0;
 /// The width the label column of a pane takes, in logical pixels: the longest label plus a gap.
 const LABEL: f32 = 74.0;
 
+/// A checkbox's box, at the side macOS draws one beside body text.
+const CHECK: f32 = 14.0;
+
 /// A titled box of `label`, `value` rows, as two widgets so a long value wraps in its column.
 fn pane<'a>(title: &'a str, rows: Vec<(String, String)>) -> Element<'a, Message> {
     let mut body = column![heading(title)].spacing(3);
     for (label, value) in rows {
         body = body.push(
             row![
-                text(label).font(MONO).size(13).width(Length::Fixed(LABEL)),
-                text(value).font(MONO).size(13).width(Fill),
+                text(label)
+                    .font(MONO)
+                    .size(BODY)
+                    .width(Length::Fixed(LABEL)),
+                text(value).font(MONO).size(BODY).width(Fill),
             ]
             .spacing(4),
         );
@@ -1209,7 +1224,7 @@ fn output_pane<'a>(app: &'a App, record: &'a Record) -> iced::widget::Container<
         head = head.push(
             button(text(stream.label()).size(BODY))
                 .style(move |t, s| if on { segment(t) } else { push(t, s) })
-                .padding([4, 10])
+                .padding(SMALL_PAD)
                 .on_press(Message::Show(*stream)),
         );
     }
@@ -1227,8 +1242,8 @@ fn output_pane<'a>(app: &'a App, record: &'a Record) -> iced::widget::Container<
     };
     let body = column![
         head,
-        text(note).size(12),
-        scrollable(text(&app.output.text).font(MONO).size(13))
+        text(note).size(SMALL),
+        scrollable(text(&app.output.text).font(MONO).size(BODY))
             .direction(lane())
             .style(scroll)
             .height(Fill),
@@ -1266,6 +1281,7 @@ pub(crate) fn new_run<'a>(app: &'a App, form: &'a Form) -> Element<'a, Message> 
     let switch = |label: &'static str, on: bool, which: Switch| {
         checkbox(on)
             .label(label)
+            .size(CHECK)
             .on_toggle(move |v| Message::Switch(which, v))
     };
     let mut posture = bsx_record::Posture::new(
@@ -1353,8 +1369,8 @@ pub(crate) fn new_run<'a>(app: &'a App, form: &'a Form) -> Element<'a, Message> 
             ),
         ]
         .spacing(16),
-        rule::horizontal(1),
-        text(posture.sentence()).size(14),
+        rule::horizontal(1).style(divider),
+        text(posture.sentence()).size(BODY),
         row![
             space().width(Fill),
             page_button("Cancel", push).on_press(Message::Back),
@@ -1365,7 +1381,7 @@ pub(crate) fn new_run<'a>(app: &'a App, form: &'a Form) -> Element<'a, Message> 
     .spacing(10)
     .width(Fill);
     if let Some(status) = &app.status {
-        page = page.push(text(status).size(13));
+        page = page.push(text(status).size(BODY));
     }
     framed(
         app,
