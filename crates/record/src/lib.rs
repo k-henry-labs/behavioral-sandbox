@@ -394,7 +394,7 @@ impl Record {
         let mut line = |key: &str, value: &dyn fmt::Display| {
             out.push_str(key);
             out.push(' ');
-            out.push_str(&value.to_string());
+            out.push_str(&escape(&value.to_string()));
             out.push('\n');
         };
         line("record", &FORMAT);
@@ -452,14 +452,17 @@ impl Record {
             ended_ms: None,
             end: None,
         };
-        let mut seen_format = false;
-        for (n, raw) in text.lines().enumerate() {
-            let line = raw.trim_end();
+        let mut seen: Vec<&str> = Vec::new();
+        for (n, line) in text.lines().enumerate() {
             if line.is_empty() {
                 continue;
             }
             let (key, value) = line.split_once(' ').unwrap_or((line, ""));
             let bad = || ParseError(format!("line {}: {line:?}", n + 1));
+            let value = &unescape(value).ok_or_else(bad)?;
+            if let Some(key) = REQUIRED.iter().find(|k| **k == key) {
+                seen.push(key);
+            }
             match key {
                 "record" => {
                     let format: u32 = value.parse().map_err(|_| bad())?;
@@ -468,7 +471,6 @@ impl Record {
                             "record format {format}; this build reads {FORMAT}"
                         )));
                     }
-                    seen_format = true;
                 }
                 "id" => record.id = value.to_string(),
                 "name" => record.name = value.to_string(),
@@ -497,9 +499,9 @@ impl Record {
                 "display" => {
                     record.posture.display = Some(DisplayMode::parse(value).ok_or_else(bad)?)
                 }
-                "sound" => record.posture.sound = value == "on",
-                "gpu" => record.posture.gpu = value == "on",
-                "results" => record.posture.results = value == "on",
+                "sound" => record.posture.sound = value.as_str() == "on",
+                "gpu" => record.posture.gpu = value.as_str() == "on",
+                "results" => record.posture.results = value.as_str() == "on",
                 "limits" => {
                     let (vcpus, mem) = value.split_once(' ').ok_or_else(bad)?;
                     record.posture.vcpus = vcpus.parse().map_err(|_| bad())?;
@@ -514,8 +516,8 @@ impl Record {
                 _ => {}
             }
         }
-        if !seen_format {
-            return Err(ParseError("no `record` line".to_string()));
+        if let Some(missing) = REQUIRED.iter().find(|k| !seen.contains(k)) {
+            return Err(ParseError(format!("no `{missing}` line")));
         }
         if record.name.is_empty() {
             return Err(ParseError("no name".to_string()));
@@ -530,6 +532,46 @@ impl Record {
         Ok(record)
     }
 }
+
+/// A value as its line carries it: a backslash, a newline and a return escaped, so one key is one
+/// line whatever an argument or a path holds.
+fn escape(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    for c in value.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+/// The value a line carries, or `None` for an escape this build does not know.
+fn unescape(line: &str) -> Option<String> {
+    let mut out = String::with_capacity(line.len());
+    let mut chars = line.chars();
+    while let Some(c) = chars.next() {
+        if c != '\\' {
+            out.push(c);
+            continue;
+        }
+        out.push(match chars.next()? {
+            '\\' => '\\',
+            'n' => '\n',
+            'r' => '\r',
+            _ => return None,
+        });
+    }
+    Some(out)
+}
+
+/// The lines every writer puts, in the order it puts them; a record without one is refused.
+const REQUIRED: [&str; 11] = [
+    "record", "id", "name", "verb", "root", "network", "sound", "gpu", "results", "limits",
+    "started",
+];
 
 /// The most characters a run id may have, which bounds the directory name it becomes.
 const MAX_ID: usize = 128;
@@ -721,10 +763,18 @@ impl Store {
         std::fs::rename(&tmp, run.record_path())
     }
 
-    /// Reads the run with `id`.
+    /// Reads the run with `id`, refusing a record that names another run: a directory copied
+    /// under a new name would otherwise be listed as the run it came from, and removed as it.
     pub fn read(&self, id: &str) -> io::Result<Record> {
         let text = std::fs::read_to_string(self.dir_of(checked_id(id)?).record_path())?;
-        Record::parse(&text).map_err(io::Error::other)
+        let record = Record::parse(&text).map_err(io::Error::other)?;
+        if record.id != id {
+            return Err(io::Error::other(format!(
+                "the record in {id} says it is {}",
+                record.id
+            )));
+        }
+        Ok(record)
     }
 
     /// Every run that can be read, newest first. A directory whose record cannot be read is
@@ -1413,6 +1463,67 @@ mod tests {
         let mut record = Record::begin("named", Verb::Run, vec!["true".into()], posture());
         record.id = id.to_string();
         record
+    }
+
+    /// A word with a newline, a return or an edge space is read back as itself: a `-c` script is
+    /// one argument, and the record has to say the whole of what ran.
+    #[test]
+    fn an_argument_is_read_back_byte_for_byte() {
+        let mut p = posture();
+        p.root = PathBuf::from("/img/two\nlines");
+        let record = Record::begin(
+            "script",
+            Verb::Run,
+            vec![
+                "sh".into(),
+                "-c".into(),
+                "echo a\necho b\r".into(),
+                "tail ".into(),
+                "\\n".into(),
+                String::new(),
+            ],
+            p,
+        );
+        let text = record.to_text();
+        assert_eq!(Record::parse(&text).expect("parses"), record);
+        assert!(!text.contains("\necho b"), "one line per key:\n{text}");
+    }
+
+    /// A record missing a line every writer puts is refused by that line's name, rather than
+    /// read as a `run` that started in 1970 with nothing to boot.
+    #[test]
+    fn a_record_missing_a_line_every_writer_puts_is_refused() {
+        let whole = Record::begin("whole", Verb::Up, vec![], posture()).to_text();
+        assert!(Record::parse(&whole).is_ok());
+        for key in REQUIRED {
+            let without: String = whole
+                .lines()
+                .filter(|l| l.split_once(' ').map_or(*l, |(k, _)| k) != key)
+                .map(|l| format!("{l}\n"))
+                .collect();
+            let err = Record::parse(&without).expect_err(key);
+            assert!(err.to_string().contains(key), "{key}: {err}");
+        }
+    }
+
+    /// A run directory copied under another name is refused rather than listed as the run it
+    /// was copied from, which `remove` would then take away in its place.
+    #[test]
+    fn a_directory_carrying_another_runs_record_is_refused() {
+        let dir = bsx_test_support::ScratchDir::created("record-copied");
+        let store = Store::at(dir.path().join("runs")).expect("a store");
+        let record = Record::begin("orig", Verb::Run, vec![], posture());
+        store.create(&record).expect("created");
+        let copy = format!("{}-copy", record.started_ms);
+        std::fs::create_dir(store.dir().join(&copy)).expect("a copied directory");
+        std::fs::copy(
+            store.dir_of(&record.id).record_path(),
+            store.dir_of(&copy).record_path(),
+        )
+        .expect("the copied record");
+        let err = store.read(&copy).expect_err("refused");
+        assert!(err.to_string().contains(&record.id), "{err}");
+        assert_eq!(store.list().expect("listed").len(), 1, "listed once");
     }
 
     /// One archive entry as [`read_tar`] saw it.
