@@ -210,7 +210,7 @@ fn main() -> ExitCode {
         .title(|app: &App| app.title())
         .theme(|app: &App| app.theme.clone())
         .scale_factor(|app: &App| f32::from(app.scale) / 100.0)
-        .window_size(Size::new(1100.0, 720.0))
+        .window_size(Size::new(1360.0, 860.0))
         .run();
     match ran {
         Ok(()) => ExitCode::SUCCESS,

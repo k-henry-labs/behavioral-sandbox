@@ -16,13 +16,13 @@ pub(crate) fn default_theme() -> iced::Theme {
     macos()
 }
 
-/// Apple's system palette, as the platform's own dialogs draw it: the gray window, near-black
-/// text, and the system blue, green, orange and red carrying the meanings they carry there.
+/// Apple's system palette, as the platform's own windows draw it: a white page, near-black text,
+/// and the system blue, green, orange and red carrying the meanings they carry there.
 fn macos() -> iced::Theme {
     iced::Theme::custom(
         "macOS",
         iced::theme::Palette {
-            background: iced::Color::from_rgb8(0xF5, 0xF5, 0xF7),
+            background: iced::Color::WHITE,
             text: iced::Color::from_rgb8(0x1D, 0x1D, 0x1F),
             primary: iced::Color::from_rgb8(0x00, 0x7A, 0xFF),
             success: iced::Color::from_rgb8(0x34, 0xC7, 0x59),
