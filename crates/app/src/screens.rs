@@ -642,8 +642,8 @@ pub(crate) fn list(app: &App) -> Element<'_, Message> {
         start.push(
             row![
                 text(format!("remove {}?", crate::ended_runs(past.len()))).size(BODY),
-                head_button("Remove", destructive).on_press(Message::ClearConfirmed),
-                head_button("Keep", push).on_press(Message::ClearCancelled),
+                small_button("Remove", destructive).on_press(Message::ClearConfirmed),
+                small_button("Keep", push).on_press(Message::ClearCancelled),
             ]
             .spacing(12)
             .align_y(iced::alignment::Vertical::Center),
@@ -652,9 +652,9 @@ pub(crate) fn list(app: &App) -> Element<'_, Message> {
         let mut ordinary = start;
         if !past.is_empty() {
             ordinary =
-                ordinary.push(head_button("Clear history", push).on_press(Message::ClearHistory));
+                ordinary.push(small_button("Clear history", push).on_press(Message::ClearHistory));
         }
-        ordinary.push(head_button("New run", push).on_press(Message::NewRun))
+        ordinary.push(small_button("New run", push).on_press(Message::NewRun))
     }
     .spacing(12)
     .align_y(iced::alignment::Vertical::Center);
@@ -741,9 +741,9 @@ fn head_title(name: &str) -> Element<'_, Message> {
         .into()
 }
 
-/// A control on a head's line: shorter than one on a page, because the traffic lights set how
-/// much room that line has before the window's own top edge.
-fn head_button<'a>(
+/// A control that has to fit a line rather than a page: a head's, whose room the traffic lights
+/// set, or the end of a row in the notebook.
+fn small_button<'a>(
     label: &'a str,
     style: fn(&iced::Theme, button::Status) -> button::Style,
 ) -> iced::widget::Button<'a, Message> {
@@ -837,12 +837,6 @@ fn run_row<'a>(app: &'a App, record: &'a Record) -> Element<'a, Message> {
         }),
         text(&record.name).font(NAME).size(TITLE),
         space().width(Fill),
-        text(state)
-            .size(SMALL)
-            .wrapping(text::Wrapping::None)
-            .style(move |t| text::Style {
-                color: Some(muted(t))
-            }),
     ]
     .spacing(8)
     .align_y(iced::alignment::Vertical::Center);
@@ -866,7 +860,7 @@ fn run_row<'a>(app: &'a App, record: &'a Record) -> Element<'a, Message> {
     let text_side = column![title, command, posture].spacing(4);
     // A running sandbox with a display shows it, so the list says what each one is doing rather
     // than only what it was asked to do.
-    let body: Element<'_, Message> = match crate::frame_program(app, &crate::RunName::of(record)) {
+    let told: Element<'_, Message> = match crate::frame_program(app, &crate::RunName::of(record)) {
         Some(program) if live => row![
             container(shader(program).width(Fill).height(Fill))
                 .width(Length::Fixed(THUMBNAIL.0))
@@ -879,6 +873,20 @@ fn run_row<'a>(app: &'a App, record: &'a Record) -> Element<'a, Message> {
         .into(),
         _ => text_side.width(Fill).into(),
     };
+    // What this row can be told to do, at its own end: a sandbox is stopped where it is listed
+    // rather than only on its own screen. There is no pause, because libkrun has no suspend.
+    let body = row![
+        told,
+        text(state)
+            .size(SMALL)
+            .wrapping(text::Wrapping::None)
+            .style(move |t| text::Style {
+                color: Some(muted(t))
+            }),
+        row_actions(record, live),
+    ]
+    .spacing(12)
+    .align_y(iced::alignment::Vertical::Center);
     // A button rather than a container under a `mouse_area`: the row is a thing you click, so it
     // answers the pointer with the step of grey a source list gives a row under one.
     button(body)
@@ -903,6 +911,21 @@ fn row_card(theme: &iced::Theme, status: button::Status) -> button::Style {
     );
     style.border.radius = CARD_RADIUS.into();
     style
+}
+
+/// What a row can be told to do without opening the run: stop a live one, run an ended one
+/// again, or take its record away. Everything else stays on the run's own screen.
+fn row_actions<'a>(record: &Record, live: bool) -> iced::widget::Row<'a, Message> {
+    if live {
+        return row![
+            small_button("Stop", destructive).on_press(Message::Stop(crate::RunName::of(record)))
+        ];
+    }
+    row![
+        small_button("Re-run", push).on_press(Message::Rerun(crate::RunId::of(record))),
+        small_button("Delete", destructive).on_press(Message::Delete(crate::RunId::of(record))),
+    ]
+    .spacing(6)
 }
 
 /// How big a live sandbox's frame is in the list, in logical pixels. Wide enough to tell two
@@ -967,27 +990,28 @@ pub(crate) fn run<'a>(app: &'a App, id: &crate::RunId) -> Element<'a, Message> {
     };
     let live = app.is_live(record);
     let mut bar = row![
-        head_button("← runs", ghost).on_press(Message::Back),
+        small_button("← runs", ghost).on_press(Message::Back),
         text(&record.name).font(MONO).size(TITLE).line_height(1.0),
         space().width(Fill),
     ]
     .spacing(12)
     .align_y(iced::alignment::Vertical::Center);
-    bar = bar.push(head_button("Export", push).on_press(Message::Export(crate::RunId::of(record))));
+    bar =
+        bar.push(small_button("Export", push).on_press(Message::Export(crate::RunId::of(record))));
     if live {
         if record.verb == Verb::Up {
             bar = bar.push(
-                head_button("Shell", push).on_press(Message::Shell(crate::RunName::of(record))),
+                small_button("Shell", push).on_press(Message::Shell(crate::RunName::of(record))),
             );
         }
         bar = bar.push(
-            head_button("Stop", destructive).on_press(Message::Stop(crate::RunName::of(record))),
+            small_button("Stop", destructive).on_press(Message::Stop(crate::RunName::of(record))),
         );
     } else {
         bar = bar
-            .push(head_button("Re-run", push).on_press(Message::Rerun(crate::RunId::of(record))));
+            .push(small_button("Re-run", push).on_press(Message::Rerun(crate::RunId::of(record))));
         bar = bar.push(
-            head_button("Delete", destructive).on_press(Message::Delete(crate::RunId::of(record))),
+            small_button("Delete", destructive).on_press(Message::Delete(crate::RunId::of(record))),
         );
     }
 
