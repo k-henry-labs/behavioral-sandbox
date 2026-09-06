@@ -199,9 +199,9 @@ fn round(theme: &iced::Theme, status: button::Status) -> button::Style {
 /// The room the traffic lights take at the window's top-left corner, before the first control.
 const LIGHTS: f32 = 80.0;
 
-/// A head's height, as a macOS window with a toolbar has one. This window has no toolbar to
-/// ask for, so its traffic lights sit above this line rather than on it.
-const HEAD_BAR: f32 = 52.0;
+/// A head's height, twice the line macOS centres this window's traffic lights on, so that a
+/// head's name, its toggle and its controls all sit on that line with them.
+const HEAD_BAR: f32 = 32.0;
 
 /// Where the toggle's circle starts, so its glyph is centred on that same line.
 const TOGGLE_TOP: f32 = (HEAD_BAR - TOGGLE) / 2.0;
@@ -698,8 +698,9 @@ const PAGE: f32 = 1000.0;
 /// The inset a pane's own name and its actions sit at, off the sidebar and the window's edge.
 const GUTTER: f32 = 24.0;
 
-/// The room under a head before the page under it begins.
-const HEAD_GAP: f32 = 30.0;
+/// Where the page begins, from the window's own top edge rather than from the head above it, so
+/// that the room a reader sees does not follow the head's height.
+const PAGE_TOP: f32 = 82.0;
 
 /// A screen the sidebar opened: its name at the pane's own edge, its content in a column centred
 /// under it at the width a row is still taken in at one glance.
@@ -715,7 +716,7 @@ fn framed<'a>(
             .height(Fill)
             .center_x(Fill)
             .padding(iced::Padding {
-                top: HEAD_GAP,
+                top: PAGE_TOP - HEAD_BAR,
                 right: GUTTER,
                 bottom: 0.0,
                 left: GUTTER,
