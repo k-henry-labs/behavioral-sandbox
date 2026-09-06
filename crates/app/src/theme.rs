@@ -34,6 +34,45 @@ impl std::fmt::Display for Mode {
 /// chooses between.
 pub(crate) const MODES: [Mode; 3] = [Mode::System, Mode::Light, Mode::Dark];
 
+/// The surface a card or a pane sits on, over the page: white in light, a step up in dark, as
+/// macOS raises a group off the window under it.
+pub(crate) fn raised(theme: &iced::Theme) -> iced::Color {
+    if theme.extended_palette().is_dark {
+        iced::Color::from_rgb8(0x2C, 0x2C, 0x2E)
+    } else {
+        iced::Color::WHITE
+    }
+}
+
+/// The sidebar's own surface, a step under the page rather than over it, which is the direction
+/// macOS sets a source list against the pane beside it.
+pub(crate) fn recessed(theme: &iced::Theme) -> iced::Color {
+    if theme.extended_palette().is_dark {
+        iced::Color::from_rgb8(0x16, 0x16, 0x18)
+    } else {
+        iced::Color::from_rgb8(0xEC, 0xEC, 0xEE)
+    }
+}
+
+/// The step of grey a row wears while the pointer is on it.
+pub(crate) fn hovered(theme: &iced::Theme) -> iced::Color {
+    if theme.extended_palette().is_dark {
+        iced::Color::from_rgb8(0x2F, 0x2F, 0x31)
+    } else {
+        iced::Color::from_rgb8(0xE1, 0xE1, 0xE6)
+    }
+}
+
+/// The step of grey under what is picked: a source list's open row, a segment, a slider's track.
+/// Neutral on purpose, since a generated ramp tints these towards the palette's own hue.
+pub(crate) fn selected(theme: &iced::Theme) -> iced::Color {
+    if theme.extended_palette().is_dark {
+        iced::Color::from_rgb8(0x3A, 0x3A, 0x3C)
+    } else {
+        iced::Color::from_rgb8(0xD8, 0xD8, 0xDD)
+    }
+}
+
 /// The theme `mode` draws in, given what the toolkit reports the desktop is showing.
 pub(crate) fn theme(mode: Mode, desktop: iced::theme::Mode) -> iced::Theme {
     match (mode, desktop) {
@@ -47,7 +86,7 @@ fn light() -> iced::Theme {
     iced::Theme::custom(
         "Light",
         iced::theme::Palette {
-            background: iced::Color::WHITE,
+            background: iced::Color::from_rgb8(0xF2, 0xF2, 0xF7),
             text: iced::Color::from_rgb8(0x1D, 0x1D, 0x1F),
             primary: iced::Color::from_rgb8(0x00, 0x7A, 0xFF),
             success: iced::Color::from_rgb8(0x34, 0xC7, 0x59),

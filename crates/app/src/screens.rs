@@ -194,7 +194,7 @@ const TOGGLE_ICON: f32 = 20.0;
 fn round(theme: &iced::Theme, status: button::Status) -> button::Style {
     let palette = theme.extended_palette();
     let surface = match status {
-        button::Status::Hovered | button::Status::Pressed => palette.background.weaker.color,
+        button::Status::Hovered | button::Status::Pressed => crate::theme::hovered(theme),
         button::Status::Active | button::Status::Disabled => iced::Color::TRANSPARENT,
     };
     let mut style = role(surface, palette.background.base.text, None, status);
@@ -269,7 +269,7 @@ fn tab<'a>(
 fn selected_tab(theme: &iced::Theme) -> button::Style {
     let palette = theme.extended_palette();
     role(
-        palette.background.weak.color,
+        crate::theme::selected(theme),
         palette.background.base.text,
         None,
         button::Status::Active,
@@ -279,9 +279,7 @@ fn selected_tab(theme: &iced::Theme) -> button::Style {
 /// The sidebar's surface: the page tinted one step, which the rule beside it parts from the page.
 fn rail(theme: &iced::Theme) -> container::Style {
     container::Style {
-        background: Some(iced::Background::Color(
-            theme.extended_palette().background.weakest.color,
-        )),
+        background: Some(iced::Background::Color(crate::theme::recessed(theme))),
         ..container::Style::default()
     }
 }
@@ -477,7 +475,7 @@ fn ticks<'a>(labels: Vec<String>) -> Element<'a, Message> {
 fn segment(theme: &iced::Theme) -> button::Style {
     let palette = theme.extended_palette();
     let mut style = role(
-        palette.background.weak.color,
+        crate::theme::selected(theme),
         palette.background.base.text,
         Some(hairline(theme)),
         button::Status::Active,
@@ -490,7 +488,7 @@ fn segment(theme: &iced::Theme) -> button::Style {
 fn rail_of(theme: &iced::Theme, status: slider::Status) -> slider::Style {
     let palette = theme.extended_palette();
     let mut style = slider::default(theme, status);
-    let rail = iced::Background::Color(palette.background.weak.color);
+    let rail = iced::Background::Color(crate::theme::selected(theme));
     style.rail.backgrounds = (rail, rail);
     style.rail.width = 4.0;
     style.handle = slider::Handle {
@@ -514,7 +512,7 @@ fn switch(theme: &iced::Theme, status: toggler::Status) -> toggler::Style {
     style.background = iced::Background::Color(if on {
         palette.primary.base.color
     } else {
-        palette.background.weak.color
+        crate::theme::selected(theme)
     });
     style.foreground = iced::Background::Color(iced::Color::WHITE);
     style
@@ -536,15 +534,6 @@ fn hairline(theme: &iced::Theme) -> iced::Color {
         .scale_alpha(0.1)
 }
 
-/// The soft shadow that lifts a surface off the page; a floating layer takes a deeper one.
-const LIFT: iced::Shadow = iced::Shadow {
-    color: iced::Color {
-        a: 0.12,
-        ..iced::Color::BLACK
-    },
-    offset: iced::Vector::new(0.0, 2.0),
-    blur_radius: 8.0,
-};
 /// The faint shadow under a push button's edge, as macOS sets one on the page.
 const RAISE: iced::Shadow = iced::Shadow {
     color: iced::Color {
@@ -562,6 +551,19 @@ fn push(theme: &iced::Theme, status: button::Status) -> button::Style {
     bordered(theme, palette.background.base.text, status)
 }
 
+/// The default action, as macOS fills one: the accent under the label it carries, a step darker
+/// under the pointer. One to a screen, or none of them reads as the way out.
+fn primary(theme: &iced::Theme, status: button::Status) -> button::Style {
+    let palette = theme.extended_palette();
+    let surface = match status {
+        button::Status::Hovered | button::Status::Pressed => palette.primary.strong.color,
+        button::Status::Active | button::Status::Disabled => palette.primary.base.color,
+    };
+    let mut style = role(surface, palette.primary.base.text, None, status);
+    style.shadow = RAISE;
+    style
+}
+
 /// The destructive act: the same push button, its label in the palette's danger.
 fn destructive(theme: &iced::Theme, status: button::Status) -> button::Style {
     let palette = theme.extended_palette();
@@ -572,7 +574,7 @@ fn destructive(theme: &iced::Theme, status: button::Status) -> button::Style {
 fn ghost(theme: &iced::Theme, status: button::Status) -> button::Style {
     let palette = theme.extended_palette();
     let surface = match status {
-        button::Status::Hovered | button::Status::Pressed => palette.background.weaker.color,
+        button::Status::Hovered | button::Status::Pressed => crate::theme::hovered(theme),
         button::Status::Active | button::Status::Disabled => iced::Color::TRANSPARENT,
     };
     role(surface, palette.background.base.text, None, status)
@@ -580,10 +582,9 @@ fn ghost(theme: &iced::Theme, status: button::Status) -> button::Style {
 
 /// The shape [`push`] and [`destructive`] share, differing only in what colour the label is.
 fn bordered(theme: &iced::Theme, text: iced::Color, status: button::Status) -> button::Style {
-    let palette = theme.extended_palette();
     let surface = match status {
-        button::Status::Hovered | button::Status::Pressed => palette.background.weaker.color,
-        button::Status::Active | button::Status::Disabled => palette.background.base.color,
+        button::Status::Hovered | button::Status::Pressed => crate::theme::hovered(theme),
+        button::Status::Active | button::Status::Disabled => crate::theme::raised(theme),
     };
     let mut style = role(surface, text, Some(hairline(theme)), status);
     style.shadow = RAISE;
@@ -614,15 +615,12 @@ fn role(
 
 /// A card: the page's own surface a shade lifted, held by a hairline border.
 fn card(theme: &iced::Theme) -> container::Style {
-    let palette = theme.extended_palette();
     container::Style {
-        background: Some(iced::Background::Color(palette.background.weakest.color)),
+        background: Some(iced::Background::Color(crate::theme::raised(theme))),
         border: iced::Border {
-            color: hairline(theme),
-            width: 1.0,
             radius: CARD_RADIUS.into(),
+            ..iced::Border::default()
         },
-        shadow: LIFT,
         ..container::Style::default()
     }
 }
@@ -630,6 +628,7 @@ fn card(theme: &iced::Theme) -> container::Style {
 /// A text entry as macOS draws one: the default look on a rounded corner.
 fn entry(theme: &iced::Theme, status: text_input::Status) -> text_input::Style {
     let mut style = text_input::default(theme, status);
+    style.background = iced::Background::Color(crate::theme::raised(theme));
     style.border.radius = FIELD_RADIUS.into();
     style
 }
@@ -720,7 +719,6 @@ fn framed<'a>(
         container(body.max_width(PAGE))
             .width(Fill)
             .height(Fill)
-            .center_x(Fill)
             .padding(iced::Padding {
                 top: PAGE_TOP - HEAD_BAR,
                 right: GUTTER,
@@ -1018,6 +1016,12 @@ pub(crate) fn run<'a>(app: &'a App, id: &crate::RunId) -> Element<'a, Message> {
     page.into()
 }
 
+/// The width a form's label column takes: the longest of them, so every field starts on one line.
+const FORM_LABEL: f32 = 100.0;
+
+/// The width a field holding a number takes, sized to the number rather than to the row.
+const FORM_NUMBER: f32 = 96.0;
+
 /// The width the label column of a pane takes, in logical pixels: the longest label plus a gap.
 const LABEL: f32 = 74.0;
 
@@ -1180,7 +1184,7 @@ fn output_pane<'a>(app: &'a App, record: &'a Record) -> iced::widget::Container<
 /// A field's aside, indented into the value column so the left edge stays the labels'.
 fn caption(line: &'static str) -> Element<'static, Message> {
     row![
-        space().width(Length::Fixed(98.0)),
+        space().width(Length::Fixed(FORM_LABEL + 8.0)),
         text(line).size(SMALL).style(|t| text::Style {
             color: Some(muted(t)),
         }),
@@ -1190,14 +1194,14 @@ fn caption(line: &'static str) -> Element<'static, Message> {
 
 /// The form for a new run, with the posture sentence above the buttons.
 pub(crate) fn new_run<'a>(app: &'a App, form: &'a Form) -> Element<'a, Message> {
-    let field = |label: &'static str, value: &'a str, which: Field| {
+    let field = |label: &'static str, value: &'a str, which: Field, width: Length| {
         row![
-            text(label).width(Length::Fixed(90.0)),
+            text(label).width(Length::Fixed(FORM_LABEL)),
             text_input("", value)
                 .style(entry)
                 .on_input(move |v| Message::Field(which, v))
                 .font(MONO)
-                .width(Fill),
+                .width(width),
         ]
         .spacing(8)
         .align_y(iced::alignment::Vertical::Center)
@@ -1243,43 +1247,53 @@ pub(crate) fn new_run<'a>(app: &'a App, form: &'a Form) -> Element<'a, Message> 
     posture.results = form.results;
 
     let mut page = column![
-        field("name", &form.name, Field::Name),
-        field("root", &form.root, Field::Root),
+        field("Name", &form.name, Field::Name, Fill),
+        field("Root", &form.root, Field::Root, Fill),
         switch(
-            "the guest may write its root",
+            "The guest may write its root",
             form.writable_root,
             Switch::WritableRoot
         ),
-        field("command", &form.command, Field::Command),
+        field("Command", &form.command, Field::Command, Fill),
         caption("words split on spaces; empty starts a sandbox to exec into"),
-        field("mounts", &form.mounts, Field::Mounts),
+        field("Mounts", &form.mounts, Field::Mounts, Fill),
         caption("GUESTDIR=HOSTDIR, space-separated, read-write"),
-        field("shares", &form.shares, Field::Shares),
+        field("Shares", &form.shares, Field::Shares, Fill),
         switch(
-            "network through the host (tsi)",
+            "Network through the host (TSI)",
             form.network,
             Switch::Network
         ),
         row![
-            switch("display", form.display, Switch::Display),
+            switch("Display", form.display, Switch::Display),
             text_input("640x480", &form.display_size)
                 .style(entry)
                 .on_input(|v| Message::Field(Field::DisplaySize, v))
                 .font(MONO)
                 .width(Length::Fixed(140.0)),
-            switch("sound", form.sound, Switch::Sound),
-            switch("gpu", form.gpu, Switch::Gpu),
+            switch("Sound", form.sound, Switch::Sound),
+            switch("GPU", form.gpu, Switch::Gpu),
         ]
         .spacing(16)
         .align_y(iced::alignment::Vertical::Center),
         switch(
-            "keep what the guest writes to /results in the record",
+            "Keep what the guest writes to /results in the record",
             form.results,
             Switch::Results
         ),
         row![
-            field("vcpus", &form.vcpus, Field::Vcpus),
-            field("mem MiB", &form.mem_mib, Field::Mem),
+            field(
+                "vCPUs",
+                &form.vcpus,
+                Field::Vcpus,
+                Length::Fixed(FORM_NUMBER)
+            ),
+            field(
+                "Memory MiB",
+                &form.mem_mib,
+                Field::Mem,
+                Length::Fixed(FORM_NUMBER)
+            ),
         ]
         .spacing(16),
         rule::horizontal(1),
@@ -1288,7 +1302,7 @@ pub(crate) fn new_run<'a>(app: &'a App, form: &'a Form) -> Element<'a, Message> 
             space().width(Fill),
             button(text("Cancel")).style(push).on_press(Message::Back),
             button(text("Start sandbox"))
-                .style(push)
+                .style(primary)
                 .on_press(Message::Start),
         ]
         .spacing(12),
