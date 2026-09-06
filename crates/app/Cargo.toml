@@ -27,6 +27,13 @@ iced = { workspace = true }
 # The monotonic clock the frame logs share with the helper's `--frame-log`.
 rustix = { workspace = true, features = ["time"] }
 
+# The window's own chrome is AppKit's, and the toolbar that puts its buttons on a head's line is
+# one call into it. All three are already in this binary through winit, which draws the window.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.5"
+objc2-app-kit = { version = "0.2", features = ["NSResponder", "NSToolbar", "NSView", "NSWindow"] }
+objc2-foundation = "0.2"
+
 [dev-dependencies]
 bsx-test-support = { path = "../test-support" }
 ttf-parser = "0.25.1"

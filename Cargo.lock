@@ -238,6 +238,9 @@ dependencies = [
  "bsx-test-support",
  "clap",
  "iced",
+ "objc2 0.5.2",
+ "objc2-app-kit",
+ "objc2-foundation 0.2.2",
  "rustix 1.1.4",
  "ttf-parser",
 ]

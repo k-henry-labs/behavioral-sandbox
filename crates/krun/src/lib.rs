@@ -1,9 +1,9 @@
 //! A safe wrapper over libkrun: a builder that puts the library's call-ordering rules in the type
 //! system, and turns its negative-errno returns into a typed [`Error`].
 //!
-//! **This is the one crate in the workspace that may use `unsafe`**, because libkrun is a C
-//! library. `every_crate_forbids_unsafe` in the gate asserts the exempt list *equals* this crate, so
-//! neither a second one nor the loss of this one passes quietly. The raw declarations live in a
+//! **This crate may use `unsafe`**, because libkrun is a C library; `bsx-app`'s window chrome is
+//! the only other, for AppKit. `every_crate_forbids_unsafe` in the gate asserts the exempt list
+//! *equals* those two, so neither a third nor the loss of this one passes quietly. The raw declarations live in a
 //! private `sys` module rather than a separate `-sys` package, which makes the API below the only
 //! way to reach libkrun instead of merely the recommended one.
 //!

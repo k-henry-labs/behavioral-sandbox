@@ -78,9 +78,10 @@ the mechanism serving it; the full text is [docs/architecture.md](docs/architect
 * **Measure rather than assert**: percentiles with the host and date, and a number that cannot be
   defended is withdrawn. libkrun has no snapshot surface, so every boot is a cold boot.
 
-The host path is `#![forbid(unsafe_code)]`, enforced by the compiler in every crate and checked by
-`every_crate_forbids_unsafe` in the gate. `bsx-krun`, the libkrun wrapper, is the one exception,
-because the library is C; the gate asserts that list exactly, so a second one cannot appear quietly.
+The host path is `#![forbid(unsafe_code)]`, enforced by the compiler and checked by
+`every_crate_forbids_unsafe` in the gate. Two crates are excepted, each for a library written in
+another language: `bsx-krun`, because libkrun is C, and `bsx-app`'s `chrome`, because AppKit is
+Objective-C. The gate asserts that list exactly, so a third cannot appear quietly.
 
 ## Building
 
@@ -120,7 +121,7 @@ types. `cargo … -p` takes the package, a path takes the directory.
 | `crates/record` | `bsx-record` | The run record the notebook keeps: posture, captured output, and the guest's `/results`, one directory per run, exportable as one tar file. |
 | `crates/input` | `bsx-input` | The guest's keyboard and pointer: device shapes, reports, and the line grammar the replay file and the control socket feed. |
 | `crates/cli` | `bsx` | The `bsx` CLI and its verbs. The binary on `PATH` is `bsx`. |
-| `crates/app` | `bsx-app` | The GUI application, on iced: the notebook of runs reached from a sidebar, a run's record with its display and output, a start form, stop, re-run, delete, export, clear history, a persisted palette, scale and landing screen, and a shell in your terminal. |
+| `crates/app` | `bsx-app` | The GUI application, on iced: the notebook of runs reached from a sidebar, a run's record with its display and output, a start form, stop, re-run, delete, export, clear history, a persisted palette, scale and landing screen, and a shell in your terminal. One AppKit call gives its window a toolbar, which is what puts the window's own buttons on the line its head is drawn to. |
 | `crates/test-support` | `bsx-test-support` | Shared test fixtures: a self-reclaiming scratch dir, a log sink, a deterministic generator. Dev-only, never shipped. |
 | `docs` | | This documentation, as an mdBook. |
 | `xtask` | `xtask` | Dev orchestration: `cargo xtask ci`, the guest image build, the vendor mirror. Never shipped. |

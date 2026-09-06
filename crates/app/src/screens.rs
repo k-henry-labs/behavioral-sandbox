@@ -197,7 +197,7 @@ fn round(theme: &iced::Theme, status: button::Status) -> button::Style {
 }
 
 /// The room the traffic lights take at the window's top-left corner, before the first control.
-const LIGHTS: f32 = 80.0;
+const LIGHTS: f32 = 91.0;
 
 /// A head's height, as a toolbar window has one: 19.5 of room over its content, which is what a
 /// window whose titlebar carries a toolbar leaves over the traffic lights in it.

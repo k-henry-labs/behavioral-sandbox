@@ -1244,8 +1244,9 @@ exclude = ["fuzz"]
         assert!(asked.contains("/dev/kvm"), "{asked:?}");
     }
 
-    /// Every workspace crate forbids `unsafe` except the raw libkrun bindings, which two doc pages
-    /// state and this checks. An **equality**, so a new crate must be decided about either way.
+    /// Every workspace crate forbids `unsafe` except the two that call a C or Objective-C library,
+    /// which two doc pages state and this checks. An **equality**, so a new crate must be decided
+    /// about either way.
     #[test]
     fn every_crate_forbids_unsafe() {
         let root = workspace_root();
@@ -1280,15 +1281,15 @@ exclude = ["fuzz"]
         forbids.sort();
         allows.sort();
         assert_eq!(
-            allows,
-            [UNSAFE_CRATE],
-            "`{UNSAFE_CRATE}` is the one crate that may use `unsafe`, because libkrun is a C \
-             library. Forbidding: {forbids:?}"
+            allows, UNSAFE_CRATES,
+            "{UNSAFE_CRATES:?} are the crates that may use `unsafe`, because libkrun is a C \
+             library and AppKit is an Objective-C one. Forbidding: {forbids:?}"
         );
     }
 
-    /// The single directory under `crates/` exempt from `#![forbid(unsafe_code)]`.
-    const UNSAFE_CRATE: &str = "krun";
+    /// The directories under `crates/` exempt from `#![forbid(unsafe_code)]`, in sorted order:
+    /// `krun` calls libkrun, and `app` calls AppKit for the window's own chrome.
+    const UNSAFE_CRATES: [&str; 2] = ["app", "krun"];
 
     /// The three copies of [`FUZZ_TARGETS`] no constant can reach, each drifting silently: a
     /// target missing from the workflow never runs, so a boundary reads as fuzzed while nothing

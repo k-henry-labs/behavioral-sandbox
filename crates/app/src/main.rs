@@ -12,8 +12,9 @@
 //!   is left, so nothing grows with time in the window.
 //! - **The frame logs are the measurement.** `--log`, `--drawn-log` and `--input-log` record the
 //!   display path on the host's monotonic clock, as `cargo xtask bench-frames --app` reads them.
-#![forbid(unsafe_code)]
+#![deny(unsafe_code)]
 
+mod chrome;
 mod cli;
 mod frame;
 mod icons;
@@ -221,7 +222,16 @@ fn main() -> ExitCode {
         }
         // Asked once here and followed by subscription after, so `System` is right from the
         // first frame rather than from the first change.
-        (app, iced::system::theme().map(Message::DesktopTheme))
+        (
+            app,
+            Task::batch([
+                iced::system::theme().map(Message::DesktopTheme),
+                // Both, because a window already open when this runs sends no `Opened` and one
+                // opened after it is not `latest` yet.
+                iced::window::latest()
+                    .then(|id| id.map_or_else(Task::none, chrome::unify_titlebar)),
+            ]),
+        )
     };
     let ran = iced::application(boot, App::update, App::view)
         .subscription(App::subscription)
@@ -453,6 +463,8 @@ pub(crate) enum Message {
     Tick,
     /// A frame went up at this instant: the clock the sidebar's motion is read against.
     Drawn(std::time::Instant),
+    /// A window is on screen: what its own chrome is settled on.
+    Opened(iced::window::Id),
     Open(RunId),
     Back,
     List,
@@ -820,6 +832,7 @@ impl App {
                 self.now = at;
                 Task::none()
             }
+            Message::Opened(id) => chrome::unify_titlebar(id),
             Message::ResetSettings => {
                 self.mode = theme::Mode::default();
                 self.scale = 100;
@@ -1065,6 +1078,7 @@ impl App {
         let mut subs = vec![timer::every_second()];
         subs.push(iced::keyboard::listen().map(Message::Keyboard));
         subs.push(iced::system::theme_changes().map(Message::DesktopTheme));
+        subs.push(iced::window::open_events().map(Message::Opened));
         // Only while something is moving: a frame subscription redraws the window on every
         // frame for as long as it is held.
         if self.sidebar.is_animating(self.now) {

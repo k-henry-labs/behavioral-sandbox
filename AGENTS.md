@@ -9,8 +9,9 @@ every session.
 
 The project uses stable Rust in one workspace. `rust-toolchain.toml` pins the version. It targets
 Linux on `x86_64` and macOS on ARM64, because those are where libkrun has a hypervisor. The host
-path is `#![forbid(unsafe_code)]`. The raw libkrun bindings are the one exception, because the
-library is C.
+path is `#![forbid(unsafe_code)]`, with two exceptions, each a library in another language: the raw
+libkrun bindings, because libkrun is C, and the GUI's window chrome, because AppKit is
+Objective-C. Both are `deny` with a named `allow` on the one item, never `forbid` lifted.
 
 **Voice: claim nothing the project cannot back.** The project is pre-release and unaudited. It has
 one maintainer and no external review. Describe mechanisms that a diff can disprove. State each
@@ -109,7 +110,7 @@ list of packages. Therefore a stale `-p` fails the gate, not the terminal of a r
 | `crates/record` | `bsx-record` | The run record: one directory per run under the local data dir with the posture as settled, the captured output (capped), and `results/`, the directory the guest sees as `/results`. Written by the CLI at start and end, read by both binaries; `export` writes one as a ustar file. |
 | `crates/input` | `bsx-input` | The guest's keyboard and pointer: the two device shapes, the reports a window's events become, and the `kbd\|ptr TYPE CODE VALUE` line grammar every feeder speaks (the replay file, the `input` request). Both binaries translate through it. |
 | `crates/cli` | `bsx` | The `bsx` binary and its verbs. The package, the binary, and the command are all `bsx`. Its library half is the internals of the CLI, not a public API. |
-| `crates/app` | `bsx-app` | The GUI application, on iced: the notebook of runs (live and past, from `bsx-record`), one run's record with its display (leased over the control socket, uploaded to a wgpu texture by its damage rectangle) and its captured output, a start form, stop, re-run, delete, and a shell in the operator's terminal. Starting, stopping and the shell go through the `bsx` binary beside it. |
+| `crates/app` | `bsx-app` | The GUI application, on iced: the notebook of runs (live and past, from `bsx-record`), one run's record with its display (leased over the control socket, uploaded to a wgpu texture by its damage rectangle) and its captured output, a start form, stop, re-run, delete, and a shell in the operator's terminal. Starting, stopping and the shell go through the `bsx` binary beside it. Its `chrome` module is the second crate that may use `unsafe`, for the one AppKit call that gives the window a toolbar. |
 | `crates/test-support` | `bsx-test-support` | Test fixtures: a self-reclaiming scratch dir, a log sink, and the deterministic generator the in-gate fuzz suites use. |
 | `xtask` | `xtask` | Dev orchestration: the gate, artifact builds, benchmarks, and packaging. It is never shipped and never renamed (`cargo xtask` is a `--package xtask` alias). |
 | `docs/` | | mdBook. `SUMMARY.md` is the index. The names are flat `topic-subtopic.md`. The hierarchy is in `SUMMARY.md`, not in directories. |
