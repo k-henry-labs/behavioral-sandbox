@@ -879,9 +879,30 @@ fn run_row<'a>(app: &'a App, record: &'a Record) -> Element<'a, Message> {
         .into(),
         _ => text_side.width(Fill).into(),
     };
-    mouse_area(container(body).width(Fill).padding(12).style(card))
+    // A button rather than a container under a `mouse_area`: the row is a thing you click, so it
+    // answers the pointer with the step of grey a source list gives a row under one.
+    button(body)
+        .width(Fill)
+        .padding(12)
+        .style(row_card)
         .on_press(Message::Open(crate::RunId::of(record)))
         .into()
+}
+
+/// A card that is a row you click: the raised surface, a step under the pointer, no edge.
+fn row_card(theme: &iced::Theme, status: button::Status) -> button::Style {
+    let surface = match status {
+        button::Status::Hovered | button::Status::Pressed => crate::theme::raised_hovered(theme),
+        button::Status::Active | button::Status::Disabled => crate::theme::raised(theme),
+    };
+    let mut style = role(
+        surface,
+        theme.extended_palette().background.base.text,
+        None,
+        status,
+    );
+    style.border.radius = CARD_RADIUS.into();
+    style
 }
 
 /// How big a live sandbox's frame is in the list, in logical pixels. Wide enough to tell two

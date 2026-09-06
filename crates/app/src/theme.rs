@@ -63,6 +63,16 @@ pub(crate) fn hovered(theme: &iced::Theme) -> iced::Color {
     }
 }
 
+/// The step a raised surface takes under the pointer: down in light, up in dark, because a card
+/// is the lightest surface in one and a raised one in the other, so it cannot move the same way.
+pub(crate) fn raised_hovered(theme: &iced::Theme) -> iced::Color {
+    if theme.extended_palette().is_dark {
+        iced::Color::from_rgb8(0x3A, 0x3A, 0x3C)
+    } else {
+        iced::Color::from_rgb8(0xE8, 0xE8, 0xED)
+    }
+}
+
 /// The step of grey under what is picked: a source list's open row, a segment, a slider's track.
 /// Neutral on purpose, since a generated ramp tints these towards the palette's own hue.
 pub(crate) fn selected(theme: &iced::Theme) -> iced::Color {
