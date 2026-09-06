@@ -752,6 +752,17 @@ fn small_button<'a>(
         .padding([4.0, 10.0])
 }
 
+/// A page's committing action, at the end of a form: the notebook's own type on the room macOS
+/// gives a dialog's push button, which is more than a control on a line gets.
+fn page_button<'a>(
+    label: &'a str,
+    style: fn(&iced::Theme, button::Status) -> button::Style,
+) -> iced::widget::Button<'a, Message> {
+    button(text(label).size(BODY))
+        .style(style)
+        .padding([6.0, 14.0])
+}
+
 /// A window's head: one row centred on the line the traffic lights sit on, and clear of them.
 fn head_bar<'a>(app: &App, head: Element<'a, Message>) -> Element<'a, Message> {
     container(head)
@@ -981,7 +992,7 @@ fn posture_tags(record: &Record) -> String {
 pub(crate) fn run<'a>(app: &'a App, id: &crate::RunId) -> Element<'a, Message> {
     let Some(record) = app.record(id) else {
         return column![
-            button(text("← runs")).style(ghost).on_press(Message::Back),
+            small_button("← runs", ghost).on_press(Message::Back),
             text(format!("the run {id} is no longer in the notebook")),
         ]
         .spacing(10)
@@ -1346,10 +1357,8 @@ pub(crate) fn new_run<'a>(app: &'a App, form: &'a Form) -> Element<'a, Message> 
         text(posture.sentence()).size(14),
         row![
             space().width(Fill),
-            button(text("Cancel")).style(push).on_press(Message::Back),
-            button(text("Start sandbox"))
-                .style(primary)
-                .on_press(Message::Start),
+            page_button("Cancel", push).on_press(Message::Back),
+            page_button("Start sandbox", primary).on_press(Message::Start),
         ]
         .spacing(12),
     ]
