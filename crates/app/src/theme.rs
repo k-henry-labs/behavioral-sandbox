@@ -30,9 +30,9 @@ impl std::fmt::Display for Mode {
     }
 }
 
-/// Every mode the picker offers, in the order it offers them: `System` between the two it picks
-/// between, so the row reads as the range it is.
-pub(crate) const MODES: [Mode; 3] = [Mode::Light, Mode::System, Mode::Dark];
+/// Every mode the picker offers, in the order it offers them: the default first, then the two it
+/// chooses between.
+pub(crate) const MODES: [Mode; 3] = [Mode::System, Mode::Light, Mode::Dark];
 
 /// The theme `mode` draws in, given what the toolkit reports the desktop is showing.
 pub(crate) fn theme(mode: Mode, desktop: iced::theme::Mode) -> iced::Theme {
