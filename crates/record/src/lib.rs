@@ -755,12 +755,18 @@ impl Store {
         Ok(run)
     }
 
-    /// Writes the record whole, atomically.
+    /// Writes the record whole, atomically: to a temporary of this writer's own, renamed over
+    /// the record, so two processes ending one run (`stop`, and the run itself) never truncate
+    /// or rename each other's.
     pub fn save(&self, record: &Record) -> io::Result<()> {
         let run = self.dir_of(checked_id(&record.id)?);
-        let tmp = run.path.join("record.tmp");
-        std::fs::write(&tmp, record.to_text())?;
-        std::fs::rename(&tmp, run.record_path())
+        let tmp = run.path.join(temp_name("record"));
+        let written = std::fs::write(&tmp, record.to_text())
+            .and_then(|()| std::fs::rename(&tmp, run.record_path()));
+        if written.is_err() {
+            let _ = std::fs::remove_file(&tmp);
+        }
+        written
     }
 
     /// Reads the run with `id`, refusing a record that names another run: a directory copied
@@ -844,12 +850,7 @@ impl Store {
         } else {
             dest.to_path_buf()
         };
-        static EXPORT_SEQ: AtomicU64 = AtomicU64::new(0);
-        let tmp = target.with_extension(format!(
-            "tar.{}.{}.tmp",
-            std::process::id(),
-            EXPORT_SEQ.fetch_add(1, Ordering::Relaxed)
-        ));
+        let tmp = target.with_extension(temp_name("tar"));
         // A create or rename failure names the destination: the OS error alone carries no path,
         // and a refused `--to` is the way this fails for a person.
         let at_target =
@@ -872,6 +873,17 @@ impl Store {
             }
         }
     }
+}
+
+/// A temporary's name no other writer on this machine is using: the stem, this process, and a
+/// count within it.
+fn temp_name(stem: &str) -> String {
+    static SEQ: AtomicU64 = AtomicU64::new(0);
+    format!(
+        "{stem}.{}.{}.tmp",
+        std::process::id(),
+        SEQ.fetch_add(1, Ordering::Relaxed)
+    )
 }
 
 /// One run's directory and the files in it.
@@ -1524,6 +1536,33 @@ mod tests {
         let err = store.read(&copy).expect_err("refused");
         assert!(err.to_string().contains(&record.id), "{err}");
         assert_eq!(store.list().expect("listed").len(), 1, "listed once");
+    }
+
+    /// Two writers save one record at the same moment (`bsx stop` and the run's own end), and a
+    /// reader between them sees one whole record or the other, never a torn or missing one.
+    #[test]
+    fn two_writers_saving_at_once_never_leave_a_torn_record() {
+        let dir = bsx_test_support::ScratchDir::created("record-race");
+        let store = Store::at(dir.path().join("runs")).expect("a store");
+        let record = Record::begin("raced", Verb::Run, vec!["true".into()], posture());
+        store.create(&record).expect("created");
+        std::thread::scope(|s| {
+            for end in [End::Stopped, End::Exit(0)] {
+                let store = &store;
+                let mut mine = record.clone();
+                s.spawn(move || {
+                    mine.finish(end);
+                    for _ in 0..2000 {
+                        store.save(&mine).expect("saved");
+                    }
+                });
+            }
+            for _ in 0..2000 {
+                store
+                    .read(&record.id)
+                    .expect("a whole record between two writers");
+            }
+        });
     }
 
     /// One archive entry as [`read_tar`] saw it.
