@@ -232,8 +232,9 @@ fn rail(theme: &iced::Theme) -> container::Style {
     }
 }
 
-/// One muted line of prose, the menu's quiet register.
-fn muted_line<'a>(line: String, size: f32) -> Element<'a, Message> {
+/// One muted line of prose, the quiet register. Takes what `text` takes, so a fixed line
+/// borrows rather than allocating on every redraw.
+fn muted_line<'a>(line: impl text::IntoFragment<'a>, size: f32) -> Element<'a, Message> {
     text(line)
         .size(size)
         .style(|t| text::Style {
@@ -312,24 +313,18 @@ pub(crate) fn settings(app: &App) -> Element<'_, Message> {
             format!("version {}", env!("CARGO_PKG_VERSION")),
             space().width(0)
         ),
-        setting(
-            Some(icons::SUN_MOON),
-            "Theme",
-            theme_note.to_string(),
-            modes
-        ),
+        setting(Some(icons::SUN_MOON), "Theme", theme_note, modes),
         stacked(
             Some(icons::SCALING),
             "Scale",
-            "How large the notebook draws everything.".to_string(),
+            "How large the notebook draws everything.",
             scale
         ),
         setting(
             Some(icons::ROCKET),
             "Open on a new run",
             "A plain launch shows the form instead of the notebook; --open and a named run \
-             outrank it."
-                .to_string(),
+             outrank it.",
             toggler(app.opens_on == crate::OpenScreen::New)
                 .size(22)
                 .style(switch)
@@ -376,7 +371,7 @@ pub(crate) fn settings(app: &App) -> Element<'_, Message> {
 fn setting<'a>(
     icon: Option<char>,
     title: &'a str,
-    what: String,
+    what: impl text::IntoFragment<'a>,
     control: impl Into<Element<'a, Message>>,
 ) -> Element<'a, Message> {
     row![labelled(icon, title, what).width(Fill), control.into()]
@@ -389,7 +384,7 @@ fn setting<'a>(
 fn labelled<'a>(
     icon: Option<char>,
     title: &'a str,
-    what: String,
+    what: impl text::IntoFragment<'a>,
 ) -> iced::widget::Row<'a, Message> {
     let mut line = row![].spacing(12);
     if let Some(icon) = icon {
@@ -406,7 +401,7 @@ fn labelled<'a>(
 fn stacked<'a>(
     icon: Option<char>,
     title: &'a str,
-    what: String,
+    what: impl text::IntoFragment<'a>,
     control: impl Into<Element<'a, Message>>,
 ) -> Element<'a, Message> {
     column![labelled(icon, title, what), control.into()]
