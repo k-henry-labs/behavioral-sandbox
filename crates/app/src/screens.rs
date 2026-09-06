@@ -199,9 +199,9 @@ fn round(theme: &iced::Theme, status: button::Status) -> button::Style {
 /// The room the traffic lights take at the window's top-left corner, before the first control.
 const LIGHTS: f32 = 80.0;
 
-/// A head's height, twice the line macOS centres this window's traffic lights on, so that
-/// everything in a head is centred on that same line.
-const HEAD_BAR: f32 = 32.0;
+/// A head's height, as a macOS window with a toolbar has one. This window has no toolbar to
+/// ask for, so its traffic lights sit above this line rather than on it.
+const HEAD_BAR: f32 = 52.0;
 
 /// Where the toggle's circle starts, so its glyph is centred on that same line.
 const TOGGLE_TOP: f32 = (HEAD_BAR - TOGGLE) / 2.0;
@@ -698,6 +698,9 @@ const PAGE: f32 = 1000.0;
 /// The inset a pane's own name and its actions sit at, off the sidebar and the window's edge.
 const GUTTER: f32 = 24.0;
 
+/// The room under a head before the page under it begins.
+const HEAD_GAP: f32 = 30.0;
+
 /// A screen the sidebar opened: its name at the pane's own edge, its content in a column centred
 /// under it at the width a row is still taken in at one glance.
 fn framed<'a>(
@@ -712,7 +715,7 @@ fn framed<'a>(
             .height(Fill)
             .center_x(Fill)
             .padding(iced::Padding {
-                top: GUTTER,
+                top: HEAD_GAP,
                 right: GUTTER,
                 bottom: 0.0,
                 left: GUTTER,
@@ -721,10 +724,16 @@ fn framed<'a>(
     .into()
 }
 
-/// A pane's own name on a head's line: one line of type, set on its own body, so that centring
-/// the box centres the letters and not the font's room for a second line.
-fn head_title(name: &str) -> iced::widget::Text<'_> {
-    text(name).size(HEAD).font(HEADING).line_height(1.0)
+/// What a head's name drops by, so that its letters rather than the font's room above them
+/// centre on the head's line: twice the ascent's overshoot of the cap, at [`HEAD`].
+const CAP_DROP: f32 = 4.0;
+
+/// A pane's own name on a head's line, one line of type on its own body and dropped onto the
+/// line by [`CAP_DROP`].
+fn head_title(name: &str) -> Element<'_, Message> {
+    container(text(name).size(HEAD).font(HEADING).line_height(1.0))
+        .padding(iced::Padding::ZERO.top(CAP_DROP))
+        .into()
 }
 
 /// A control on a head's line: shorter than one on a page, because the traffic lights set how
@@ -1284,7 +1293,7 @@ pub(crate) fn new_run<'a>(app: &'a App, form: &'a Form) -> Element<'a, Message> 
     }
     framed(
         app,
-        head_title("New run").into(),
+        head_title("New run"),
         column![scrollable(page).direction(lane()).style(scroll)].width(Fill),
     )
 }
