@@ -29,7 +29,8 @@ use std::process::ExitCode;
 use std::sync::Arc;
 
 use clap::Parser;
-use iced::{Element, Size, Subscription, Task};
+use iced::animation::Easing;
+use iced::{Animation, Element, Size, Subscription, Task};
 
 use bsx_krun::SharedFrames;
 use bsx_record::{Record, Store};
@@ -450,6 +451,8 @@ pub(crate) enum Switch {
 pub(crate) enum Message {
     /// A second passed: reread the notebook and the open run's output.
     Tick,
+    /// A frame went up at this instant: the clock the sidebar's motion is read against.
+    Drawn(std::time::Instant),
     Open(RunId),
     Back,
     List,
@@ -539,8 +542,10 @@ pub(crate) struct App {
     opens_on: OpenScreen,
     /// Whether the list is asking "really clear the history?". Leaving the list disarms it.
     confirm_clear: bool,
-    /// Whether the sidebar is out. Folded, its toggle keeps the corner it left.
-    sidebar_shown: bool,
+    /// Whether the sidebar is out, and where it stands while that is changing.
+    sidebar: Animation<bool>,
+    /// The instant the last frame was drawn at, which every animation is read at.
+    now: std::time::Instant,
 }
 
 /// One leased display: what was mapped for it, the presents it has reported, and where its input
@@ -580,7 +585,8 @@ impl App {
             scale: 100,
             opens_on: OpenScreen::List,
             confirm_clear: false,
-            sidebar_shown: true,
+            sidebar: Animation::new(true).quick().easing(Easing::EaseInOut),
+            now: std::time::Instant::now(),
         };
         app.refresh();
         if let Some(key) = opening {
@@ -608,6 +614,11 @@ impl App {
                 self.record(id).map_or(id.as_str(), |r| r.name.as_str())
             ),
         }
+    }
+
+    /// How far the sidebar is out: 0 folded away, 1 all the way, and between while it moves.
+    pub(crate) fn sidebar_out(&self) -> f32 {
+        self.sidebar.interpolate(0.0, 1.0, self.now)
     }
 
     /// The record with `id`, from the last tick.
@@ -798,7 +809,15 @@ impl App {
                 Task::none()
             }
             Message::ToggleSidebar => {
-                self.sidebar_shown = !self.sidebar_shown;
+                // From the clock rather than the last frame: an idle window draws none, and a
+                // motion begun in the past is over before it is seen.
+                self.now = std::time::Instant::now();
+                let out = self.sidebar.value();
+                self.sidebar.go_mut(!out, self.now);
+                Task::none()
+            }
+            Message::Drawn(at) => {
+                self.now = at;
                 Task::none()
             }
             Message::ResetSettings => {
@@ -1046,6 +1065,11 @@ impl App {
         let mut subs = vec![timer::every_second()];
         subs.push(iced::keyboard::listen().map(Message::Keyboard));
         subs.push(iced::system::theme_changes().map(Message::DesktopTheme));
+        // Only while something is moving: a frame subscription redraws the window on every
+        // frame for as long as it is held.
+        if self.sidebar.is_animating(self.now) {
+            subs.push(iced::window::frames().map(Message::Drawn));
+        }
         // Dropping a run's subscription cancels its lease and ends its thread.
         subs.extend(
             self.watches()

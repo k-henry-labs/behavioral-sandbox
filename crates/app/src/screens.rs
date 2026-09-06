@@ -94,35 +94,35 @@ fn lane() -> scrollable::Direction {
 
 /// The window's own furniture: the sidebar on the left, the open screen beside it.
 pub(crate) fn chrome<'a>(app: &'a App, content: Element<'a, Message>) -> Element<'a, Message> {
-    if !app.sidebar_shown {
-        // Folded: the toggle keeps the corner the sidebar left, and the pane's head steps aside
-        // for it through [`head_inset`].
-        return iced::widget::stack![
-            content,
-            container(sidebar_toggle()).padding(iced::Padding {
-                top: TOGGLE_TOP,
-                right: 0.0,
-                bottom: 0.0,
-                left: LIGHTS,
-            }),
-        ]
-        .into();
+    let out = app.sidebar_out();
+    let mut panes = row![];
+    if out > 0.0 {
+        panes = panes
+            .push(sidebar(app, SIDEBAR * out))
+            .push(rule::vertical(1).style(|t| rule::Style {
+                color: hairline(t),
+                radius: 0.0.into(),
+                fill_mode: rule::FillMode::Full,
+                snap: true,
+            }));
     }
-    row![
-        sidebar(app),
-        rule::vertical(1).style(|t| rule::Style {
-            color: hairline(t),
-            radius: 0.0.into(),
-            fill_mode: rule::FillMode::Full,
-            snap: true,
+    // The toggle rides over both panes rather than inside either, so that one glyph crosses the
+    // window as the sidebar folds instead of two swapping places.
+    iced::widget::stack![
+        panes.push(content),
+        container(sidebar_toggle()).padding(iced::Padding {
+            top: TOGGLE_TOP,
+            right: 0.0,
+            bottom: 0.0,
+            left: toggle_at(out),
         }),
-        content,
     ]
     .into()
 }
 
-/// The sidebar: where this machine's sandboxes are reached, and what it found to run them with.
-fn sidebar(app: &App) -> Element<'_, Message> {
+/// The sidebar at `width`: where this machine's sandboxes are reached, clipped to what the fold
+/// has left it rather than laid out again at every width.
+fn sidebar(app: &App, width: f32) -> Element<'_, Message> {
     let running = app.runs.iter().filter(|r| app.is_live(r)).count();
     let on_list = matches!(app.screen, crate::Screen::List | crate::Screen::Run(_));
     let nav = column![
@@ -149,16 +149,16 @@ fn sidebar(app: &App) -> Element<'_, Message> {
         ),
     ]
     .spacing(3);
-    let nav = column![row![space().width(Fill), sidebar_toggle()], nav].spacing(18);
     container(nav.height(Fill))
         .style(rail)
-        .width(Length::Fixed(SIDEBAR))
+        .width(Length::Fixed(width))
         .height(Fill)
+        .clip(true)
         .padding(iced::Padding {
-            top: TOGGLE_TOP,
-            right: 10.0,
+            top: NAV_TOP,
+            right: RAIL_PAD,
             bottom: 12.0,
-            left: 10.0,
+            left: RAIL_PAD,
         })
         .into()
 }
@@ -206,13 +206,27 @@ const HEAD_BAR: f32 = 32.0;
 /// Where the toggle's circle starts, so its glyph is centred on that same line.
 const TOGGLE_TOP: f32 = (HEAD_BAR - TOGGLE) / 2.0;
 
-/// Where a pane's head starts: at the gutter, or past the lights and the toggle when folded.
+/// The room the sidebar keeps at its own edges, and so where the toggle rests inside it.
+const RAIL_PAD: f32 = 10.0;
+
+/// Where the sidebar's first tab starts: under the toggle and the gap after it.
+const NAV_TOP: f32 = TOGGLE_TOP + TOGGLE + 18.0;
+
+/// Where the toggle stands: over the room the lights leave when the sidebar is folded away, at
+/// the sidebar's own inner edge when it is out, and along that line while it moves.
+fn toggle_at(out: f32) -> f32 {
+    LIGHTS + (SIDEBAR - RAIL_PAD - TOGGLE - LIGHTS) * out
+}
+
+/// Where a pane's head starts, at this much of the sidebar: at the gutter, out past the lights
+/// and the toggle by as much as the sidebar is folded away.
+fn head_inset_at(out: f32) -> f32 {
+    GUTTER + (LIGHTS + TOGGLE) * (1.0 - out)
+}
+
+/// Where the head of the pane this window is showing starts.
 fn head_inset(app: &App) -> f32 {
-    if app.sidebar_shown {
-        GUTTER
-    } else {
-        LIGHTS + TOGGLE + GUTTER
-    }
+    head_inset_at(app.sidebar_out())
 }
 
 /// One sidebar tab: its name, an optional count, and the pill it wears while its screen is open.
@@ -223,7 +237,13 @@ fn tab<'a>(
     open: bool,
     message: Message,
 ) -> Element<'a, Message> {
-    let mut line = row![icons::glyph(icon, ICON), text(label).size(TAB)].spacing(12);
+    let mut line = row![
+        icons::glyph(icon, ICON),
+        // One line whatever room is left: a label that rewrapped would step down the rail on
+        // every frame of a fold.
+        text(label).size(TAB).wrapping(text::Wrapping::None),
+    ]
+    .spacing(12);
     line = line.push(space().width(Fill));
     if let Some(count) = count {
         line = line.push(text(count).size(SMALL).style(|t| text::Style {
@@ -1283,6 +1303,21 @@ fn bytes(n: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The toggle and a head cross the window on their own tracks as the sidebar folds. This
+    /// walks the fold and holds the gap between them to the gutter at every step.
+    #[test]
+    fn the_toggle_keeps_its_room_from_a_head_across_the_whole_fold() {
+        for step in 0u8..=100 {
+            let out = f32::from(step) / 100.0;
+            let toggle_ends = toggle_at(out) + TOGGLE;
+            let head_starts = SIDEBAR * out + head_inset_at(out);
+            assert!(
+                head_starts - toggle_ends >= GUTTER,
+                "at {out} out, the head starts at {head_starts} and the toggle ends at {toggle_ends}"
+            );
+        }
+    }
 
     /// A path under home is spelled with `~`; anything else is left whole.
     #[test]
