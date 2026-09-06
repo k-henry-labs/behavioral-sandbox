@@ -386,8 +386,8 @@ fn resolve_root_from(
     let Some(root) = root else {
         return Err(
             "no guest root: pass --root, set BSX_GUEST_ROOT, or install a tree at \
-             ~/.local/share/bsx/rootfs (a checkout builds one with `cargo xtask build-rootfs`, \
-             at artifacts/rootfs-guest)"
+             ~/.local/share/bsx/rootfs (a checkout puts one there with `cargo xtask init`, or \
+             builds the full image on Linux with `cargo xtask build-rootfs`)"
                 .to_string(),
         );
     };

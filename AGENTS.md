@@ -139,6 +139,11 @@ cargo install cargo-deny                      # run by the gate
 `/dev/kvm` must be readable and writable by your user, which usually means membership of the `kvm`
 group. No part of the build or the run needs root.
 
+**A guest tree comes from one of two commands.** `cargo xtask init` writes the pinned minirootfs
+and the static agent to `bsx`'s own default root and runs anywhere, because neither step needs
+`apk`; it installs no runtimes, locks no closure, and makes no reproducibility claim. The image
+below is the built one.
+
 **The guest image is built on Linux, for either arch.** `apk` installs by fetching and unpacking and
 the install runs `--no-scripts`, so `--arch` chooses the *guest's* architecture independently of the
 builder's; what follows the builder is `apk.static`, which has to execute there. That is also why
@@ -160,6 +165,7 @@ anything that needs a signed `bsx` should sign rather than assume.
 
 ```console
 cargo xtask setup            # what this host can and cannot do
+cargo xtask init             # a guest tree where `bsx` looks for one: minirootfs + the agent
 cargo xtask ci               # the gate (and signs what it built, on macOS)
 cargo xtask sign             # macOS only: re-entitle the built `bsx` after any other build
 cargo xtask bundle           # macOS only: assemble artifacts/BSX.app from the built pair

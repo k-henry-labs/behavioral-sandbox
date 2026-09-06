@@ -12,6 +12,7 @@ mod bundle;
 mod drift;
 mod guest_bins;
 mod icons;
+mod init;
 mod lints;
 mod rootfs;
 mod sign;
@@ -84,6 +85,20 @@ enum Cmd {
         /// The git rev to compare against (default: the latest `v*` tag).
         #[arg(long, value_name = "REV")]
         baseline: Option<String>,
+    },
+    /// Put a bootable guest tree where `bsx` looks for one, on any host: the pinned Alpine
+    /// minirootfs plus the static agent, so `run`, `up`, `exec` and `shell` all answer. The
+    /// runtimes and the locked closure need `build-rootfs`, whose installer only runs on Linux.
+    Init {
+        /// Where the tree goes. Falls back to `$BSX_GUEST_ROOT`, then `~/.local/share/bsx/rootfs`.
+        #[arg(long, value_name = "DIR")]
+        root: Option<PathBuf>,
+        /// The guest's architecture (`x86_64` or `aarch64`), defaulting to this host's.
+        #[arg(long, value_name = "ARCH")]
+        arch: Option<String>,
+        /// Replace a guest tree already at that path.
+        #[arg(long)]
+        force: bool,
     },
     /// Assemble the guest rootfs: a minimal Alpine base + the guest runtimes (python3) + the
     /// static agent, as a directory tree at `artifacts/rootfs-guest` (needs `curl` and `tar`), the
@@ -178,6 +193,7 @@ fn main() -> Result<()> {
         Cmd::Setup => setup(),
         Cmd::Sign { release } => sign::sign_for_hypervisor(release),
         Cmd::Icons => icons::cut_icon_font(),
+        Cmd::Init { root, arch, force } => init::init(root, arch, force),
         Cmd::Bundle { release } => bundle::bundle_app(release),
         Cmd::Vendor { dir, verify } => {
             if verify {
@@ -952,14 +968,46 @@ fn cargo(args: &[&str]) -> Result<()> {
 
 /// Runs cargo with this host's identity remapped out of what it builds, for release binaries only:
 /// `panic!` locations are baked in regardless of debug info. `CARGO_ENCODED_RUSTFLAGS` *replaces*
-/// configured `rustflags`, which is why this stays off the gate.
-fn cargo_reproducible(args: &[&str]) -> Result<()> {
-    let flags = remap_flags(
+/// configured `rustflags`, which is why this stays off the gate. `extra` carries flags a build
+/// needs that this host would not pass on its own; `--target` keeps them off its build scripts.
+fn cargo_reproducible(args: &[&str], extra: Vec<String>) -> Result<()> {
+    let mut flags = remap_flags(
         &cargo_home(),
         &rustc_sysroot()?,
         rustc_commit_hash().as_deref(),
     );
+    flags.extend(extra);
     cargo_env(args, &[("CARGO_ENCODED_RUSTFLAGS", &flags.join("\x1f"))])
+}
+
+/// The linker the toolchain ships beside `rustc`, which emits ELF on whatever host it runs on.
+fn rust_lld() -> Result<PathBuf> {
+    let host = rustc_host_triple()?;
+    let lld = rustc_sysroot()?
+        .join("lib/rustlib")
+        .join(&host)
+        .join("bin/rust-lld");
+    if !lld.is_file() {
+        bail!(
+            "no rust-lld at {} — every toolchain ships one, so a partial install has to be \
+             repaired (`rustup toolchain install`) before a guest binary can be linked",
+            lld.display()
+        );
+    }
+    Ok(lld)
+}
+
+/// This host's target triple, as its own `rustc` reports it.
+fn rustc_host_triple() -> Result<String> {
+    let out = Command::new("rustc")
+        .arg("-vV")
+        .output()
+        .context("running rustc -vV")?;
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .find_map(|l| l.strip_prefix("host: "))
+        .map(|h| h.trim().to_string())
+        .context("rustc -vV printed no host triple")
 }
 
 /// The `--remap-path-prefix` flags [`cargo_reproducible`] passes, onto fixed tokens.

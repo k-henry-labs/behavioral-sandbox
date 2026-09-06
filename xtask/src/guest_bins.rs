@@ -44,7 +44,16 @@ fn build_guest_musl(arch: GuestArch) -> Result<PathBuf> {
     let mut args = vec!["build", "--release", "--locked", "-p", "bsx-guest-agent"];
     args.extend_from_slice(selector);
     args.extend_from_slice(&["--target", target]);
-    cargo_reproducible(&args)?;
+    // The toolchain's own linker on every host, rather than whatever `cc` is: a macOS `cc` cannot
+    // emit ELF and rejects the GNU flags rustc hands it, and one linker is one path to test.
+    let lld = crate::rust_lld()?;
+    cargo_reproducible(
+        &args,
+        vec![
+            format!("-Clinker={}", lld.display()),
+            "-Clinker-flavor=ld.lld".to_string(),
+        ],
+    )?;
     let bin = crate::target_dir().join(target).join(subpath);
     verify_static(&bin, label)?;
     println!("\n✓ {label} built (static): {}", bin.display());

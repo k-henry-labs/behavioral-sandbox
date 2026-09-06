@@ -91,6 +91,10 @@ the `kvm` group. On macOS, Hypervisor.framework refuses a process without the
 does not reliably outlive the next cargo build, so re-sign after building. No part of the build or
 the run needs root on either platform.
 
+`cargo xtask init` is what gets a sandbox booting: it puts the pinned Alpine minirootfs and the
+static agent where `bsx` looks for a root, on either platform, since neither step needs `apk`. The
+runtimes and the locked package closure come from `cargo xtask build-rootfs`, which runs on Linux.
+
 libkrun and its kernel payload install from the system package manager (`pacman -S libkrun
 libkrunfw` on Arch; `brew tap slp/krun && brew trust slp/krun && brew install libkrun libkrunfw`
 on macOS): a C library and a shared object holding a Linux kernel, so neither arrives through
@@ -99,6 +103,7 @@ what executes during the build is `apk.static`, a Linux binary.
 
 ```console
 cargo xtask setup            # what this host can and cannot do
+cargo xtask init             # a guest tree where bsx looks for one, so a sandbox can boot
 cargo xtask ci               # the gate: fmt, prose drift, clippy, build, test, docs, deny
 cargo xtask sign             # macOS: re-entitle the built bsx after any other build
 cargo xtask bundle           # macOS: assemble artifacts/BSX.app, so the window runs as BSX

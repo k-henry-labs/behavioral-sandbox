@@ -4,6 +4,22 @@ Behavioral Sandbox (BSX) uses minimal Alpine Linux guest images containing only 
 required to run workloads and the static guest agent. Guest rootfs trees are built reproducibly
 without root privileges.
 
+## A tree to boot right away (`cargo xtask init`)
+
+`cargo xtask init` puts the pinned Alpine minirootfs and the static guest agent where `bsx` resolves
+a root (`--root`, then `$BSX_GUEST_ROOT`, then `~/.local/share/bsx/rootfs`), with the `/results`
+mount point and a resolver beside them. It runs on either platform: the base is a tarball and the
+agent is a static musl build, so neither step needs `apk`.
+
+```console
+cargo xtask init                      # this host's arch, into bsx's default root
+cargo xtask init --root DIR --force   # somewhere else, replacing a tree already there
+```
+
+It is a fixture, not the image: no runtimes, no locked closure, no reproducibility claim, and the
+tree carries the invoking user's ownership rather than `0:0`. `--force` refuses a directory that
+does not already look like a guest tree, so it cannot be pointed at a home directory.
+
 ## Building rootfs trees (`cargo xtask build-rootfs`)
 
 Image builds are orchestrated through `cargo xtask build-rootfs`.
