@@ -83,10 +83,9 @@ struct Cli {
     /// notebook open.
     #[arg(long)]
     exit_with_lease: bool,
-    /// The palette to draw in, by the name the toolkit prints it under (`Nord`, `Tokyo Night
-    /// Storm`, `Catppuccin Mocha`). Case and spacing are ignored. Falls back to `$BSX_THEME`,
-    /// then to the theme picked in Settings, then to the app's own New York. An unknown name is
-    /// refused with the full list.
+    /// The mode to draw in: `light`, `dark`, or `system`, which follows the desktop. Case is
+    /// ignored. Falls back to `$BSX_THEME`, then to the pick in Settings, then to `system`. An
+    /// unknown name is refused with the three.
     #[arg(long, value_name = "NAME")]
     theme: Option<String>,
     /// Open on this screen instead of the menu.
@@ -157,7 +156,7 @@ fn main() -> ExitCode {
     let asked = theme::asked_for(cli.theme.as_deref(), theme::from_env());
     let theme_overridden = asked.is_some();
     let saved = state::load();
-    let (theme, theme_note) = match theme::startup(asked.as_deref(), saved.theme.as_deref()) {
+    let (mode, theme_note) = match theme::startup(asked.as_deref(), saved.theme.as_deref()) {
         Ok(pair) => pair,
         Err(why) => {
             eprintln!("bsx-app: {why}");
@@ -193,7 +192,7 @@ fn main() -> ExitCode {
             Arc::clone(&sinks),
             exit_with_lease,
         );
-        app.theme = theme.clone();
+        app.mode = mode;
         app.theme_overridden = theme_overridden;
         app.scale = scale;
         app.opens_on = opens_on.unwrap_or(OpenScreen::List);
@@ -203,12 +202,14 @@ fn main() -> ExitCode {
         if opening.is_none() {
             app.set_screen(landing(open, opens_on).screen());
         }
-        app
+        // Asked once here and followed by subscription after, so `System` is right from the
+        // first frame rather than from the first change.
+        (app, iced::system::theme().map(Message::DesktopTheme))
     };
     let ran = iced::application(boot, App::update, App::view)
         .subscription(App::subscription)
         .title(|app: &App| app.title())
-        .theme(|app: &App| app.theme.clone())
+        .theme(|app: &App| theme::theme(app.mode, app.desktop))
         .scale_factor(|app: &App| f32::from(app.scale) / 100.0)
         .window_size(Size::new(1360.0, 860.0))
         .run();
@@ -438,8 +439,10 @@ pub(crate) enum Message {
     Settings,
     /// A keyboard event every widget ignored: what the window's own chords read.
     Keyboard(iced::keyboard::Event),
-    /// Draw in this palette from now on, and remember it.
-    SetTheme(iced::Theme),
+    /// Draw in this mode from now on, and remember it.
+    SetTheme(theme::Mode),
+    /// The toolkit's report of what the desktop is showing, at start and on every change.
+    DesktopTheme(iced::theme::Mode),
     /// Draw at this scale from now on, and remember it.
     SetScale(Scale),
     /// Open the next plain launch on this screen, and remember it.
@@ -503,8 +506,10 @@ pub(crate) struct App {
     /// live run with a display when the list is showing its grid.
     displays: BTreeMap<RunName, Display>,
     exit_with_lease: bool,
-    /// The palette every view draws in; Settings changes it live.
-    theme: iced::Theme,
+    /// The mode every view draws in; Settings changes it live.
+    mode: theme::Mode,
+    /// What the desktop is showing, as the toolkit last reported it: what `System` follows.
+    desktop: iced::theme::Mode,
     /// Whether --theme or $BSX_THEME set it, which outranks a pick at the next launch.
     theme_overridden: bool,
     /// The interface scale in percent; Settings changes it live.
@@ -546,7 +551,8 @@ impl App {
             sinks,
             displays: BTreeMap::new(),
             exit_with_lease,
-            theme: theme::default_theme(),
+            mode: theme::Mode::default(),
+            desktop: iced::theme::Mode::None,
             theme_overridden: false,
             scale: 100,
             opens_on: OpenScreen::List,
@@ -710,7 +716,7 @@ impl App {
     /// What Settings persists, gathered whole so every save writes every knob.
     fn saved(&self) -> state::Saved {
         state::Saved {
-            theme: Some(self.theme.to_string()),
+            theme: Some(self.mode.to_string()),
             scale: Some(self.scale),
             open: Some(self.opens_on.to_string()),
         }
@@ -759,15 +765,16 @@ impl App {
                 }
                 Task::none()
             }
-            Message::SetTheme(theme) => {
-                self.theme = theme;
+            Message::SetTheme(mode) => {
+                self.mode = mode;
                 self.status = match state::save(&self.saved()) {
-                    Ok(()) => Some(format!("drawing in {}", self.theme)),
-                    Err(e) => Some(format!(
-                        "drawing in {} for this window; not saved: {e}",
-                        self.theme
-                    )),
+                    Ok(()) => Some(format!("drawing in {mode}")),
+                    Err(e) => Some(format!("drawing in {mode} for this window; not saved: {e}")),
                 };
+                Task::none()
+            }
+            Message::DesktopTheme(desktop) => {
+                self.desktop = desktop;
                 Task::none()
             }
             Message::SetScale(Scale(pct)) => {
@@ -1000,6 +1007,7 @@ impl App {
     fn subscription(&self) -> Subscription<Message> {
         let mut subs = vec![timer::every_second()];
         subs.push(iced::keyboard::listen().map(Message::Keyboard));
+        subs.push(iced::system::theme_changes().map(Message::DesktopTheme));
         // Dropping a run's subscription cancels its lease and ends its thread.
         subs.extend(
             self.watches()

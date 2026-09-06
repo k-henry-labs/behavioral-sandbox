@@ -238,17 +238,11 @@ pub(crate) fn settings(app: &App) -> Element<'_, Message> {
         heading("APPEARANCE"),
         row![
             text("theme").size(BODY).width(LABEL),
-            pick_list(
-                crate::theme::all(),
-                Some(app.theme.clone()),
-                Message::SetTheme
-            )
-            .text_size(BODY)
-            .width(Length::Fixed(254.0))
-            .padding(PICK)
-            .menu_height(Length::Fixed(MENU))
-            .menu_style(picker_menu)
-            .style(picker),
+            pick_list(&crate::theme::MODES[..], Some(app.mode), Message::SetTheme)
+                .text_size(BODY)
+                .width(Length::Fixed(240.0))
+                .menu_style(picker_menu)
+                .style(picker),
         ]
         .spacing(10)
         .align_y(iced::alignment::Vertical::Center),
@@ -260,8 +254,7 @@ pub(crate) fn settings(app: &App) -> Element<'_, Message> {
                 Message::SetScale
             )
             .text_size(BODY)
-            .width(Length::Fixed(254.0))
-            .padding(PICK)
+            .width(Length::Fixed(240.0))
             .menu_style(picker_menu)
             .style(picker),
         ]
@@ -289,8 +282,7 @@ pub(crate) fn settings(app: &App) -> Element<'_, Message> {
             text("open on").size(BODY).width(LABEL),
             pick_list(&crate::OPENS[..], Some(app.opens_on), Message::SetOpensOn)
                 .text_size(BODY)
-                .width(Length::Fixed(254.0))
-                .padding(PICK)
+                .width(Length::Fixed(240.0))
                 .menu_style(picker_menu)
                 .style(picker),
         ]
@@ -344,75 +336,75 @@ const FLOAT: iced::Shadow = iced::Shadow {
     offset: iced::Vector::new(0.0, 8.0),
     blur_radius: 24.0,
 };
-/// An open picker menu's height: enough for eight rows, short of any window edge.
-const MENU: f32 = 360.0;
-
-/// The pickers' padding: the default, with the right side also clearing the open menu's
-/// scroller, which floats over the rows and is not reachable through the picker to restyle.
-const PICK: iced::Padding = iced::Padding {
-    top: 5.0,
-    bottom: 5.0,
-    right: 24.0,
-    left: 10.0,
+/// The faint shadow under a push button's edge, as macOS sets one on the page.
+const RAISE: iced::Shadow = iced::Shadow {
+    color: iced::Color {
+        a: 0.08,
+        ..iced::Color::BLACK
+    },
+    offset: iced::Vector::new(0.0, 1.0),
+    blur_radius: 2.0,
 };
 
-/// The one call to action on a screen: solid in the palette's primary, dimmed under the pointer.
-fn primary(theme: &iced::Theme, status: button::Status) -> button::Style {
+/// A push button as macOS draws one: the page's own surface inside a hairline, no colour of its
+/// own, a step of grey under the pointer. Every action here is one of these.
+fn push(theme: &iced::Theme, status: button::Status) -> button::Style {
     let palette = theme.extended_palette();
-    let pair = match status {
-        button::Status::Hovered | button::Status::Pressed => palette.primary.strong,
-        button::Status::Active | button::Status::Disabled => palette.primary.base,
-    };
-    role(pair.color, pair.text, status)
+    bordered(theme, palette.background.base.text, status)
 }
 
-/// The workhorse: a flat fill one step off the page, a step further under the pointer.
-fn secondary(theme: &iced::Theme, status: button::Status) -> button::Style {
+/// The destructive act: the same push button, its label in the palette's danger.
+fn destructive(theme: &iced::Theme, status: button::Status) -> button::Style {
     let palette = theme.extended_palette();
-    let surface = match status {
-        button::Status::Hovered | button::Status::Pressed => palette.background.strong,
-        button::Status::Active | button::Status::Disabled => palette.background.weak,
-    };
-    role(surface.color, palette.background.base.text, status)
+    bordered(theme, palette.danger.base.color, status)
 }
 
-/// Navigation that stays quiet until the pointer finds it.
+/// Navigation that stays quiet until the pointer finds it: no edge, the same grey under it.
 fn ghost(theme: &iced::Theme, status: button::Status) -> button::Style {
     let palette = theme.extended_palette();
     let surface = match status {
-        button::Status::Hovered | button::Status::Pressed => palette.background.weak.color,
+        button::Status::Hovered | button::Status::Pressed => palette.background.weaker.color,
         button::Status::Active | button::Status::Disabled => iced::Color::TRANSPARENT,
     };
-    role(surface, palette.background.base.text, status)
+    role(surface, palette.background.base.text, None, status)
 }
 
-/// The destructive act: solid in the palette's danger, never the default anything.
-fn destructive(theme: &iced::Theme, status: button::Status) -> button::Style {
+/// The shape [`push`] and [`destructive`] share, differing only in what colour the label is.
+fn bordered(theme: &iced::Theme, text: iced::Color, status: button::Status) -> button::Style {
     let palette = theme.extended_palette();
-    let pair = match status {
-        button::Status::Hovered | button::Status::Pressed => palette.danger.strong,
-        button::Status::Active | button::Status::Disabled => palette.danger.base,
+    let surface = match status {
+        button::Status::Hovered | button::Status::Pressed => palette.background.weaker.color,
+        button::Status::Active | button::Status::Disabled => palette.background.base.color,
     };
-    role(pair.color, pair.text, status)
+    let mut style = role(surface, text, Some(hairline(theme)), status);
+    style.shadow = RAISE;
+    style
 }
 
-/// One shape for every role: a borderless fill on the corner, the whole control fading when
-/// disabled, the way a macOS dialog draws its buttons.
-fn role(surface: iced::Color, text: iced::Color, status: button::Status) -> button::Style {
+/// One shape for every role: a fill on the corner, an optional hairline, and the whole control
+/// fading when disabled, the way a macOS dialog draws its buttons.
+fn role(
+    surface: iced::Color,
+    text: iced::Color,
+    edge: Option<iced::Color>,
+    status: button::Status,
+) -> button::Style {
     let faded = matches!(status, button::Status::Disabled);
     let dim = |color: iced::Color| if faded { color.scale_alpha(0.5) } else { color };
     button::Style {
         background: Some(iced::Background::Color(dim(surface))),
         text_color: dim(text),
         border: iced::Border {
+            color: edge.map_or(iced::Color::TRANSPARENT, dim),
+            width: f32::from(u8::from(edge.is_some())),
             radius: RADIUS.into(),
-            ..iced::Border::default()
         },
         ..button::Style::default()
     }
 }
 
-/// A picker's open menu: a card that scrolls, capped by [`MENU`] so it ends inside the window.
+/// A picker's open menu: a card in the palette's own steps. Every menu here is three or four
+/// rows, so none scrolls and no scroller sits over a row.
 fn picker_menu(theme: &iced::Theme) -> iced::widget::overlay::menu::Style {
     let palette = theme.extended_palette();
     iced::widget::overlay::menu::Style {
@@ -423,8 +415,8 @@ fn picker_menu(theme: &iced::Theme) -> iced::widget::overlay::menu::Style {
             radius: CARD_RADIUS.into(),
         },
         text_color: palette.background.base.text,
-        selected_text_color: palette.primary.base.text,
-        selected_background: iced::Background::Color(palette.primary.base.color),
+        selected_text_color: palette.background.base.text,
+        selected_background: iced::Background::Color(palette.background.weaker.color),
         shadow: FLOAT,
     }
 }
@@ -451,13 +443,21 @@ fn entry(theme: &iced::Theme, status: text_input::Status) -> text_input::Style {
     style
 }
 
-/// A closed picker as macOS draws a popup button: a flat fill, no outline.
+/// A closed picker as macOS draws a popup button: the same edge and page as [`push`].
 fn picker(theme: &iced::Theme, status: pick_list::Status) -> pick_list::Style {
+    let palette = theme.extended_palette();
     let mut style = pick_list::default(theme, status);
-    style.background = iced::Background::Color(theme.extended_palette().background.weak.color);
+    style.background = iced::Background::Color(match status {
+        pick_list::Status::Hovered | pick_list::Status::Opened { .. } => {
+            palette.background.weaker.color
+        }
+        pick_list::Status::Active => palette.background.base.color,
+    });
+    style.text_color = palette.background.base.text;
     style.border = iced::Border {
+        color: hairline(theme),
+        width: 1.0,
         radius: FIELD_RADIUS.into(),
-        ..iced::Border::default()
     };
     style
 }
@@ -478,7 +478,7 @@ pub(crate) fn list(app: &App) -> Element<'_, Message> {
                     .style(destructive)
                     .on_press(Message::ClearConfirmed),
                 button(text("Keep"))
-                    .style(secondary)
+                    .style(push)
                     .on_press(Message::ClearCancelled),
             ]
             .spacing(12)
@@ -489,13 +489,13 @@ pub(crate) fn list(app: &App) -> Element<'_, Message> {
         if !past.is_empty() {
             ordinary = ordinary.push(
                 button(text("Clear history"))
-                    .style(secondary)
+                    .style(push)
                     .on_press(Message::ClearHistory),
             );
         }
         ordinary.push(
             button(text("New run"))
-                .style(primary)
+                .style(push)
                 .on_press(Message::NewRun),
         )
     }
@@ -747,14 +747,14 @@ pub(crate) fn run<'a>(app: &'a App, id: &crate::RunId) -> Element<'a, Message> {
     .align_y(iced::alignment::Vertical::Center);
     bar = bar.push(
         button(text("Export"))
-            .style(secondary)
+            .style(push)
             .on_press(Message::Export(crate::RunId::of(record))),
     );
     if live {
         if record.verb == Verb::Up {
             bar = bar.push(
                 button(text("Shell"))
-                    .style(secondary)
+                    .style(push)
                     .on_press(Message::Shell(crate::RunName::of(record))),
             );
         }
@@ -766,7 +766,7 @@ pub(crate) fn run<'a>(app: &'a App, id: &crate::RunId) -> Element<'a, Message> {
     } else {
         bar = bar.push(
             button(text("Re-run"))
-                .style(secondary)
+                .style(push)
                 .on_press(Message::Rerun(crate::RunId::of(record))),
         );
         bar = bar.push(
@@ -1091,11 +1091,9 @@ pub(crate) fn new_run<'a>(app: &'a App, form: &'a Form) -> Element<'a, Message> 
         text(posture.sentence()).size(14),
         row![
             space().width(Fill),
-            button(text("Cancel"))
-                .style(secondary)
-                .on_press(Message::Back),
+            button(text("Cancel")).style(push).on_press(Message::Back),
             button(text("Start sandbox"))
-                .style(primary)
+                .style(push)
                 .on_press(Message::Start),
         ]
         .spacing(12),

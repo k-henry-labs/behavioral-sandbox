@@ -1,26 +1,50 @@
-//! Which palette the notebook draws in.
+//! Which palette the notebook draws in: light, dark, or whichever the desktop is showing.
 //!
-//! - **A theme is a choice, not a restyling.** Every colour in `screens` comes from a semantic role
-//!   on the theme's extended palette (`success.base`, `background.strong.text`) and never from a
-//!   literal, so every theme the toolkit ships already works.
-//! - **The list is the toolkit's plus two.** [`all`] puts the app's own macOS and New York
-//!   palettes ahead of `iced::Theme::ALL`, read from the toolkit, so a theme iced adds or drops
-//!   cannot leave a copy behind to drift.
+//! - **Two palettes, Apple's.** Light and dark are the system palette in its two forms: the page,
+//!   near-black or near-white text, and the system blue, green, orange and red. Every colour in
+//!   `screens` comes from a semantic role on the extended palette, never from a literal.
+//! - **`System` is the default** and follows the toolkit's report of the desktop's appearance, so
+//!   the window flips when the desktop does. The other two hold still.
 //! - **A name is refused, never guessed at.** A typo that silently fell back to the default would
-//!   read as "that theme looks like the old one".
+//!   read as "that mode looks like the old one".
 
 use std::fmt::Write as _;
 
-/// What the notebook draws in when nothing asks otherwise.
-pub(crate) fn default_theme() -> iced::Theme {
-    macos()
+/// What the notebook draws in, as a person picks it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum Mode {
+    Light,
+    Dark,
+    #[default]
+    System,
 }
 
-/// Apple's system palette, as the platform's own windows draw it: a white page, near-black text,
-/// and the system blue, green, orange and red carrying the meanings they carry there.
-fn macos() -> iced::Theme {
+/// The name each mode prints and is asked for by.
+impl std::fmt::Display for Mode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Light => "Light",
+            Self::Dark => "Dark",
+            Self::System => "System",
+        })
+    }
+}
+
+/// Every mode the picker offers, in the order it offers them.
+pub(crate) const MODES: [Mode; 3] = [Mode::Light, Mode::Dark, Mode::System];
+
+/// The theme `mode` draws in, given what the toolkit reports the desktop is showing.
+pub(crate) fn theme(mode: Mode, desktop: iced::theme::Mode) -> iced::Theme {
+    match (mode, desktop) {
+        (Mode::Dark, _) | (Mode::System, iced::theme::Mode::Dark) => dark(),
+        (Mode::Light, _) | (Mode::System, _) => light(),
+    }
+}
+
+/// Apple's system palette in its light form: a white page and the system colours.
+fn light() -> iced::Theme {
     iced::Theme::custom(
-        "macOS",
+        "Light",
         iced::theme::Palette {
             background: iced::Color::WHITE,
             text: iced::Color::from_rgb8(0x1D, 0x1D, 0x1F),
@@ -32,78 +56,69 @@ fn macos() -> iced::Theme {
     )
 }
 
-/// The app's own palette: near-black, near-white, and color kept for meaning.
-fn new_york() -> iced::Theme {
+/// The same palette in its dark form: the system's dark page, and the colours it brightens there.
+fn dark() -> iced::Theme {
     iced::Theme::custom(
-        "New York",
+        "Dark",
         iced::theme::Palette {
-            background: iced::Color::from_rgb8(0x09, 0x09, 0x0B),
-            text: iced::Color::from_rgb8(0xFA, 0xFA, 0xFA),
-            primary: iced::Color::from_rgb8(0xFA, 0xFA, 0xFA),
-            success: iced::Color::from_rgb8(0x22, 0xC5, 0x5E),
-            warning: iced::Color::from_rgb8(0xF5, 0x9E, 0x0B),
-            danger: iced::Color::from_rgb8(0xEF, 0x44, 0x44),
+            background: iced::Color::from_rgb8(0x1C, 0x1C, 0x1E),
+            text: iced::Color::from_rgb8(0xF5, 0xF5, 0xF7),
+            primary: iced::Color::from_rgb8(0x0A, 0x84, 0xFF),
+            success: iced::Color::from_rgb8(0x30, 0xD1, 0x58),
+            warning: iced::Color::from_rgb8(0xFF, 0x9F, 0x0A),
+            danger: iced::Color::from_rgb8(0xFF, 0x45, 0x3A),
         },
     )
 }
 
-/// Every theme the picker offers: the app's own first, then everything the toolkit ships.
-pub(crate) fn all() -> Vec<iced::Theme> {
-    [macos(), new_york()]
-        .into_iter()
-        .chain(iced::Theme::ALL.iter().cloned())
-        .collect()
-}
-
-/// The environment variable a theme can be named in, below the flag and above the default.
+/// The environment variable a mode can be named in, below the flag and above the default.
 pub(crate) const ENV: &str = "BSX_THEME";
 
-/// The theme `asked` names, or [`default_theme`] when nothing asked.
+/// The mode `asked` names, or the default when nothing asked.
 ///
-/// Matching ignores case and anything that is not a letter or digit, so `Tokyo Night Storm`,
-/// `TokyoNightStorm` and `tokyo-night-storm` are one name.
-pub(crate) fn resolve(asked: Option<&str>) -> Result<iced::Theme, String> {
+/// Matching ignores case and anything that is not a letter or digit, so `System`, `system` and
+/// ` SYSTEM ` are one name.
+pub(crate) fn resolve(asked: Option<&str>) -> Result<Mode, String> {
     let Some(asked) = asked else {
-        return Ok(default_theme());
+        return Ok(Mode::default());
     };
     let wanted = normalise(asked);
     if wanted.is_empty() {
         return Err(refusal(asked));
     }
-    all()
+    MODES
         .into_iter()
-        .find(|theme| normalise(&theme.to_string()) == wanted)
+        .find(|mode| normalise(&mode.to_string()) == wanted)
         .ok_or_else(|| refusal(asked))
 }
 
-/// The theme to open in, and a note when a saved name had to be let go.
+/// The mode to open in, and a note when a saved name had to be let go.
 ///
 /// An explicit ask (flag or env) is refused when unknown, as [`resolve`] refuses it; a stale
-/// *saved* name only degrades to [`default_theme`], because a launch should not be blocked by
-/// a file.
+/// *saved* name only degrades to the default, because a launch should not be blocked by a file.
 pub(crate) fn startup(
     asked: Option<&str>,
     saved: Option<&str>,
-) -> Result<(iced::Theme, Option<String>), String> {
+) -> Result<(Mode, Option<String>), String> {
     if asked.is_some() {
-        return resolve(asked).map(|theme| (theme, None));
+        return resolve(asked).map(|mode| (mode, None));
     }
     let Some(saved) = saved else {
-        return Ok((default_theme(), None));
+        return Ok((Mode::default(), None));
     };
     match resolve(Some(saved)) {
-        Ok(theme) => Ok((theme, None)),
+        Ok(mode) => Ok((mode, None)),
         Err(_) => Ok((
-            default_theme(),
+            Mode::default(),
             Some(format!(
-                "the saved theme {saved:?} is not in this build; drawing in {}",
-                default_theme()
+                "the saved theme {saved:?} is not one this build has; drawing in {}",
+                Mode::default()
             )),
         )),
     }
 }
 
-/// The theme named on the command line, else in the environment, else none.
+/// The mode named on the command line, else in the environment, else none.
 ///
 /// Takes the environment's value rather than reading it, so the precedence is a pure function and
 /// its test needs neither `unsafe` nor a process-global the other tests race against.
@@ -117,11 +132,11 @@ pub(crate) fn from_env() -> Option<String> {
     std::env::var(ENV).ok()
 }
 
-/// A refusal that quotes every name it would have accepted, since the set is short and fixed.
+/// A refusal that quotes every name it would have accepted, since the set is three.
 fn refusal(asked: &str) -> String {
     let mut message = format!("no theme named {asked:?}. The ones there are:");
-    for theme in all() {
-        let _ = write!(message, "\n  {theme}");
+    for mode in MODES {
+        let _ = write!(message, "\n  {mode}");
     }
     message
 }
@@ -138,98 +153,89 @@ fn normalise(name: &str) -> String {
 mod tests {
     use super::*;
 
-    /// Every theme the picker offers can be asked for by the name it prints, the app's own New
-    /// York among them, or the list is a promise the app does not keep.
+    /// Every mode the picker offers can be asked for by the name it prints, and nothing asked is
+    /// the default: the list is a promise the app keeps.
     #[test]
-    fn every_theme_in_the_picker_can_be_named() {
-        assert!(
-            iced::Theme::ALL.len() >= 20,
-            "iced ships {} themes, which is fewer than this app was written against",
-            iced::Theme::ALL.len()
-        );
-        for theme in all() {
-            let by_display = resolve(Some(&theme.to_string())).expect("its own printed name");
-            assert_eq!(by_display, theme);
+    fn every_mode_in_the_picker_can_be_named() {
+        for mode in MODES {
+            assert_eq!(
+                resolve(Some(&mode.to_string())).expect("its own name"),
+                mode
+            );
         }
-        assert_eq!(
-            resolve(Some("mac-os")).expect("the platform's palette"),
-            default_theme()
-        );
-        assert_ne!(
-            resolve(Some("new-york")).expect("the app's other palette"),
-            default_theme(),
-            "New York stays in the picker without being the default"
-        );
-        assert_eq!(resolve(None).expect("nothing asked"), default_theme());
+        assert_eq!(resolve(None).expect("nothing asked"), Mode::System);
     }
 
-    /// The spelling a person actually types is accepted: the printed name, the enum's own casing,
-    /// and the kebab form a shell history tends to carry.
+    /// `System` draws in whichever palette the desktop is showing; the other two hold still.
+    #[test]
+    fn system_follows_the_desktop_and_the_others_hold_still() {
+        assert_eq!(theme(Mode::System, iced::theme::Mode::Dark), dark());
+        assert_eq!(theme(Mode::System, iced::theme::Mode::Light), light());
+        assert_eq!(
+            theme(Mode::System, iced::theme::Mode::None),
+            light(),
+            "unknown is light"
+        );
+        assert_eq!(theme(Mode::Light, iced::theme::Mode::Dark), light());
+        assert_eq!(theme(Mode::Dark, iced::theme::Mode::Light), dark());
+    }
+
+    /// The spelling a person actually types is accepted: the printed name, any casing, and the
+    /// stray whitespace a shell history tends to carry.
     #[test]
     fn a_name_is_matched_however_it_is_spaced_and_cased() {
-        for spelling in [
-            "Tokyo Night Storm",
-            "TokyoNightStorm",
-            "tokyo-night-storm",
-            "  tokyo night storm  ",
-            "TOKYO_NIGHT_STORM",
-        ] {
+        for spelling in ["System", "system", "SYSTEM", "  system  "] {
             assert_eq!(
-                resolve(Some(spelling)).expect("one theme, five spellings"),
-                iced::Theme::TokyoNightStorm,
+                resolve(Some(spelling)).expect("one mode, four spellings"),
+                Mode::System,
                 "{spelling:?}"
             );
         }
     }
 
-    /// An unknown name is refused with the list, never quietly defaulted: a theme that silently
-    /// did not change reads as a theme that looks like the old one.
+    /// An unknown name is refused with the list, never quietly defaulted: a mode that silently
+    /// did not change reads as a mode that looks like the old one.
     #[test]
     fn an_unknown_name_is_refused_and_says_what_would_have_worked() {
-        let why = resolve(Some("dracola")).expect_err("a typo is not a theme");
-        assert!(why.contains("dracola"), "names what was asked: {why}");
-        assert!(why.contains("Dracula"), "and what was meant: {why}");
+        let why = resolve(Some("drak")).expect_err("a typo is not a mode");
+        assert!(why.contains("drak"), "names what was asked: {why}");
+        assert!(why.contains("Dark"), "and what was meant: {why}");
         assert!(
             resolve(Some("")).is_err(),
             "an empty name is not the default"
         );
-        assert_eq!(resolve(None).expect("nothing asked"), default_theme());
     }
 
     /// The flag outranks the environment, which outranks the default: the order the CLI's other
-    /// knobs already use. An environment set to blanks is nothing asked, not a theme named "".
+    /// knobs already use. An environment set to blanks is nothing asked, not a mode named "".
     #[test]
     fn the_flag_outranks_the_environment() {
-        let env = || Some("Nord".to_string());
-        assert_eq!(
-            asked_for(Some("Dracula"), env()).as_deref(),
-            Some("Dracula")
-        );
-        assert_eq!(asked_for(None, env()).as_deref(), Some("Nord"));
+        let env = || Some("Dark".to_string());
+        assert_eq!(asked_for(Some("Light"), env()).as_deref(), Some("Light"));
+        assert_eq!(asked_for(None, env()).as_deref(), Some("Dark"));
         assert_eq!(asked_for(None, None), None);
         assert_eq!(asked_for(None, Some("   ".to_string())), None);
     }
 
-    /// A saved theme is used; a stale one degrades to the default with a note; an explicit
-    /// flag or env ask is still refused when unknown, and outranks whatever was saved.
+    /// A saved mode is used; a stale one (a palette an older build offered) degrades to the
+    /// default with a note; an explicit ask is still refused when unknown, and outranks the saved.
     #[test]
-    fn a_saved_theme_is_used_and_a_stale_one_degrades_with_a_note() {
+    fn a_saved_mode_is_used_and_a_stale_one_degrades_with_a_note() {
         assert_eq!(
-            startup(None, Some("Nord")).expect("a saved theme"),
-            (iced::Theme::Nord, None)
+            startup(None, Some("Dark")).expect("a saved mode"),
+            (Mode::Dark, None)
         );
-        let (theme, note) = startup(None, Some("dracola")).expect("a stale name still opens");
-        assert_eq!(theme, default_theme());
-        let note = note.expect("with a note");
-        assert!(note.contains("dracola"), "{note}");
-        startup(Some("dracola"), Some("Nord")).expect_err("an explicit ask is refused");
+        let (mode, note) = startup(None, Some("Nord")).expect("a stale name still opens");
+        assert_eq!(mode, Mode::System);
+        assert!(note.expect("with a note").contains("Nord"));
+        startup(Some("drak"), Some("Dark")).expect_err("an explicit ask is refused");
         assert_eq!(
-            startup(Some("Nord"), Some("Dracula")).expect("the ask outranks the saved"),
-            (iced::Theme::Nord, None)
+            startup(Some("Light"), Some("Dark")).expect("the ask outranks the saved"),
+            (Mode::Light, None)
         );
         assert_eq!(
             startup(None, None).expect("nothing asked"),
-            (default_theme(), None)
+            (Mode::System, None)
         );
     }
 }
