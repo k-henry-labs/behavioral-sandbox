@@ -446,6 +446,8 @@ pub(crate) enum Message {
     SetOpensOn(OpenScreen),
     /// Every setting back to what a fresh install has, and remembered so.
     ResetSettings,
+    /// Fold the sidebar away, or bring it back.
+    ToggleSidebar,
     NewRun,
     Field(Field, String),
     Switch(Switch, bool),
@@ -517,6 +519,8 @@ pub(crate) struct App {
     opens_on: OpenScreen,
     /// Whether the list is asking "really clear the history?". Leaving the list disarms it.
     confirm_clear: bool,
+    /// Whether the sidebar is out. Folded, its toggle keeps the corner it left.
+    sidebar_shown: bool,
 }
 
 /// One leased display: what was mapped for it, the presents it has reported, and where its input
@@ -556,6 +560,7 @@ impl App {
             scale: 100,
             opens_on: OpenScreen::List,
             confirm_clear: false,
+            sidebar_shown: true,
         };
         app.refresh();
         if let Some(key) = opening {
@@ -770,6 +775,10 @@ impl App {
                     Ok(()) => Some(format!("drawing in {mode}")),
                     Err(e) => Some(format!("drawing in {mode} for this window; not saved: {e}")),
                 };
+                Task::none()
+            }
+            Message::ToggleSidebar => {
+                self.sidebar_shown = !self.sidebar_shown;
                 Task::none()
             }
             Message::ResetSettings => {

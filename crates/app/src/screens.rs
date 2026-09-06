@@ -94,6 +94,11 @@ fn lane() -> scrollable::Direction {
 
 /// The window's own furniture: the sidebar on the left, the open screen beside it.
 pub(crate) fn chrome<'a>(app: &'a App, content: Element<'a, Message>) -> Element<'a, Message> {
+    if !app.sidebar_shown {
+        // Folded: the toggle keeps the corner the sidebar left, and the pane's head steps aside
+        // for it through [`head_inset`].
+        return iced::widget::stack![content, container(sidebar_toggle()).padding(12)].into();
+    }
     row![
         sidebar(app),
         rule::vertical(1).style(|t| rule::Style {
@@ -132,12 +137,67 @@ fn sidebar(app: &App) -> Element<'_, Message> {
         ),
     ]
     .spacing(3);
+    let nav = column![row![space().width(Fill), sidebar_toggle()], nav].spacing(8);
     container(nav.height(Fill))
         .style(rail)
         .width(Length::Fixed(SIDEBAR))
         .height(Fill)
         .padding([12, 10])
         .into()
+}
+
+/// The button that folds the sidebar and brings it back, wearing the glyph macOS gives it.
+fn sidebar_toggle<'a>() -> Element<'a, Message> {
+    button(sidebar_glyph())
+        .style(ghost)
+        .padding(6)
+        .on_press(Message::ToggleSidebar)
+        .into()
+}
+
+/// The `sidebar.left` glyph drawn from two widgets: a rounded box with its leading pane marked
+/// off, in the text colour a step quieter.
+fn sidebar_glyph<'a>() -> Element<'a, Message> {
+    let pane = rule::vertical(1).style(|t| rule::Style {
+        color: ink(t),
+        radius: 0.0.into(),
+        fill_mode: rule::FillMode::Full,
+        snap: true,
+    });
+    container(row![space().width(5), pane])
+        .width(Length::Fixed(17.0))
+        .height(Length::Fixed(13.0))
+        .style(|t| container::Style {
+            border: iced::Border {
+                color: ink(t),
+                width: 1.5,
+                radius: 3.0.into(),
+            },
+            ..container::Style::default()
+        })
+        .into()
+}
+
+/// The colour a glyph is drawn in: the text, a step quieter, so it reads as a control.
+fn ink(theme: &iced::Theme) -> iced::Color {
+    theme
+        .extended_palette()
+        .background
+        .base
+        .text
+        .scale_alpha(0.7)
+}
+
+/// The room a folded sidebar's toggle takes at the pane's corner, which a head steps aside for.
+const TOGGLE_ROOM: f32 = 34.0;
+
+/// Where a pane's head starts: at the gutter, or past the toggle when the sidebar is folded.
+fn head_inset(app: &App) -> f32 {
+    if app.sidebar_shown {
+        GUTTER
+    } else {
+        GUTTER + TOGGLE_ROOM
+    }
 }
 
 /// One sidebar tab: its name, an optional count, and the pill it wears while its screen is open.
@@ -303,7 +363,11 @@ pub(crate) fn settings(app: &App) -> Element<'_, Message> {
     if let Some(status) = &app.status {
         body = body.push(text(status).size(BODY));
     }
-    framed(row![text("Settings").size(HEAD).font(HEADING)].into(), body)
+    framed(
+        app,
+        row![text("Settings").size(HEAD).font(HEADING)].into(),
+        body,
+    )
 }
 
 /// One setting as a source-list app lays one out: its name over a grey line of what it does,
@@ -589,7 +653,7 @@ pub(crate) fn list(app: &App) -> Element<'_, Message> {
     if let Some(status) = &app.status {
         body = body.push(text(status).size(BODY));
     }
-    framed(header.into(), body)
+    framed(app, header.into(), body)
 }
 
 /// The width a page of cards stops at, in logical pixels.
@@ -601,11 +665,19 @@ const GUTTER: f32 = 24.0;
 /// A screen the sidebar opened: its name at the pane's own edge, its content in a column centred
 /// under it at the width a row is still taken in at one glance.
 fn framed<'a>(
+    app: &App,
     head: Element<'a, Message>,
     body: iced::widget::Column<'a, Message>,
 ) -> Element<'a, Message> {
     column![
-        container(head).padding([18.0, GUTTER]).width(Fill),
+        container(head)
+            .padding(iced::Padding {
+                top: 18.0,
+                right: GUTTER,
+                bottom: 18.0,
+                left: head_inset(app),
+            })
+            .width(Fill),
         container(body.max_width(PAGE))
             .width(Fill)
             .height(Fill)
@@ -791,6 +863,7 @@ pub(crate) fn run<'a>(app: &'a App, id: &crate::RunId) -> Element<'a, Message> {
     };
     let live = app.is_live(record);
     let mut bar = row![
+        space().width(Length::Fixed(head_inset(app) - GUTTER)),
         button(text("← runs")).style(ghost).on_press(Message::Back),
         text(&record.name).font(MONO).size(18),
         space().width(Fill),
@@ -1156,6 +1229,7 @@ pub(crate) fn new_run<'a>(app: &'a App, form: &'a Form) -> Element<'a, Message> 
         page = page.push(text(status).size(13));
     }
     framed(
+        app,
         text("New run").size(HEAD).font(HEADING).into(),
         column![scrollable(page).direction(lane()).style(scroll)].width(Fill),
     )
