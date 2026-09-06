@@ -100,7 +100,7 @@ pub(crate) fn chrome<'a>(app: &'a App, content: Element<'a, Message>) -> Element
         return iced::widget::stack![
             content,
             container(sidebar_toggle()).padding(iced::Padding {
-                top: 4.0,
+                top: TOGGLE_TOP,
                 right: 0.0,
                 bottom: 0.0,
                 left: LIGHTS,
@@ -155,7 +155,7 @@ fn sidebar(app: &App) -> Element<'_, Message> {
         .width(Length::Fixed(SIDEBAR))
         .height(Fill)
         .padding(iced::Padding {
-            top: 4.0,
+            top: TOGGLE_TOP,
             right: 10.0,
             bottom: 12.0,
             left: 10.0,
@@ -196,18 +196,22 @@ fn round(theme: &iced::Theme, status: button::Status) -> button::Style {
     style
 }
 
-/// The room the traffic lights take at the window's top-left corner, over whatever is there.
-const LIGHTS: f32 = 78.0;
+/// The room the traffic lights take at the window's top-left corner, before the first control.
+const LIGHTS: f32 = 80.0;
 
-/// The room the lights and a folded sidebar's toggle take together, which a head steps past.
-const TOGGLE_ROOM: f32 = 91.0;
+/// A head's height, twice the line macOS centres this window's traffic lights on, so that
+/// everything in a head is centred on that same line.
+const HEAD_BAR: f32 = 32.0;
 
-/// Where a pane's head starts: at the gutter, or past the toggle when the sidebar is folded.
+/// Where the toggle's circle starts, so its glyph is centred on that same line.
+const TOGGLE_TOP: f32 = (HEAD_BAR - TOGGLE) / 2.0;
+
+/// Where a pane's head starts: at the gutter, or past the lights and the toggle when folded.
 fn head_inset(app: &App) -> f32 {
     if app.sidebar_shown {
         GUTTER
     } else {
-        GUTTER + TOGGLE_ROOM
+        LIGHTS + TOGGLE + GUTTER
     }
 }
 
@@ -383,11 +387,7 @@ pub(crate) fn settings(app: &App) -> Element<'_, Message> {
     if let Some(status) = &app.status {
         body = body.push(text(status).size(BODY));
     }
-    framed(
-        app,
-        row![text("Settings").size(HEAD).font(HEADING)].into(),
-        body,
-    )
+    framed(app, row![head_title("Settings")].into(), body)
 }
 
 /// One setting as a source-list app lays one out: its name over a grey line of what it does,
@@ -612,20 +612,13 @@ fn entry(theme: &iced::Theme, status: text_input::Status) -> text_input::Style {
 pub(crate) fn list(app: &App) -> Element<'_, Message> {
     let live: Vec<&Record> = app.runs.iter().filter(|r| app.is_live(r)).collect();
     let past: Vec<&Record> = app.runs.iter().filter(|r| !app.is_live(r)).collect();
-    let start = row![
-        text("Sandboxes").size(HEAD).font(HEADING),
-        space().width(Fill)
-    ];
+    let start = row![head_title("Sandboxes"), space().width(Fill)];
     let header = if app.confirm_clear {
         start.push(
             row![
                 text(format!("remove {}?", crate::ended_runs(past.len()))).size(BODY),
-                button(text("Remove"))
-                    .style(destructive)
-                    .on_press(Message::ClearConfirmed),
-                button(text("Keep"))
-                    .style(push)
-                    .on_press(Message::ClearCancelled),
+                head_button("Remove", destructive).on_press(Message::ClearConfirmed),
+                head_button("Keep", push).on_press(Message::ClearCancelled),
             ]
             .spacing(12)
             .align_y(iced::alignment::Vertical::Center),
@@ -633,17 +626,10 @@ pub(crate) fn list(app: &App) -> Element<'_, Message> {
     } else {
         let mut ordinary = start;
         if !past.is_empty() {
-            ordinary = ordinary.push(
-                button(text("Clear history"))
-                    .style(push)
-                    .on_press(Message::ClearHistory),
-            );
+            ordinary =
+                ordinary.push(head_button("Clear history", push).on_press(Message::ClearHistory));
         }
-        ordinary.push(
-            button(text("New run"))
-                .style(push)
-                .on_press(Message::NewRun),
-        )
+        ordinary.push(head_button("New run", push).on_press(Message::NewRun))
     }
     .spacing(12)
     .align_y(iced::alignment::Vertical::Center);
@@ -700,21 +686,51 @@ fn framed<'a>(
     body: iced::widget::Column<'a, Message>,
 ) -> Element<'a, Message> {
     column![
-        container(head)
-            .padding(iced::Padding {
-                top: 8.0,
-                right: GUTTER,
-                bottom: 18.0,
-                left: head_inset(app),
-            })
-            .width(Fill),
+        head_bar(app, head),
         container(body.max_width(PAGE))
             .width(Fill)
             .height(Fill)
             .center_x(Fill)
-            .padding([0.0, GUTTER]),
+            .padding(iced::Padding {
+                top: GUTTER,
+                right: GUTTER,
+                bottom: 0.0,
+                left: GUTTER,
+            }),
     ]
     .into()
+}
+
+/// A pane's own name on a head's line: one line of type, set on its own body, so that centring
+/// the box centres the letters and not the font's room for a second line.
+fn head_title(name: &str) -> iced::widget::Text<'_> {
+    text(name).size(HEAD).font(HEADING).line_height(1.0)
+}
+
+/// A control on a head's line: shorter than one on a page, because the traffic lights set how
+/// much room that line has before the window's own top edge.
+fn head_button<'a>(
+    label: &'a str,
+    style: fn(&iced::Theme, button::Status) -> button::Style,
+) -> iced::widget::Button<'a, Message> {
+    button(text(label).size(BODY))
+        .style(style)
+        .padding([4.0, 10.0])
+}
+
+/// A window's head: one row centred on the line the traffic lights sit on, and clear of them.
+fn head_bar<'a>(app: &App, head: Element<'a, Message>) -> Element<'a, Message> {
+    container(head)
+        .height(HEAD_BAR)
+        .align_y(iced::alignment::Vertical::Center)
+        .padding(iced::Padding {
+            top: 0.0,
+            right: GUTTER,
+            bottom: 0.0,
+            left: head_inset(app),
+        })
+        .width(Fill)
+        .into()
 }
 
 /// The sidebar's width: the nav labels plus their counts, and no more.
@@ -896,41 +912,27 @@ pub(crate) fn run<'a>(app: &'a App, id: &crate::RunId) -> Element<'a, Message> {
     };
     let live = app.is_live(record);
     let mut bar = row![
-        space().width(Length::Fixed(head_inset(app) - GUTTER)),
-        button(text("← runs")).style(ghost).on_press(Message::Back),
-        text(&record.name).font(MONO).size(18),
+        head_button("← runs", ghost).on_press(Message::Back),
+        text(&record.name).font(MONO).size(TITLE).line_height(1.0),
         space().width(Fill),
     ]
     .spacing(12)
     .align_y(iced::alignment::Vertical::Center);
-    bar = bar.push(
-        button(text("Export"))
-            .style(push)
-            .on_press(Message::Export(crate::RunId::of(record))),
-    );
+    bar = bar.push(head_button("Export", push).on_press(Message::Export(crate::RunId::of(record))));
     if live {
         if record.verb == Verb::Up {
             bar = bar.push(
-                button(text("Shell"))
-                    .style(push)
-                    .on_press(Message::Shell(crate::RunName::of(record))),
+                head_button("Shell", push).on_press(Message::Shell(crate::RunName::of(record))),
             );
         }
         bar = bar.push(
-            button(text("Stop"))
-                .style(destructive)
-                .on_press(Message::Stop(crate::RunName::of(record))),
+            head_button("Stop", destructive).on_press(Message::Stop(crate::RunName::of(record))),
         );
     } else {
+        bar = bar
+            .push(head_button("Re-run", push).on_press(Message::Rerun(crate::RunId::of(record))));
         bar = bar.push(
-            button(text("Re-run"))
-                .style(push)
-                .on_press(Message::Rerun(crate::RunId::of(record))),
-        );
-        bar = bar.push(
-            button(text("Delete"))
-                .style(destructive)
-                .on_press(Message::Delete(crate::RunId::of(record))),
+            head_button("Delete", destructive).on_press(Message::Delete(crate::RunId::of(record))),
         );
     }
 
@@ -966,17 +968,16 @@ pub(crate) fn run<'a>(app: &'a App, id: &crate::RunId) -> Element<'a, Message> {
     }
     right = right.push(output_pane(app, record).height(Length::FillPortion(2)));
 
+    let body = row![left, rule::vertical(1), right.width(Length::FillPortion(3))]
+        .spacing(12)
+        .height(Fill);
     let mut page = column![
-        bar,
+        head_bar(app, bar.into()),
         rule::horizontal(1),
-        row![left, rule::vertical(1), right.width(Length::FillPortion(3))]
-            .spacing(12)
-            .height(Fill),
-    ]
-    .spacing(10)
-    .padding(14);
+        container(body).height(Fill).padding(14),
+    ];
     if let Some(status) = &app.status {
-        page = page.push(text(status).size(13));
+        page = page.push(container(text(status).size(13)).padding([0.0, 14.0]));
     }
     page.into()
 }
@@ -1263,7 +1264,7 @@ pub(crate) fn new_run<'a>(app: &'a App, form: &'a Form) -> Element<'a, Message> 
     }
     framed(
         app,
-        text("New run").size(HEAD).font(HEADING).into(),
+        head_title("New run").into(),
         column![scrollable(page).direction(lane()).style(scroll)].width(Fill),
     )
 }
