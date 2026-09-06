@@ -117,6 +117,12 @@ pub(crate) fn chrome<'a>(app: &'a App, content: Element<'a, Message>) -> Element
             left: toggle_at(out),
         }),
     ]
+    // `push_under`, not a first layer: a stack takes its size from the layer it was built on, and
+    // this one is 52 tall. Under everything, so a control on that line answers a click first and
+    // only what nothing else wanted reaches the window's own line, which a double click zooms.
+    .push_under(
+        mouse_area(space().width(Fill).height(HEAD_BAR)).on_double_click(Message::ZoomWindow),
+    )
     .into()
 }
 

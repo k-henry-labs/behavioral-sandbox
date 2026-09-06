@@ -465,6 +465,8 @@ pub(crate) enum Message {
     Drawn(std::time::Instant),
     /// A window is on screen: what its own chrome is settled on.
     Opened(iced::window::Id),
+    /// The head's own line was double-clicked, which is how a macOS window is zoomed.
+    ZoomWindow,
     Open(RunId),
     Back,
     List,
@@ -558,6 +560,8 @@ pub(crate) struct App {
     sidebar: Animation<bool>,
     /// The instant the last frame was drawn at, which every animation is read at.
     now: std::time::Instant,
+    /// The window this is drawing in, once it is open: what a zoom is asked of.
+    window: Option<iced::window::Id>,
 }
 
 /// One leased display: what was mapped for it, the presents it has reported, and where its input
@@ -599,6 +603,7 @@ impl App {
             confirm_clear: false,
             sidebar: Animation::new(true).quick().easing(Easing::EaseInOut),
             now: std::time::Instant::now(),
+            window: None,
         };
         app.refresh();
         if let Some(key) = opening {
@@ -832,7 +837,13 @@ impl App {
                 self.now = at;
                 Task::none()
             }
-            Message::Opened(id) => chrome::unify_titlebar(id),
+            Message::Opened(id) => {
+                self.window = Some(id);
+                chrome::unify_titlebar(id)
+            }
+            Message::ZoomWindow => self
+                .window
+                .map_or_else(Task::none, iced::window::toggle_maximize),
             Message::ResetSettings => {
                 self.mode = theme::Mode::default();
                 self.scale = 100;
