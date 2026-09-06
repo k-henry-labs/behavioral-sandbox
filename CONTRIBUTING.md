@@ -6,10 +6,10 @@ before you spend time on one.
 **Open an issue first for anything non-trivial.** Bug fixes, tests, and documentation can go
 straight to a pull request. For a new capability, a change to a public API, or a refactor that moves
 code between crates, open an issue and settle the shape first. That is not gatekeeping: the project
-is pre-1.0 and the surface is actively being rebuilt on libkrun (the `bsx-channel` framing, the
-supervisor that does not exist yet, and the crate names all change without notice until the first
-supported release, `v0.1.0`), and an issue is how you avoid building against a shape that is about
-to change under you.
+is pre-1.0 and its surface still moves (the `bsx-channel` framing, the `bsx-supervisor` spawn and
+discovery API, and the crate names all change without notice until the first supported release,
+`v0.1.0`), and an issue is how you avoid building against a shape that is about to change under
+you.
 
 **Six design rules govern every change**, and the first question in review is which rule a change
 touches. They are in [Architecture and design](docs/architecture.md), with the reasoning behind

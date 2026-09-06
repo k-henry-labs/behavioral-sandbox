@@ -23,33 +23,6 @@
   </h3>
 </div>
 
-## Where this is
-
-**Sandboxes run; nothing is released.**
-
-What is here, on a host whose hypervisor answers (`/dev/kvm` on Linux, Hypervisor.framework on macOS
-ARM64) and a guest image the tree builds: `bsx run` runs one command in a sandbox and exits with its
-status, `bsx shell` opens a session on a pty inside the guest, `bsx up` starts a sandbox that
-outlives the command that started it, `bsx ls`, `bsx exec` and `bsx stop` reach a sandbox this
-process did not start, `bsx show`, `bsx rm` and `bsx export` read, remove and package what a run
-left behind, and `--display WIDTHxHEIGHT` shows a guest's screen in a window whose keyboard and
-pointer go to the guest, and the desktop image boots to a terminal in a Wayland session there, with
-`--sound` for audio. `bsx-app` is the notebook: every run on the machine, live and past, with its
-posture, output and results; a live run's display in the window with your keyboard and pointer going
-in; a form that shows a sandbox's posture before it boots. A sidebar reaches its screens; it exports
-a run to one tar file, clears the ended history behind a confirm, and keeps the palette, the
-interface scale and the screen it opens on across launches.
-
-On macOS ARM64 the same tree builds, signs (`cargo xtask sign`) and boots the same sandboxes under
-Hypervisor.framework. Its libkrun build carries no `--sound` and no guest keyboard or pointer
-backend, and the display helper's own window is compiled out there, so a guest's display on macOS is
-viewed in `bsx-app`, which `cargo xtask bundle` assembles as `BSX.app`. `--gpu` offers a guest the
-3D path (virgl + Venus) where libkrun reports the feature, but no host measured so far carries a
-Venus renderer, so acceleration is unproven everywhere.
-
-There are no users, no installed base, and no release to install. Nothing below is an invitation to
-depend on this yet.
-
 ## What it is
 
 A desktop application for running untrusted code, on one person's machine, with a CLI beside it.
@@ -58,6 +31,34 @@ hardware virtualization: KVM on Linux, Hypervisor.framework on macOS ARM64.
 
 libkrun makes the calling process the virtual machine monitor. `krun_start_enter` never returns, so
 a VM **is** a process: every VM is a helper the supervisor spawned and reaps.
+
+## What it does today
+
+On a host whose hypervisor answers (`/dev/kvm` on Linux, Hypervisor.framework on macOS ARM64) and a
+guest image the tree builds:
+
+* **Run something.** `bsx run` runs one command in a sandbox and exits with its status, `bsx shell`
+  opens a session on a pty inside the guest, and `bsx up` starts a sandbox that outlives the command
+  that started it. `bsx ls`, `bsx exec` and `bsx stop` reach a sandbox this process did not start.
+* **See it.** `--display WIDTHxHEIGHT` shows a guest's screen in a window whose keyboard and pointer
+  go to the guest, the desktop image boots to a terminal in a Wayland session there, and `--sound`
+  adds a virtio-snd card.
+* **Keep it.** Every run leaves a record: the posture as settled, the captured output, and the
+  guest's `/results`. `bsx show`, `bsx rm` and `bsx export` read, remove and package them, one ustar
+  file per run.
+* **Drive it from a window.** `bsx-app` is the notebook: every run on the machine, live and past; a
+  live run's display with your keyboard and pointer going in; a form that shows a sandbox's posture
+  before it boots. A sidebar reaches its screens, and its palette, interface scale and landing
+  screen persist across launches.
+
+macOS ARM64 builds, signs (`cargo xtask sign`), bundles as `BSX.app` (`cargo xtask bundle`) and
+boots the same sandboxes under Hypervisor.framework.
+
+**Status.** Pre-release: one maintainer, no external review, and no release to install. macOS's
+libkrun builds neither the `--sound` nor the guest input backend, and the display helper's own
+window is compiled out there, so a display on macOS is viewed in `bsx-app`. `--gpu` offers a guest
+the 3D path (virgl + Venus) where libkrun reports the feature, but no host measured so far carries a
+Venus-built renderer, so guest acceleration is unproven.
 
 ## Design rules
 
@@ -127,17 +128,17 @@ types. `cargo … -p` takes the package, a path takes the directory.
 ## Verified on
 
 The gate (`cargo xtask ci`: build, tests, lints, docs, dependency audit) runs in CI on Ubuntu 24.04
-`x86_64` and macOS ARM64 (`macos-14`) on every change and needs no privilege, and a smoke lane runs
+`x86_64` and macOS ARM64 (`macos-15`) on every change and needs no privilege, and a smoke lane runs
 the wire-protocol fuzz targets from their committed seeds. **No CI lane boots a VM.** The suites
 that boot one run where a hypervisor answers, and skip saying so where none does. Development
 happens on Arch Linux `x86_64` and macOS ARM64.
 
 ## Releases and scope
 
-There is no published roadmap and no promised date. A capability becomes a feature when a test
-exercises it end to end, and is not announced before that. The first supported release, `v0.1.0`,
-will pin the host↔guest wire framing and the supervisor API; until then everything, including the
-crate names, changes without notice.
+There is no published roadmap and no promised date, and no installed base to break. A capability
+becomes a feature when a test exercises it end to end, and is not announced before that. The first
+supported release, `v0.1.0`, will pin the host↔guest wire framing and the supervisor API; until then
+everything, including the crate names, changes without notice.
 
 The project is **open to outside pull requests**, though everything here is pre-`v0.1.0` and
 changes without notice. A pull request signs its commits off (`git commit -s`). The terms are in

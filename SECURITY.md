@@ -5,9 +5,9 @@ seriously even this early. The security **model** (what is trusted, what counts 
 and what does not, and how a fix ships) is documented in
 [`docs/security.md`](docs/security.md).
 
-**There is no supported release yet.** The tree boots pre-release sandboxes on
-libkrun. Until the first supported release (`v0.1.0`), every version is a development snapshot: no
-version receives backported fixes, and nothing should be treated as production-ready.
+**The tree boots sandboxes on libkrun, and there is no supported release yet.** Until the first
+supported release (`v0.1.0`), every version is a development snapshot: no version receives
+backported fixes, and nothing should be treated as production-ready.
 
 ## Reporting a vulnerability
 

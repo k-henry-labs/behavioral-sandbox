@@ -1,9 +1,9 @@
 # Running a sandbox
 
-A sandbox with no flags shares nothing: the guest reads its root image, cannot write it, has no
-network beyond loopback, and gets one empty directory mounted at `/results` for what it produces.
-Everything past that is opted into on the command line, and the posture is printed (`--dry-run`
-shows it without booting) because what is shared **is** the policy.
+A sandbox with no flags gets three things: its root image, read-only; loopback; and one empty
+directory at `/results` for what it produces. Nothing else is shared, everything past that is opted
+into on the command line, and the posture is printed (`--dry-run` shows it without booting) because
+what is shared **is** the policy.
 
 ```console
 bsx run --root ~/.local/share/bsx/rootfs -- uname -a
@@ -26,8 +26,8 @@ The guest root falls back to `$BSX_GUEST_ROOT`, then `~/.local/share/bsx/rootfs`
 | `bsx rm ID\|NAME` | Removes one run's record and everything it captured. |
 | `bsx export ID\|NAME` | Writes one run as a ustar `.tar` (`--to` picks a directory or exact path). |
 
-There is no daemon: a VM is a helper process listening on a control socket in the runtime
-directory, so a sandbox started by the CLI is visible to the app and the other way round.
+There is no daemon: a VM is a helper process listening on a control socket in the runtime directory,
+so a sandbox started by the CLI is visible to the app and the other way round.
 
 ## The posture flags
 
@@ -48,20 +48,18 @@ directory, so a sandbox started by the CLI is visible to the app and the other w
 
 ## Configuration layering
 
-Configuration is resolved in precedence order:
-1. Command line flags.
-2. Environment variables (`$BSX_VCPUS`, `$BSX_MEM_MIB`, `$BSX_GUEST_ROOT`, `$BSX_RUNS_DIR`, `$BSX_RUNS_KEEP`, `$BSX_OUTPUT_CAP_KIB`, `$BSX_LOG`, `$BSX_CLI`, `$BSX_THEME`).
-3. The nearest `.bsx.toml` in or above the current working directory.
-4. User defaults in `~/.bsx.toml`.
-5. Built-in defaults.
+Configuration is resolved in precedence order: 1. Command line flags. 2. Environment variables
+(`$BSX_VCPUS`, `$BSX_MEM_MIB`, `$BSX_GUEST_ROOT`, `$BSX_RUNS_DIR`, `$BSX_RUNS_KEEP`,
+`$BSX_OUTPUT_CAP_KIB`, `$BSX_LOG`, `$BSX_CLI`, `$BSX_THEME`). 3. The nearest `.bsx.toml` in or above
+the current working directory. 4. User defaults in `~/.bsx.toml`. 5. Built-in defaults.
 
 ## What a run leaves
 
 Every run leaves one directory under `$BSX_RUNS_DIR`, else `$XDG_DATA_HOME/bsx/runs`, else
 `~/.local/share/bsx/runs`: the `record` file (the posture as settled, the timings, the end), the
-captured output (capped at `$BSX_OUTPUT_CAP_KIB`, 4 MiB by default, with a `.truncated` sidecar
-when cut), and `results/`, the directory the guest saw as `/results`. Ended runs beyond
-`$BSX_RUNS_KEEP` (200 by default) are pruned oldest-first when a new run starts.
+captured output (capped at `$BSX_OUTPUT_CAP_KIB`, 4 MiB by default, with a `.truncated` sidecar when
+cut), and `results/`, the directory the guest saw as `/results`. Ended runs beyond `$BSX_RUNS_KEEP`
+(200 by default) are pruned oldest-first when a new run starts.
 
 `bsx export` packages that directory as one ustar file a stock `tar` extracts. A symlink a guest
 planted inside `results/` is archived as a link entry, never opened:
@@ -85,16 +83,16 @@ readable.
   file beside the runs directory. `--theme` and `$BSX_THEME` outrank the saved palette, and
   `--open` the saved screen, for one launch.
 
-`bsx-app NAME` opens straight onto a run; `--open list|new|settings` opens a screen. Starting
-and stopping go through
-the `bsx` binary beside the app (`$BSX_CLI` overrides which one).
+`bsx-app NAME` opens straight onto a run; `--open list|new|settings` opens a screen. Starting and
+stopping go through the `bsx` binary beside the app (`$BSX_CLI` overrides which one).
 
 ## Platform notes
 
 On macOS ARM64 the same verbs work, but this platform's libkrun builds no `--sound` and no guest
 input backend, and a display is viewed in `bsx-app` rather than a window of the helper's own; sign
 the binary again after any build (`cargo xtask sign`). `cargo xtask bundle` assembles
-`artifacts/BSX.app` from the built pair, which is what makes the window's menu bar say `BSX`
-rather than the file name `bsx-app`; the `bsx` copied inside it is signed there. `--gpu` boots here and the guest sees
-`card0` and `renderD128`; this host's virglrenderer carries no Venus, so the offer ends at the
-device. The [Architecture](./architecture.md) page carries the fuller status and the measurements.
+`artifacts/BSX.app` from the built pair, which is what makes the window's menu bar say `BSX` rather
+than the file name `bsx-app`; the `bsx` copied inside it is signed there. `--gpu` boots here and the
+guest sees `card0` and `renderD128`; this host's virglrenderer carries no Venus, so the offer ends
+at the device. The [Architecture](./architecture.md) page carries the fuller status and the
+measurements.

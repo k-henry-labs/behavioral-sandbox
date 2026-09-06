@@ -9,40 +9,54 @@ It exists for the usual suspects: a third-party binary, a dependency's install s
 AI-generated snippet, a sample under analysis. Everything stays on your own machine: no account, no
 telemetry, no control plane, and nothing that stops working with the network off.
 
-## Where this is, right now
+## What it does today
 
-**Sandboxes run, and nothing is released.** BSX runs on
-[libkrun](https://github.com/containers/libkrun), a library that makes the calling process the
-virtual machine monitor. It runs one command in a sandbox (`bsx run`), a session on a guest pty
-(`bsx shell`), and a sandbox that outlives the command that started it (`bsx up`, reached afterwards
-with `ls`, `exec` and `stop`), and shows a guest's display in a window whose keyboard and pointer
-reach the guest (`--display`), with a desktop image that boots to a terminal in a Wayland session
-there, and `--sound` for audio. Every run leaves a record, which `bsx ls --all`, `show`, `rm` and
-`export` read, remove and package (one ustar file per run). `bsx-app` is the notebook: every run,
-live and past, with its posture, output and results, a live run's display with your keyboard and
-pointer going in, and a form that shows a sandbox's posture before it boots. A sidebar reaches its
-screens, it exports a run to one tar file, clears the ended history behind a confirm, and keeps the
-palette, the interface scale and the screen it opens on across launches. On macOS ARM64 the same
-tree signs (`cargo xtask sign`) and boots the same sandboxes under Hypervisor.framework, without
-`--sound` or the guest input path (its libkrun builds neither backend) and with a guest's display
-viewed in `bsx-app`, which `cargo xtask bundle` assembles as `BSX.app`. `--gpu` offers a guest the
-3D path (virgl + Venus) where libkrun reports the feature; no host measured so far carries a Venus
-renderer, so acceleration is unproven everywhere.
+BSX runs on [libkrun](https://github.com/containers/libkrun), a library that makes the calling
+process the virtual machine monitor. `krun_start_enter` never returns, so a VM **is** a process:
+every sandbox is a helper this project spawned, tracked and reaped.
 
-This book is short, and deliberately so: it describes the rules the project is built to, the
-crates that are actually in the tree, and how a sandbox is run.
+- **Run something.** `bsx run` runs one command in a fresh sandbox and exits with its status,
+  `bsx shell` opens a session on a pty inside the guest, and `bsx up` starts a sandbox that
+  outlives the command that started it, reached afterwards by name with `ls`, `exec` and `stop`.
+- **See it.** `--display WIDTHxHEIGHT` gives the guest a virtio-gpu scanout shown in a window, and
+  that window's keyboard and pointer reach the guest as two virtio-input devices. The desktop image
+  boots to a terminal in a Wayland session under it, and `--sound` adds a virtio-snd card.
+- **Keep it.** Every run leaves a record: the posture as settled, the captured output, and the
+  directory the guest saw as `/results`. `bsx ls --all`, `show`, `rm` and `export` read, remove and
+  package them, one ustar file per run.
+- **Drive it from a window.** `bsx-app` is the notebook of those runs, live and past: a sidebar over
+  the list, one run's record with its display and output, a start form that shows a sandbox's
+  posture before it boots, and a shell in your own terminal. Its palette, interface scale and
+  landing screen persist across launches.
+
+Both platforms run the same sandboxes: KVM on Linux, and Hypervisor.framework on macOS ARM64, where
+the tree also signs itself (`cargo xtask sign`) and bundles as `BSX.app` (`cargo xtask bundle`).
+
+**Status.** Pre-release: one maintainer, no external review, and no release to install. macOS's
+libkrun builds neither the `--sound` nor the guest input backend, so a display there is viewed in
+`bsx-app`. `--gpu` offers a guest the 3D path where libkrun reports the feature, but no host
+measured so far carries a Venus-built renderer, so guest acceleration is unproven.
+
+This book is short, and deliberately so: it describes the rules the project is built to, the crates
+that are actually in the tree, and how a sandbox is run.
 
 ## Reading this book
 
-- **[Running a sandbox](./running.md)**, the verbs, posture flags, configuration layering, what a run leaves behind, and the notebook.
-- **[Architecture](./architecture.md)**, the six design rules with the mechanism serving each, and what is in the tree.
-- **[Control socket & IPC](./control-ipc.md)**, local process discovery, display leasing, zero-copy memfd sharing, and host↔guest wire framing.
-- **[Building guest images](./building-images.md)**, unprivileged rootfs assembly with `apk.static` and `fakeroot`, desktop closures, and lockfile verification.
-- **[Security](./security.md)**, what is trusted, what counts as a security bug, and how to report one.
+- **[Running a sandbox](./running.md)**, the verbs, posture flags, configuration layering, what a
+  run leaves behind, and the notebook.
+- **[Architecture](./architecture.md)**, the six design rules with the mechanism serving each, and
+  what is in the tree.
+- **[Control socket & IPC](./control-ipc.md)**, local process discovery, display leasing, zero-copy
+  memfd sharing, and host↔guest wire framing.
+- **[Building guest images](./building-images.md)**, unprivileged rootfs assembly with `apk.static`
+  and `fakeroot`, desktop closures, and lockfile verification.
+- **[Security](./security.md)**, what is trusted, what counts as a security bug, and how to report
+  one.
 
-The repository's own operating manual is [`AGENTS.md`](https://github.com/kendricklawton/behavioral-sandbox/blob/main/AGENTS.md)
-at the root: the design rules, the repo layout, the build, and the commit conventions. It is written
-as standing instructions for a coding agent and doubles as the developer reference.
+The repository's own operating manual is
+[`AGENTS.md`](https://github.com/kendricklawton/behavioral-sandbox/blob/main/AGENTS.md) at the root:
+the design rules, the repo layout, the build, and the commit conventions. It is written as standing
+instructions for a coding agent and doubles as the developer reference.
 
 ## License
 
