@@ -106,7 +106,7 @@ cargo xtask setup            # what this host can and cannot do
 cargo xtask init             # a guest tree where bsx looks for one, so a sandbox can boot
 cargo xtask ci               # the gate: fmt, prose drift, clippy, build, test, docs, deny
 cargo xtask sign             # macOS: re-entitle the built bsx after any other build
-cargo xtask bundle           # macOS: assemble artifacts/BSX.app, so the window runs as BSX
+cargo xtask bundle           # macOS: assemble artifacts/BSX.app, so the menu bar says Behavioral Sandbox
 cargo xtask build-rootfs     # the guest image (Alpine + runtimes + the static agent)
 cargo xtask build-rootfs --desktop   # the desktop image (+ a Wayland compositor and a terminal)
 ```

@@ -17,8 +17,9 @@ use anyhow::{Context, Result, bail};
 
 use crate::{artifacts_dir, sign, target_dir};
 
-/// What the menu bar, the Dock and the About window call it.
-const APP_NAME: &str = "BSX";
+/// What the menu bar, the Dock and the About window call it: the product's name, not its
+/// initials, which stay on the bundle's file name and the CLI.
+const APP_NAME: &str = "Behavioral Sandbox";
 
 /// The bundle's own directory name.
 const BUNDLE: &str = "BSX.app";
@@ -130,17 +131,18 @@ mod tests {
     #[test]
     fn the_plist_names_the_app_and_the_binary_it_starts() {
         let plist = info_plist("1.2.3");
-        let packed: String = plist.chars().filter(|c| !c.is_whitespace()).collect();
+        let pack = |text: &str| -> String { text.chars().filter(|c| !c.is_whitespace()).collect() };
+        let packed = pack(&plist);
         assert!(
-            packed.contains(&format!(
+            packed.contains(&pack(&format!(
                 "<key>CFBundleName</key><string>{APP_NAME}</string>"
-            )),
+            ))),
             "the menu bar reads CFBundleName: {plist}"
         );
         assert!(
-            packed.contains(&format!(
+            packed.contains(&pack(&format!(
                 "<key>CFBundleExecutable</key><string>{EXECUTABLE}</string>"
-            )),
+            ))),
             "the bundle starts the binary it carries: {plist}"
         );
         assert!(packed.contains("<string>1.2.3</string>"), "{plist}");
