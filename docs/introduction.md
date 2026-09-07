@@ -30,7 +30,7 @@ every sandbox is a helper this project spawned, tracked and reaped.
   landing screen persist across launches.
 
 Both platforms run the same sandboxes: KVM on Linux, and Hypervisor.framework on macOS ARM64, where
-the tree also signs itself (`cargo xtask sign`) and bundles as `BSX.app` (`cargo xtask bundle`).
+the tree also signs itself (`cargo xtask sign`) and bundles as `Behavioral Sandbox.app` (`cargo xtask bundle`).
 
 **Status.** Pre-release: one maintainer, no external review, and no release to install. macOS's
 libkrun builds neither the `--sound` nor the guest input backend, so a display there is viewed in

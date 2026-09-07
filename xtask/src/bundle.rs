@@ -17,18 +17,19 @@ use anyhow::{Context, Result, bail};
 
 use crate::{artifacts_dir, sign, target_dir};
 
-/// What the menu bar, the Dock and the About window call it: the product's name, not its
-/// initials, which stay on the bundle's file name and the CLI.
+/// What the menu bar, the Dock, Finder and the About window call it: the application's name.
+/// `bsx` is its short name, which stays on the binaries, where a person types it.
 const APP_NAME: &str = "Behavioral Sandbox";
 
-/// The bundle's own directory name.
-const BUNDLE: &str = "BSX.app";
+/// The bundle's own directory name, which Finder shows as the application's.
+const BUNDLE: &str = "Behavioral Sandbox.app";
 
 /// The binary the bundle runs, and the one copied in beside it.
 const EXECUTABLE: &str = "bsx-app";
 const CLI: &str = "bsx";
 
-/// Assembles `artifacts/BSX.app` from the built binaries, or explains why there is nothing to do.
+/// Assembles `artifacts/Behavioral Sandbox.app` from the built binaries, or explains why there is
+/// nothing to do.
 pub(crate) fn bundle_app(release: bool) -> Result<()> {
     if !cfg!(target_os = "macos") {
         // Said rather than passed over: a step that silently does nothing reads as a step that
@@ -152,13 +153,13 @@ mod tests {
     /// `CFBundleExecutable` is resolved from and where `bsx` lands beside it.
     #[test]
     fn the_executable_sits_where_macos_looks_for_it() {
-        let app = Path::new("/tmp/BSX.app");
+        let app = Path::new("/tmp/Behavioral Sandbox.app");
         assert_eq!(
             executable_in(app),
-            Path::new("/tmp/BSX.app/Contents/MacOS/bsx-app")
+            Path::new("/tmp/Behavioral Sandbox.app/Contents/MacOS/bsx-app")
         );
         assert!(
-            bundle_path().ends_with("artifacts/BSX.app"),
+            bundle_path().ends_with("artifacts/Behavioral Sandbox.app"),
             "{:?}",
             bundle_path()
         );

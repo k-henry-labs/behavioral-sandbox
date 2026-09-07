@@ -168,7 +168,7 @@ cargo xtask setup            # what this host can and cannot do
 cargo xtask init             # a guest tree where `bsx` looks for one: minirootfs + the agent
 cargo xtask ci               # the gate (and signs what it built, on macOS)
 cargo xtask sign             # macOS only: re-entitle the built `bsx` after any other build
-cargo xtask bundle           # macOS only: assemble artifacts/BSX.app from the built pair
+cargo xtask bundle           # macOS only: assemble artifacts/Behavioral Sandbox.app from the built pair
 cargo xtask build-rootfs     # the guest image (Alpine + the GUEST_PACKAGES runtimes + static agent)
 cargo xtask build-rootfs --desktop   # the desktop image (+ cage, foot, seatd, udev, and bsx-session)
 cargo xtask build-rootfs --arch aarch64   # an image for the other arch, from either Linux builder

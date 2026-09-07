@@ -58,9 +58,9 @@ enum Cmd {
     /// `crates/app/fonts/lucide.ttf`. A dev step: the cut font is committed, since the app
     /// compiles it in and the gate builds with no network.
     Icons,
-    /// Assemble `artifacts/BSX.app` from the built binaries, so the window runs as `BSX` rather
-    /// than as the file name `bsx-app` (macOS). `bsx` is copied in beside it and signed there.
-    /// Elsewhere it says there is nothing to bundle and exits.
+    /// Assemble `artifacts/Behavioral Sandbox.app` from the built binaries, so the window runs as
+    /// `Behavioral Sandbox` rather than as the file name `bsx-app` (macOS). `bsx` is copied in
+    /// beside it and signed there. Elsewhere it says there is nothing to bundle and exits.
     Bundle {
         /// Bundle the release build rather than the debug one.
         #[arg(long)]

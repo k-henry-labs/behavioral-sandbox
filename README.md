@@ -51,7 +51,7 @@ guest image the tree builds:
   before it boots. A sidebar reaches its screens, and its palette, interface scale and landing
   screen persist across launches.
 
-macOS ARM64 builds, signs (`cargo xtask sign`), bundles as `BSX.app` (`cargo xtask bundle`) and
+macOS ARM64 builds, signs (`cargo xtask sign`), bundles as `Behavioral Sandbox.app` (`cargo xtask bundle`) and
 boots the same sandboxes under Hypervisor.framework.
 
 **Status.** Pre-release: one maintainer, no external review, and no release to install. macOS's
@@ -106,7 +106,7 @@ cargo xtask setup            # what this host can and cannot do
 cargo xtask init             # a guest tree where bsx looks for one, so a sandbox can boot
 cargo xtask ci               # the gate: fmt, prose drift, clippy, build, test, docs, deny
 cargo xtask sign             # macOS: re-entitle the built bsx after any other build
-cargo xtask bundle           # macOS: assemble artifacts/BSX.app, so the menu bar says Behavioral Sandbox
+cargo xtask bundle           # macOS: assemble artifacts/Behavioral Sandbox.app from the built pair
 cargo xtask build-rootfs     # the guest image (Alpine + runtimes + the static agent)
 cargo xtask build-rootfs --desktop   # the desktop image (+ a Wayland compositor and a terminal)
 ```

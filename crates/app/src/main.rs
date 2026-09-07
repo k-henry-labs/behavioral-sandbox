@@ -470,6 +470,8 @@ pub(crate) enum Message {
     Drawn(std::time::Instant),
     /// A window is on screen: what its own chrome is settled on.
     Opened(iced::window::Id),
+    /// The window changed size, which is also how it enters and leaves full screen.
+    Resized(iced::window::Id),
     /// The head's own line was double-clicked, which is how a macOS window is zoomed.
     ZoomWindow,
     Open(RunId),
@@ -628,11 +630,11 @@ impl App {
 
     fn title(&self) -> String {
         match &self.screen {
-            Screen::Settings => "BSX › settings".to_string(),
-            Screen::List => "BSX › sandboxes".to_string(),
-            Screen::New => "BSX › new run".to_string(),
+            Screen::Settings => "Behavioral Sandbox › settings".to_string(),
+            Screen::List => "Behavioral Sandbox › sandboxes".to_string(),
+            Screen::New => "Behavioral Sandbox › new run".to_string(),
             Screen::Run(id) => format!(
-                "BSX › {}",
+                "Behavioral Sandbox › {}",
                 self.record(id).map_or(id.as_str(), |r| r.name.as_str())
             ),
         }
@@ -846,6 +848,7 @@ impl App {
                 self.window = Some(id);
                 chrome::unify_titlebar(id)
             }
+            Message::Resized(id) => chrome::fit_fullscreen(id),
             Message::ZoomWindow => self
                 .window
                 .map_or_else(Task::none, iced::window::toggle_maximize),
@@ -1095,6 +1098,7 @@ impl App {
         subs.push(iced::keyboard::listen().map(Message::Keyboard));
         subs.push(iced::system::theme_changes().map(Message::DesktopTheme));
         subs.push(iced::window::open_events().map(Message::Opened));
+        subs.push(iced::window::resize_events().map(|(id, _)| Message::Resized(id)));
         // Only while something is moving: a frame subscription redraws the window on every
         // frame for as long as it is held.
         if self.sidebar.is_animating(self.now) {

@@ -91,8 +91,8 @@ stopping go through the `bsx` binary beside the app (`$BSX_CLI` overrides which 
 On macOS ARM64 the same verbs work, but this platform's libkrun builds no `--sound` and no guest
 input backend, and a display is viewed in `bsx-app` rather than a window of the helper's own; sign
 the binary again after any build (`cargo xtask sign`). `cargo xtask bundle` assembles
-`artifacts/BSX.app` from the built pair, which is what makes the window's menu bar say `Behavioral
-Sandbox` rather than the file name `bsx-app`; the `bsx` copied inside it is signed there. `--gpu` boots here and the
+`artifacts/Behavioral Sandbox.app` from the built pair, which is what makes the window's menu bar
+say `Behavioral Sandbox` rather than the file name `bsx-app`; the `bsx` copied inside it is signed there. `--gpu` boots here and the
 guest sees `card0` and `renderD128`; this host's virglrenderer carries no Venus, so the offer ends
 at the device. The [Architecture](./architecture.md) page carries the fuller status and the
 measurements.

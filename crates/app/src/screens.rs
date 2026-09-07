@@ -363,7 +363,7 @@ pub(crate) fn settings(app: &App) -> Element<'_, Message> {
     let mut body = column![
         setting(
             None,
-            "BSX",
+            "Behavioral Sandbox",
             format!("version {}", env!("CARGO_PKG_VERSION")),
             space().width(0)
         ),
