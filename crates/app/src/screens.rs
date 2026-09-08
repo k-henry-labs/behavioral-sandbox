@@ -919,7 +919,9 @@ fn run_row<'a>(app: &'a App, record: &'a Record) -> Element<'a, Message> {
         .style(|t| text::Style {
             color: Some(muted(t)),
         });
-    let text_side = column![title, command, posture].spacing(4);
+    // Clipped to the room the row leaves it: each line is unwrapped, so a long command draws its
+    // whole width and would otherwise run across the state and the actions beside it.
+    let text_side = container(column![title, command, posture].spacing(4)).clip(true);
     // A running sandbox with a display shows it, so the list says what each one is doing rather
     // than only what it was asked to do.
     let told: Element<'_, Message> = match crate::frame_program(app, &crate::RunName::of(record)) {
