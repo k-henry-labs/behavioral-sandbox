@@ -42,22 +42,19 @@ verified outcome.
    Hypervisor.framework. A change that moves the boundary into guest-side software is a design
    error, not an optimisation, and a shared-kernel shortcut taken to simplify things is the same
    error.
-2. **Local-first. Nothing leaves the machine.** No account, no telemetry, no control plane, and no
-   licence check that needs a server. A feature that cannot work on a laptop with the network off
-   belongs to a different product.
-3. **Deny by default.** A sandbox with no explicit configuration shares no host directory and has no
+2. **Deny by default.** A sandbox with no explicit configuration shares no host directory and has no
    network. What is shared **is** the policy: no in-kernel enforcer sits behind it, so the set of
    shared directories and the network backend are settled before the VM starts and are visible to
    the person starting it.
-4. **An application, not a platform.** The product is a program on one person's machine. The unit is
+3. **An application, not a platform.** The product is a program on one person's machine. The unit is
    the sandbox; there is no tenant, no account, and no fleet. Mechanism that makes one machine's
    sandboxes work belongs here, and anything that must know who is paying is a different product.
    An AI model is a caller, never a component: it drives the app from outside.
-5. **No panic, hang, or leak on the host path.** A hostile or crashing guest, or a helper that dies,
+4. **No panic, hang, or leak on the host path.** A hostile or crashing guest, or a helper that dies,
    should surface as a typed error. A leak here is a stranded VM holding somebody's laptop RAM, not
    a server you can reboot. This is what the code is written against and what the
    confinement suite exercises; an aim, not a proven property.
-6. **Measure rather than assert.** Boot, memory, and frame timings are reported as nearest-rank
+5. **Measure rather than assert.** Boot, memory, and frame timings are reported as nearest-rank
    percentiles with the host and date they were taken on. Where a number cannot be defended, it is
    withdrawn rather than published. libkrun has no snapshot surface, so every boot is a cold boot.
 

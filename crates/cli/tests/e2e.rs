@@ -457,7 +457,7 @@ fn a_mount_point_the_image_lacks_is_refused_before_boot() {
     assert!(err.contains("--rootfs writable"), "names the opt-in: {err}");
 }
 
-/// Design rule 3's other half: the posture is visible *before* the VM starts. `--dry-run` boots
+/// Design rule 2's other half: the posture is visible *before* the VM starts. `--dry-run` boots
 /// nothing, asserted through the control socket every boot leaves. The same command runs for
 /// real after, so a socket that stopped appearing could not leave this vacuous.
 #[test]

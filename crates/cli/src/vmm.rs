@@ -603,7 +603,7 @@ fn build_and_enter(args: &VmmArgs) -> Result<std::convert::Infallible, HelperErr
         machine = machine.vsock_port(port, path, tormoni_krun::VsockInitiator::Host)?;
         restrict_when_bound(path);
     }
-    // Rule 3: the guest issuing GPU commands is a named hole. Probed like sound, because a
+    // Rule 2: the guest issuing GPU commands is a named hole. Probed like sound, because a
     // build without gpu exports the symbol and adds no device.
     if args.gpu && !tormoni_krun::has_feature(tormoni_krun::KRUN_FEATURE_GPU)? {
         return Err(HelperError::GpuUnsupported);
@@ -646,7 +646,7 @@ fn build_and_enter(args: &VmmArgs) -> Result<std::convert::Infallible, HelperErr
         )
         .map_err(HelperError::Window)?;
     }
-    // Off unless asked (rule 3): a two-way path to the host's sound server is a named hole.
+    // Off unless asked (rule 2): a two-way path to the host's sound server is a named hole.
     // Probed, because a build without snd exports the symbol and adds no device.
     if args.sound {
         if !tormoni_krun::has_feature(tormoni_krun::KRUN_FEATURE_SND)? {

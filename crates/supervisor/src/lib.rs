@@ -182,10 +182,10 @@ pub struct VmConfig {
     /// reads to measure how many frames a second cross from the guest.
     pub frame_log: Option<PathBuf>,
     /// Whether the guest gets a virtio-snd card, backed by the host's audio server. `false` by
-    /// default (rule 3): a two-way hole is opened by an explicit `--sound`, never ambient.
+    /// default (rule 2): a two-way hole is opened by an explicit `--sound`, never ambient.
     pub sound: bool,
     /// Whether the guest's virtio-gpu carries the 3D path (virgl + Venus) into the host
-    /// renderer, created even without a display. `false` by default (rule 3): the guest driving
+    /// renderer, created even without a display. `false` by default (rule 2): the guest driving
     /// the host GPU is opened by an explicit `--gpu`, never ambient.
     pub gpu: bool,
     /// A file to take everything this VM says, instead of the caller's stderr.

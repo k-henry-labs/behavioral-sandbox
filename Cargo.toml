@@ -71,7 +71,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 [workspace.lints.clippy]
 unwrap_used = "deny"
 expect_used = "deny"
-# Design rule 5 (no panic on the host path) is the rule the code is written against, so the compiler
+# Design rule 4 (no panic on the host path) is the rule the code is written against, so the compiler
 # enforces it rather than habit: the explicit-panic macros are denied tree-wide. Unlike
 # `unwrap`/`expect`, clippy has no "allow in tests" knob for these, so the integration-test crates
 # that use `panic!` as an assertion helper opt out with a file-level `#![allow(clippy::panic)]`.

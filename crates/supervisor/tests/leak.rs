@@ -2,7 +2,7 @@
 //!
 //! The successor to the old suite's `driver_death_cannot_leak_a_vm`, and the one test from it worth
 //! rebuilding. **A leak here is a stranded VM holding somebody's laptop RAM**, not a server anyone
-//! can reboot, which is why design rule 5 names it and why this exists before the supervisor grows
+//! can reboot, which is why design rule 4 names it and why this exists before the supervisor grows
 //! any more surface.
 //!
 //! These spawn real guests, so they need `/dev/kvm`, the guest tree and a built `tormoni`. Each

@@ -11,7 +11,7 @@ discovery API, and the crate names all change without notice until the first sup
 `v0.1.0`), and an issue is how you avoid building against a shape that is about to change under
 you.
 
-**Six design rules govern every change**, and the first question in review is which rule a change
+**Five design rules govern every change**, and the first question in review is which rule a change
 touches. They are in [Architecture and design](docs/architecture.md), with the reasoning behind
 each. A change that breaks one is declined as a design error rather than weighed as a trade-off,
 however good the code is, so they are worth reading before starting anything large.

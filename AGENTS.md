@@ -60,7 +60,7 @@ and the guest image build stays on Linux. `--gpu` (phase 5) offers a guest the 3
 Venus) behind `krun_has_feature`; acceleration is unproven on every measured host, and the ML
 guest image is a scaffold no host has built.
 
-## Design rules (every change holds to all six)
+## Design rules (every change holds to all five)
 
 This is the single source of the design rules. Two other places restate them for readers.
 `docs/architecture.md` restates them for the book. `README.md` restates them for a person who never
@@ -72,22 +72,19 @@ shows as a design error, not as a trade-off.
    Hypervisor.framework. If you move the boundary into guest-side software, this is a design error,
    not an optimisation. A shared-kernel shortcut that you take to "make it simpler" is the same
    error.
-2. **Local-first. Nothing leaves the machine.** No account, no telemetry, no control plane, no
-   licence check that needs a server. A feature that cannot work on a laptop with the network off
-   belongs to a different product. This rule is what decides a feature, not taste.
-3. **Deny by default.** A sandbox with no explicit configuration shares no host directory and has no
+2. **Deny by default.** A sandbox with no explicit configuration shares no host directory and has no
    network. What is shared **is** the policy: no in-kernel enforcer sits behind it, so the set of
    virtiofs tags and the network backend are settled before the VM starts and are visible to the
    person starting it.
-4. **An application, not a platform.** The product is a program on one person's machine. The unit is
+3. **An application, not a platform.** The product is a program on one person's machine. The unit is
    the sandbox. There is no tenant, no account, and no fleet. Mechanism that makes one machine's
    sandboxes work is this project's; anything that must know who is paying is a different product.
    The **AI model is a caller**, never a component: it drives the app from outside.
-5. **No panic, hang, or leak on the host path.** A hostile guest, a guest that crashes, or a helper
+4. **No panic, hang, or leak on the host path.** A hostile guest, a guest that crashes, or a helper
    that dies must show as a typed error. A leak here is a stranded VM holding somebody's laptop RAM,
    not a server you can reboot. The code is written to this rule, and the confinement suite tests
    this property. It is an aim, not a proven property.
-6. **Measure, do not assert.** Report boot, memory, and frame timings as nearest-rank percentiles.
+5. **Measure, do not assert.** Report boot, memory, and frame timings as nearest-rank percentiles.
    Give the host and the date with each number. Withdraw a number that you cannot defend. libkrun has
    no snapshot surface, so every boot is a cold boot and the number that matters is the one a user
    waits for.

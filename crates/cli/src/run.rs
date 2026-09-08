@@ -293,7 +293,7 @@ pub(crate) fn posture_of(cfg: &VmConfig, results: bool) -> Posture {
 
 /// Writes what this sandbox shares, one element to a line, in the order the guest meets them.
 ///
-/// Design rule 3's second half: the posture is visible to whoever starts it. To stdout, as a
+/// Design rule 2's second half: the posture is visible to whoever starts it. To stdout, as a
 /// run's structured result.
 pub(crate) fn print_posture(
     name: &str,

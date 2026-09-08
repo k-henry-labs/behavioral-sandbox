@@ -62,13 +62,11 @@ Venus-built renderer, so guest acceleration is unproven.
 
 ## Design rules
 
-Six rules. A change that breaks one is a design error, not a trade-off. Each states an intent and
+Five rules. A change that breaks one is a design error, not a trade-off. Each states an intent and
 the mechanism serving it; the full text is [docs/architecture.md](docs/architecture.md).
 
 * **Isolation is hardware, not software**: untrusted code runs in a VM under KVM or
   Hypervisor.framework, never behind a guest-side check.
-* **Local-first**: no account, no telemetry, no control plane. A feature that cannot work with the
-  network off belongs to a different product.
 * **Deny by default**: no explicit configuration means no shared directory and no network. What is
   shared *is* the policy, settled before the VM starts.
 * **An application, not a platform**: a program on one person's machine. There is no tenant, no

@@ -6,8 +6,8 @@ CPU's, enforced by hardware virtualization: KVM on Linux, Hypervisor.framework o
 sandbox can reach is settled before it starts, on the host side of that boundary.
 
 It exists for the usual suspects: a third-party binary, a dependency's install script, an
-AI-generated snippet, a sample under analysis. Everything stays on your own machine: no account, no
-telemetry, no control plane, and nothing that stops working with the network off.
+AI-generated snippet, a sample under analysis. Everything stays on your own machine: no telemetry,
+no control plane, and nothing that stops working with the network off.
 
 ## What it does today
 
@@ -44,7 +44,7 @@ that are actually in the tree, and how a sandbox is run.
 
 - **[Running a sandbox](./running.md)**, the verbs, posture flags, configuration layering, what a
   run leaves behind, and the notebook.
-- **[Architecture](./architecture.md)**, the six design rules with the mechanism serving each, and
+- **[Architecture](./architecture.md)**, the five design rules with the mechanism serving each, and
   what is in the tree.
 - **[Control socket & IPC](./control-ipc.md)**, local process discovery, display leasing, zero-copy
   memfd sharing, and host↔guest wire framing.
