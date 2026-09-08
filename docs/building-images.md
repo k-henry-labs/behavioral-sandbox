@@ -1,18 +1,18 @@
 # Building guest images
 
-Behavioral Sandbox (BSX) uses minimal Alpine Linux guest images containing only the components
+Tormoni uses minimal Alpine Linux guest images containing only the components
 required to run workloads and the static guest agent. Guest rootfs trees are built reproducibly
 without root privileges.
 
 ## A tree to boot right away (`cargo xtask init`)
 
-`cargo xtask init` puts the pinned Alpine minirootfs and the static guest agent where `bsx` resolves
-a root (`--root`, then `$BSX_GUEST_ROOT`, then `~/.local/share/bsx/rootfs`), with the `/results`
+`cargo xtask init` puts the pinned Alpine minirootfs and the static guest agent where `tormoni` resolves
+a root (`--root`, then `$TORMONI_GUEST_ROOT`, then `~/.local/share/tormoni/rootfs`), with the `/results`
 mount point and a resolver beside them. It runs on either platform: the base is a tarball and the
 agent is a static musl build, so neither step needs `apk`.
 
 ```console
-cargo xtask init                      # this host's arch, into bsx's default root
+cargo xtask init                      # this host's arch, into tormoni's default root
 cargo xtask init --root DIR --force   # somewhere else, replacing a tree already there
 ```
 
@@ -63,7 +63,7 @@ The desktop sandbox image adds graphical and terminal session support for `--dis
 - **`cage`**: A minimal Wayland kiosk compositor based on wlroots.
 - **`foot`**: A fast, lightweight Wayland terminal emulator.
 - **`seatd` & `udev`**: Seat management and device node creation inside the guest.
-- **`bsx-session`**: A helper session supervisor that launches `seatd`, starts `cage`, and runs
+- **`tormoni-session`**: A helper session supervisor that launches `seatd`, starts `cage`, and runs
   `foot` in a Wayland kiosk session.
 
 ### ML guest closure (`artifacts/rootfs-ml`)

@@ -14,7 +14,7 @@
 //! `dlopen("libkrunfw.5.dylib")`, a bare name, so the dynamic loader searches its own paths and
 //! never the linker's. There is no `libkrunfw.pc` to ask, and libkrun's own `-L` need not hold it
 //! (Homebrew gives each formula its own prefix; Arch puts both in `/usr/lib`). So it is searched
-//! for by name, and the directory is baked in for `bsx-supervisor` to put on the helper's
+//! for by name, and the directory is baked in for `tormoni-supervisor` to put on the helper's
 //! `DYLD_FALLBACK_LIBRARY_PATH`.
 
 use std::path::{Path, PathBuf};
@@ -22,10 +22,10 @@ use std::process::Command;
 
 fn main() {
     println!("cargo::rustc-check-cfg=cfg(krun_linked)");
-    println!("cargo::rerun-if-env-changed=BSX_KRUN_LIB_DIR");
-    println!("cargo::rerun-if-env-changed=BSX_KRUNFW_LIB_DIR");
+    println!("cargo::rerun-if-env-changed=TORMONI_KRUN_LIB_DIR");
+    println!("cargo::rerun-if-env-changed=TORMONI_KRUNFW_LIB_DIR");
 
-    if let Some(dir) = std::env::var_os("BSX_KRUN_LIB_DIR") {
+    if let Some(dir) = std::env::var_os("TORMONI_KRUN_LIB_DIR") {
         // An override is trusted: a wrong path should fail at link, not be probed into a skip.
         println!("cargo::rustc-link-search=native={}", dir.to_string_lossy());
         emit_link();
@@ -49,8 +49,8 @@ fn main() {
             emit_krunfw_dir(&searched);
         }
         _ => println!(
-            "cargo::warning=libkrun not found (no pkg-config entry). bsx-krun compiled its \
-             declarations, but nothing can link them: install libkrun, or set BSX_KRUN_LIB_DIR."
+            "cargo::warning=libkrun not found (no pkg-config entry). tormoni-krun compiled its \
+             declarations, but nothing can link them: install libkrun, or set TORMONI_KRUN_LIB_DIR."
         ),
     }
 }
@@ -69,15 +69,18 @@ fn emit_krunfw_dir(near: &[PathBuf]) {
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("macos") {
         return;
     }
-    if let Some(dir) = std::env::var_os("BSX_KRUNFW_LIB_DIR") {
-        println!("cargo::rustc-env=BSX_KRUNFW_DIR={}", dir.to_string_lossy());
+    if let Some(dir) = std::env::var_os("TORMONI_KRUNFW_LIB_DIR") {
+        println!(
+            "cargo::rustc-env=TORMONI_KRUNFW_DIR={}",
+            dir.to_string_lossy()
+        );
         return;
     }
     match near.iter().find_map(|dir| find_krunfw(dir)) {
-        Some(found) => println!("cargo::rustc-env=BSX_KRUNFW_DIR={}", found.display()),
+        Some(found) => println!("cargo::rustc-env=TORMONI_KRUNFW_DIR={}", found.display()),
         None => println!(
             "cargo::warning=libkrunfw not found near libkrun. A sandbox will fail to boot with \
-             \"Couldn't find or load libkrunfw\": set BSX_KRUNFW_LIB_DIR to the directory holding \
+             \"Couldn't find or load libkrunfw\": set TORMONI_KRUNFW_LIB_DIR to the directory holding \
              it."
         ),
     }

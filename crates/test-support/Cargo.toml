@@ -1,5 +1,5 @@
 [package]
-name = "bsx-test-support"
+name = "tormoni-test-support"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

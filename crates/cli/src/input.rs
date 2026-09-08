@@ -1,7 +1,7 @@
 //! The winit side of the guest's input, and the two feeders the helper runs. The devices, the
-//! reports and the line grammar are `bsx_input`'s; this is what the helper adds to them.
+//! reports and the line grammar are `tormoni_input`'s; this is what the helper adds to them.
 //!
-//! - **`BSX_INPUT_REPLAY`** names a file or FIFO of lines the helper feeds to the devices as a
+//! - **`TORMONI_INPUT_REPLAY`** names a file or FIFO of lines the helper feeds to the devices as a
 //!   window would: the end-to-end test's way in on a runner with no display server.
 //! - **An `input` session is a thread.** The control thread answers `ok` and hands the
 //!   connection to a thread that feeds its lines until the client goes, so a slow or silent
@@ -12,12 +12,12 @@ use std::io::{self, BufReader};
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
 
-use bsx_input::{Button, Target, feed};
-use bsx_krun::{InputEvent, InputSender};
+use tormoni_input::{Button, Target, feed};
+use tormoni_krun::{InputEvent, InputSender};
 use winit::event::MouseButton;
 
 /// The environment variable naming the replay source.
-pub(crate) const REPLAY_ENV: &str = "BSX_INPUT_REPLAY";
+pub(crate) const REPLAY_ENV: &str = "TORMONI_INPUT_REPLAY";
 
 /// The senders of both devices, as the window and the feeders hold them.
 #[derive(Debug, Clone)]
@@ -39,7 +39,7 @@ impl Inputs {
 
 /// The evdev code of a mouse button, or `None` for one the pointer does not emit.
 pub(crate) fn button_code(button: MouseButton) -> Option<u16> {
-    Some(bsx_input::button_code(match button {
+    Some(tormoni_input::button_code(match button {
         MouseButton::Left => Button::Left,
         MouseButton::Right => Button::Right,
         MouseButton::Middle => Button::Middle,
@@ -54,11 +54,11 @@ pub(crate) fn button_code(button: MouseButton) -> Option<u16> {
 /// the guest to be listening before it types.
 pub(crate) fn replay(path: PathBuf, inputs: Inputs) -> io::Result<()> {
     std::thread::Builder::new()
-        .name("bsx-input-replay".to_string())
+        .name("tormoni-input-replay".to_string())
         .spawn(move || {
             let Ok(file) = std::fs::File::open(&path) else {
                 eprintln!(
-                    "bsx __vmm: warning: {REPLAY_ENV}={} could not be opened; no input replayed",
+                    "tormoni __vmm: warning: {REPLAY_ENV}={} could not be opened; no input replayed",
                     path.display()
                 );
                 return;
@@ -66,7 +66,7 @@ pub(crate) fn replay(path: PathBuf, inputs: Inputs) -> io::Result<()> {
             feed(
                 BufReader::new(file),
                 |target, events| inputs.send(target, events),
-                |line| eprintln!("bsx __vmm: warning: replay line ignored: {line:?}"),
+                |line| eprintln!("tormoni __vmm: warning: replay line ignored: {line:?}"),
             );
         })
         .map(drop)
@@ -76,12 +76,12 @@ pub(crate) fn replay(path: PathBuf, inputs: Inputs) -> io::Result<()> {
 /// client hangs up.
 pub(crate) fn serve(stream: UnixStream, inputs: Inputs) -> io::Result<()> {
     std::thread::Builder::new()
-        .name("bsx-input-session".to_string())
+        .name("tormoni-input-session".to_string())
         .spawn(move || {
             feed(
                 BufReader::new(stream),
                 |target, events| inputs.send(target, events),
-                |line| eprintln!("bsx __vmm: warning: input line ignored: {line:?}"),
+                |line| eprintln!("tormoni __vmm: warning: input line ignored: {line:?}"),
             );
         })
         .map(drop)
@@ -95,16 +95,25 @@ mod tests {
     /// no report.
     #[test]
     fn winit_buttons_map_to_the_devices_codes() {
-        assert_eq!(button_code(MouseButton::Left), Some(bsx_input::BTN_LEFT));
-        assert_eq!(button_code(MouseButton::Right), Some(bsx_input::BTN_RIGHT));
+        assert_eq!(
+            button_code(MouseButton::Left),
+            Some(tormoni_input::BTN_LEFT)
+        );
+        assert_eq!(
+            button_code(MouseButton::Right),
+            Some(tormoni_input::BTN_RIGHT)
+        );
         assert_eq!(
             button_code(MouseButton::Middle),
-            Some(bsx_input::BTN_MIDDLE)
+            Some(tormoni_input::BTN_MIDDLE)
         );
-        assert_eq!(button_code(MouseButton::Back), Some(bsx_input::BTN_SIDE));
+        assert_eq!(
+            button_code(MouseButton::Back),
+            Some(tormoni_input::BTN_SIDE)
+        );
         assert_eq!(
             button_code(MouseButton::Forward),
-            Some(bsx_input::BTN_EXTRA)
+            Some(tormoni_input::BTN_EXTRA)
         );
         assert_eq!(button_code(MouseButton::Other(9)), None);
     }

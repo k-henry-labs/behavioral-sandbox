@@ -1,8 +1,8 @@
-//! End-to-end tests for the user-facing verbs: each boots a real guest through the built `bsx`.
+//! End-to-end tests for the user-facing verbs: each boots a real guest through the built `tormoni`.
 //!
 //! `#[ignore]`d for the reason the supervisor's leak suite is: they need `/dev/kvm` and a guest
 //! tree, and **skip with a printed reason** where a prerequisite is missing, because cargo counts
-//! a skipped test as a pass. Run with `cargo test -p bsx --test e2e -- --ignored`.
+//! a skipped test as a pass. Run with `cargo test -p tormoni --test e2e -- --ignored`.
 
 // A test binary: `expect` is the idiomatic assertion in helpers outside `#[test]`.
 #![allow(clippy::expect_used, clippy::panic)]
@@ -13,7 +13,7 @@ use std::process::Command;
 
 /// Why this host cannot run these, or `None` when it can.
 fn skip_reason() -> Option<String> {
-    if let Some(why) = bsx_test_support::hypervisor_unusable() {
+    if let Some(why) = tormoni_test_support::hypervisor_unusable() {
         return Some(why);
     }
     if !guest_root().is_dir() {
@@ -44,17 +44,17 @@ fn guest_root() -> PathBuf {
         .join("artifacts/rootfs-guest")
 }
 
-/// The `bsx` under test: the binary cargo built for this test run, never a `PATH` lookup.
-fn bsx() -> Command {
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_bsx"));
+/// The `tormoni` under test: the binary cargo built for this test run, never a `PATH` lookup.
+fn tormoni() -> Command {
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_tormoni"));
     // The records these tests write go under the temp dir, not the operator's notebook.
-    cmd.env("BSX_RUNS_DIR", runs_dir());
+    cmd.env("TORMONI_RUNS_DIR", runs_dir());
     cmd
 }
 
 /// A runs directory for this test process alone.
 fn runs_dir() -> PathBuf {
-    std::env::temp_dir().join(format!("bsx-e2e-runs-{}", std::process::id()))
+    std::env::temp_dir().join(format!("tormoni-e2e-runs-{}", std::process::id()))
 }
 
 /// The roadmap's own example: the guest's stdout is this process's stdout, unmixed with anything
@@ -65,13 +65,13 @@ fn run_prints_the_guests_output_and_nothing_else() {
     if skipped("run_prints_the_guests_output_and_nothing_else") {
         return;
     }
-    let out = bsx()
+    let out = tormoni()
         .arg("run")
         .arg("--root")
         .arg(guest_root())
         .args(["--", "echo", "hello"])
         .output()
-        .expect("run bsx");
+        .expect("run tormoni");
     assert_eq!(
         String::from_utf8_lossy(&out.stdout),
         "hello\n",
@@ -81,7 +81,7 @@ fn run_prints_the_guests_output_and_nothing_else() {
     assert!(out.status.success(), "{}", out.status);
 }
 
-/// The guest command's exit code is the verb's exit code, which is what lets `bsx run` sit in a
+/// The guest command's exit code is the verb's exit code, which is what lets `tormoni run` sit in a
 /// script where the command itself would.
 #[test]
 #[ignore = "boots a real guest: needs /dev/kvm and the guest tree"]
@@ -89,13 +89,13 @@ fn run_exits_with_the_guest_commands_code() {
     if skipped("run_exits_with_the_guest_commands_code") {
         return;
     }
-    let status = bsx()
+    let status = tormoni()
         .arg("run")
         .arg("--root")
         .arg(guest_root())
         .args(["--", "sh", "-c", "exit 7"])
         .status()
-        .expect("run bsx");
+        .expect("run tormoni");
     assert_eq!(status.code(), Some(7));
 }
 
@@ -117,13 +117,13 @@ fn shell_runs_the_command_on_a_guest_pty_and_returns_its_exit() {
             .unwrap_or_default()
     };
     let tmp_before = image_tmp();
-    let out = bsx()
+    let out = tormoni()
         .arg("shell")
         .arg("--root")
         .arg(guest_root())
         .args(["--", "/bin/sh", "-c", "tty; stty size; exit 3"])
         .output()
-        .expect("run bsx shell");
+        .expect("run tormoni shell");
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(
         stdout.contains("/dev/pts/"),
@@ -164,13 +164,13 @@ fn the_default_guest_cannot_reach_the_host_network() {
         "wget -T 3 -q -O /dev/null http://127.0.0.1:{port}/ && echo REACHED || echo blocked"
     );
     let reach = |net: &str| -> String {
-        let out = bsx()
+        let out = tormoni()
             .arg("run")
             .arg("--root")
             .arg(guest_root())
             .args(["--net", net, "--", "sh", "-c", &probe])
             .output()
-            .expect("run bsx");
+            .expect("run tormoni");
         String::from_utf8_lossy(&out.stdout).trim().to_string()
     };
     assert_eq!(
@@ -195,7 +195,7 @@ fn the_configured_limits_are_what_the_guest_sees() {
     if skipped("the_configured_limits_are_what_the_guest_sees") {
         return;
     }
-    let out = bsx()
+    let out = tormoni()
         .arg("run")
         .arg("--root")
         .arg(guest_root())
@@ -207,7 +207,7 @@ fn the_configured_limits_are_what_the_guest_sees() {
             "nproc; awk '/MemTotal/{print $2}' /proc/meminfo",
         ])
         .output()
-        .expect("run bsx");
+        .expect("run tormoni");
     let stdout = String::from_utf8_lossy(&out.stdout);
     let mut lines = stdout.lines();
     assert_eq!(
@@ -226,7 +226,7 @@ fn the_configured_limits_are_what_the_guest_sees() {
     );
 }
 
-/// The environment layer: with no flag, `BSX_VCPUS` decides, which is the flag-then-env order
+/// The environment layer: with no flag, `TORMONI_VCPUS` decides, which is the flag-then-env order
 /// every layered knob here follows.
 #[test]
 #[ignore = "boots a real guest: needs /dev/kvm and the guest tree"]
@@ -234,14 +234,14 @@ fn a_limit_from_the_environment_reaches_the_guest() {
     if skipped("a_limit_from_the_environment_reaches_the_guest") {
         return;
     }
-    let out = bsx()
+    let out = tormoni()
         .arg("run")
-        .env("BSX_VCPUS", "2")
+        .env("TORMONI_VCPUS", "2")
         .arg("--root")
         .arg(guest_root())
         .args(["--", "nproc"])
         .output()
-        .expect("run bsx");
+        .expect("run tormoni");
     assert_eq!(
         String::from_utf8_lossy(&out.stdout).trim(),
         "2",
@@ -253,12 +253,12 @@ fn a_limit_from_the_environment_reaches_the_guest() {
 /// A machine larger than the host is a refusal before boot, not a guest that believes in RAM
 /// nothing can back.
 #[test]
-#[ignore = "spawns the built bsx (no VM boots: the refusal is the test)"]
+#[ignore = "spawns the built tormoni (no VM boots: the refusal is the test)"]
 fn a_machine_larger_than_the_host_is_refused_before_boot() {
-    let out = bsx()
+    let out = tormoni()
         .args(["run", "--root", "/tmp", "--mem", "4000000", "--", "true"])
         .output()
-        .expect("run bsx");
+        .expect("run tormoni");
     if !Path::new("/proc/meminfo").exists() {
         println!("SKIPPED a_machine_larger_than_the_host_is_refused_before_boot: no MemTotal");
         return;
@@ -276,7 +276,7 @@ fn a_mounted_directory_is_read_write_and_edits_land_on_the_host() {
     if skipped("a_mounted_directory_is_read_write_and_edits_land_on_the_host") {
         return;
     }
-    let dir = bsx_test_support::ScratchDir::created("e2e-mount");
+    let dir = tormoni_test_support::ScratchDir::created("e2e-mount");
     std::fs::write(dir.path().join("f"), "from-host\n").expect("stage a host file");
 
     let mount = format!("/mnt={}", dir.path().display());
@@ -289,14 +289,14 @@ fn a_mounted_directory_is_read_write_and_edits_land_on_the_host() {
         names
     };
     let before = image_top();
-    let out = bsx()
+    let out = tormoni()
         .arg("run")
         .arg("--root")
         .arg(guest_root())
         .args(["--mount", &mount])
         .args(["--", "sh", "-c", "cat /mnt/f && echo from-guest > /mnt/g"])
         .output()
-        .expect("run bsx");
+        .expect("run tormoni");
     assert!(
         out.status.success(),
         "stderr: {}",
@@ -324,7 +324,7 @@ fn a_second_virtiofs_tag_carries_a_directory_the_guest_mounts_itself() {
     if skipped("a_second_virtiofs_tag_carries_a_directory_the_guest_mounts_itself") {
         return;
     }
-    let dir = bsx_test_support::ScratchDir::created("e2e-share");
+    let dir = tormoni_test_support::ScratchDir::created("e2e-share");
     let mounted = dir.path().join("mounted");
     let shared = dir.path().join("shared");
     std::fs::create_dir(&mounted).expect("a directory for the helper's tag");
@@ -343,7 +343,7 @@ fn a_second_virtiofs_tag_carries_a_directory_the_guest_mounts_itself() {
     let before = image_top();
     // `/opt` because the image has it and nothing else uses it: under the default read-only root
     // the guest cannot create a mount point, which is the same constraint `--mount` has.
-    let out = bsx()
+    let out = tormoni()
         .arg("run")
         .arg("--root")
         .arg(guest_root())
@@ -356,7 +356,7 @@ fn a_second_virtiofs_tag_carries_a_directory_the_guest_mounts_itself() {
             "mount -t virtiofs work /opt && cat /mnt/f /opt/f &&              echo from-the-mount > /mnt/g && echo from-the-share > /opt/g",
         ])
         .output()
-        .expect("run bsx");
+        .expect("run tormoni");
     assert!(
         out.status.success(),
         "stderr: {}",
@@ -398,10 +398,10 @@ fn the_default_guest_cannot_write_the_image_it_boots_from() {
     if skipped("the_default_guest_cannot_write_the_image_it_boots_from") {
         return;
     }
-    let probe = guest_root().join("bsx-write-probe");
+    let probe = guest_root().join("tormoni-write-probe");
     let _ = std::fs::remove_file(&probe);
     let write = |posture: &str| -> String {
-        let out = bsx()
+        let out = tormoni()
             .arg("run")
             .arg("--root")
             .arg(guest_root())
@@ -410,10 +410,10 @@ fn the_default_guest_cannot_write_the_image_it_boots_from() {
                 "--",
                 "sh",
                 "-c",
-                "echo guest > /bsx-write-probe && echo WROTE || echo blocked",
+                "echo guest > /tormoni-write-probe && echo WROTE || echo blocked",
             ])
             .output()
-            .expect("run bsx");
+            .expect("run tormoni");
         String::from_utf8_lossy(&out.stdout).trim().to_string()
     };
     assert_eq!(
@@ -439,14 +439,14 @@ fn the_default_guest_cannot_write_the_image_it_boots_from() {
 /// rather than the preamble's exit 2 on a console the caller may not be watching. No guest tree
 /// needed: the check reads the tree the VM would serve, and `/tmp` has no `/no-such-mount-point`.
 #[test]
-#[ignore = "spawns the built bsx (no VM boots: the refusal is the test)"]
+#[ignore = "spawns the built tormoni (no VM boots: the refusal is the test)"]
 fn a_mount_point_the_image_lacks_is_refused_before_boot() {
-    let out = bsx()
+    let out = tormoni()
         .args(["run", "--root", "/tmp"])
         .args(["--mount", "/no-such-mount-point=/tmp"])
         .args(["--", "true"])
         .output()
-        .expect("run bsx");
+        .expect("run tormoni");
     assert_eq!(out.status.code(), Some(2));
     let err = String::from_utf8_lossy(&out.stderr);
     assert!(err.contains("/no-such-mount-point"), "names it: {err}");
@@ -463,19 +463,19 @@ fn a_mount_point_the_image_lacks_is_refused_before_boot() {
 #[test]
 #[ignore = "the dry run boots nothing; the paired real run needs /dev/kvm and the guest tree"]
 fn a_dry_run_prints_the_posture_and_boots_nothing() {
-    let runtime = bsx_test_support::ScratchDir::created("e2e-dry-run");
+    let runtime = tormoni_test_support::ScratchDir::created("e2e-dry-run");
     std::fs::set_permissions(runtime.path(), PermissionsExt::from_mode(0o700))
         .expect("a control-socket directory must be private");
     let name = format!("dryrun-{}", std::process::id());
-    let socket = runtime.path().join("bsx").join(format!("{name}.sock"));
+    let socket = runtime.path().join("tormoni").join(format!("{name}.sock"));
 
-    let out = bsx()
+    let out = tormoni()
         .arg("run")
         .env("XDG_RUNTIME_DIR", runtime.path())
         .args(["--root", "/tmp", "--name", &name, "--dry-run"])
         .args(["--", "true"])
         .output()
-        .expect("run bsx");
+        .expect("run tormoni");
     assert!(out.status.success(), "{}", out.status);
     let stdout = String::from_utf8_lossy(&out.stdout);
     for line in ["root     /tmp read-only", "network  none", "exec     true"] {
@@ -490,7 +490,7 @@ fn a_dry_run_prints_the_posture_and_boots_nothing() {
     if skipped("a_dry_run_prints_the_posture_and_boots_nothing (the paired real run)") {
         return;
     }
-    let out = bsx()
+    let out = tormoni()
         .arg("run")
         .env("XDG_RUNTIME_DIR", runtime.path())
         .args(["--root"])
@@ -498,7 +498,7 @@ fn a_dry_run_prints_the_posture_and_boots_nothing() {
         .args(["--name", &name])
         .args(["--", "true"])
         .output()
-        .expect("run bsx");
+        .expect("run tormoni");
     assert!(out.status.success(), "{}", out.status);
     assert!(
         socket.exists(),
@@ -512,18 +512,18 @@ fn a_dry_run_prints_the_posture_and_boots_nothing() {
 /// the kernel matching whichever device it saw first. Refused before boot, since nothing
 /// downstream can tell.
 #[test]
-#[ignore = "spawns the built bsx (no VM boots: the refusal is the test)"]
+#[ignore = "spawns the built tormoni (no VM boots: the refusal is the test)"]
 fn a_share_tag_that_would_shadow_a_mount_is_refused_before_boot() {
-    let out = bsx()
+    let out = tormoni()
         .args(["run", "--root", "/tmp"])
-        .args(["--share", "bsx-mnt-0=/tmp"])
+        .args(["--share", "tormoni-mnt-0=/tmp"])
         .args(["--mount", "/mnt=/tmp"])
         .args(["--", "true"])
         .output()
-        .expect("run bsx");
+        .expect("run tormoni");
     assert_eq!(out.status.code(), Some(2));
     let err = String::from_utf8_lossy(&out.stderr);
-    assert!(err.contains("bsx-mnt-0"), "names the tag: {err}");
+    assert!(err.contains("tormoni-mnt-0"), "names the tag: {err}");
     assert!(err.contains("reserved"), "names the rule: {err}");
 }
 
@@ -536,12 +536,12 @@ fn a_frame_the_guest_draws_reaches_the_host() {
     if skipped("a_frame_the_guest_draws_reaches_the_host") {
         return;
     }
-    let dir = bsx_test_support::ScratchDir::created("e2e-frame");
+    let dir = tormoni_test_support::ScratchDir::created("e2e-frame");
     std::fs::write(dir.path().join("draw.py"), include_str!("drm_draw.py"))
         .expect("stage the drawer");
     let shot = dir.path().join("frame.ppm");
     let mount = format!("/mnt={}", dir.path().display());
-    let out = bsx()
+    let out = tormoni()
         .arg("run")
         .arg("--root")
         .arg(guest_root())
@@ -553,7 +553,7 @@ fn a_frame_the_guest_draws_reaches_the_host() {
         .env_remove("WAYLAND_DISPLAY")
         .args(["--", "python3", "/mnt/draw.py", "4"])
         .output()
-        .expect("run bsx");
+        .expect("run tormoni");
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(out.status.success(), "stderr: {stderr}");
     assert!(
@@ -587,11 +587,11 @@ fn a_display_guest_is_offered_a_3d_virtio_gpu_it_has_no_driver_for() {
     if skipped("a_display_guest_is_offered_a_3d_virtio_gpu_it_has_no_driver_for") {
         return;
     }
-    let dir = bsx_test_support::ScratchDir::created("e2e-gpu");
+    let dir = tormoni_test_support::ScratchDir::created("e2e-gpu");
     std::fs::write(dir.path().join("probe.py"), include_str!("gpu_probe.py"))
         .expect("stage the probe");
     let mount = format!("/mnt={}", dir.path().display());
-    let out = bsx()
+    let out = tormoni()
         .arg("run")
         .arg("--root")
         .arg(guest_root())
@@ -600,7 +600,7 @@ fn a_display_guest_is_offered_a_3d_virtio_gpu_it_has_no_driver_for() {
         .env_remove("WAYLAND_DISPLAY")
         .args(["--", "python3", "/mnt/probe.py"])
         .output()
-        .expect("run bsx");
+        .expect("run tormoni");
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(out.status.success(), "stderr: {stderr}");
     let report = String::from_utf8_lossy(&out.stdout);
@@ -638,7 +638,7 @@ fn a_synthetic_key_and_click_reach_a_guest_process() {
     if skipped("a_synthetic_key_and_click_reach_a_guest_process") {
         return;
     }
-    let dir = bsx_test_support::ScratchDir::created("e2e-input");
+    let dir = tormoni_test_support::ScratchDir::created("e2e-input");
     std::fs::write(dir.path().join("read.py"), include_str!("input_read.py"))
         .expect("stage the reader");
     let fifo = dir.path().join("events");
@@ -651,12 +651,12 @@ fn a_synthetic_key_and_click_reach_a_guest_process() {
         "a FIFO for the replay"
     );
     let mount = format!("/mnt={}", dir.path().display());
-    let mut child = bsx()
+    let mut child = tormoni()
         .arg("run")
         .arg("--root")
         .arg(guest_root())
         .args(["--display", "320x240", "--mount", &mount])
-        .env("BSX_INPUT_REPLAY", &fifo)
+        .env("TORMONI_INPUT_REPLAY", &fifo)
         .env_remove("DISPLAY")
         .env_remove("WAYLAND_DISPLAY")
         .args(["--", "python3", "/mnt/read.py", "20"])
@@ -664,7 +664,7 @@ fn a_synthetic_key_and_click_reach_a_guest_process() {
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
-        .expect("run bsx");
+        .expect("run tormoni");
     let stderr = child.stderr.take().expect("piped");
     let stderr = std::thread::spawn(move || {
         let mut s = String::new();
@@ -705,12 +705,12 @@ fn a_synthetic_key_and_click_reach_a_guest_process() {
     drop(writer);
     let mut rest = String::new();
     std::io::Read::read_to_string(&mut stdout, &mut rest).expect("read the rest");
-    let status = child.wait().expect("wait for bsx");
+    let status = child.wait().expect("wait for tormoni");
     let out = lines.concat() + &rest;
     let err = stderr.join().unwrap_or_default();
     assert!(status.success(), "stdout: {out}\nstderr: {err}");
     assert!(
-        out.contains("bsx keyboard") && out.contains("bsx pointer"),
+        out.contains("tormoni keyboard") && out.contains("tormoni pointer"),
         "the guest names both devices: {out}"
     );
     let events: Vec<&str> = out
@@ -803,7 +803,7 @@ fn the_desktop_image_boots_to_a_session_the_keyboard_reaches() {
             return;
         }
     };
-    let dir = bsx_test_support::ScratchDir::created("e2e-desktop");
+    let dir = tormoni_test_support::ScratchDir::created("e2e-desktop");
     let fifo = dir.path().join("keys");
     assert!(
         Command::new("mkfifo")
@@ -815,12 +815,12 @@ fn the_desktop_image_boots_to_a_session_the_keyboard_reaches() {
     // A shell reading one line and running it: what a user would type at foot's prompt, fed the
     // same way, and deterministic.
     let mount = format!("/mnt={}", dir.path().display());
-    let mut child = bsx()
+    let mut child = tormoni()
         .arg("run")
         .arg("--root")
         .arg(&desktop)
         .args(["--display", "640x480", "--mount", &mount])
-        .env("BSX_INPUT_REPLAY", &fifo)
+        .env("TORMONI_INPUT_REPLAY", &fifo)
         .env_remove("DISPLAY")
         .env_remove("WAYLAND_DISPLAY")
         // `timeout` bounds a session that never gets its keystrokes; the sentinel is the pass.
@@ -828,7 +828,7 @@ fn the_desktop_image_boots_to_a_session_the_keyboard_reaches() {
             "--",
             "timeout",
             "60",
-            "bsx-session",
+            "tormoni-session",
             "foot",
             "sh",
             "-c",
@@ -840,7 +840,7 @@ fn the_desktop_image_boots_to_a_session_the_keyboard_reaches() {
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
-        .expect("run bsx");
+        .expect("run tormoni");
     let drain = |mut pipe: Box<dyn Read + Send>| {
         std::thread::spawn(move || {
             let mut buf = String::new();
@@ -872,7 +872,7 @@ fn the_desktop_image_boots_to_a_session_the_keyboard_reaches() {
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
     let mut landed = None;
     while std::time::Instant::now() < deadline {
-        keys.write_all(typed("bsx-typed-this\n").as_bytes())
+        keys.write_all(typed("tormoni-typed-this\n").as_bytes())
             .expect("type the command");
         keys.flush().expect("flush the keys");
         std::thread::sleep(std::time::Duration::from_secs(2));
@@ -882,14 +882,14 @@ fn the_desktop_image_boots_to_a_session_the_keyboard_reaches() {
         }
     }
     drop(keys);
-    let status = child.wait().expect("wait for bsx");
+    let status = child.wait().expect("wait for tormoni");
     let (out, err) = (
         stdout.join().unwrap_or_default(),
         stderr.join().unwrap_or_default(),
     );
     assert_eq!(
         landed.as_deref(),
-        Some("bsx-typed-this"),
+        Some("tormoni-typed-this"),
         "the keys typed at the session's terminal never reached its shell\nstdout: {out}\nstderr: {err}"
     );
     assert!(
@@ -909,14 +909,14 @@ fn gpu_gives_the_guest_a_drm_device_and_nothing_else_does() {
         return;
     }
     let dri = |flags: &[&str]| -> String {
-        let out = bsx()
+        let out = tormoni()
             .arg("run")
             .arg("--root")
             .arg(guest_root())
             .args(flags)
             .args(["--", "sh", "-c", "ls /dev/dri 2>/dev/null || echo none"])
             .output()
-            .expect("run bsx");
+            .expect("run tormoni");
         assert!(
             out.status.success(),
             "stderr: {}",
@@ -946,14 +946,14 @@ fn sound_gives_the_guest_a_card_and_nothing_else_does() {
         return;
     }
     let cards = |flags: &[&str]| -> String {
-        let out = bsx()
+        let out = tormoni()
             .arg("run")
             .arg("--root")
             .arg(guest_root())
             .args(flags)
             .args(["--", "sh", "-c", "cat /proc/asound/cards"])
             .output()
-            .expect("run bsx");
+            .expect("run tormoni");
         assert!(
             out.status.success(),
             "stderr: {}",
@@ -982,12 +982,12 @@ fn a_frame_log_records_each_frame_the_guest_flushed() {
     if skipped("a_frame_log_records_each_frame_the_guest_flushed") {
         return;
     }
-    let dir = bsx_test_support::ScratchDir::created("e2e-frame-log");
+    let dir = tormoni_test_support::ScratchDir::created("e2e-frame-log");
     std::fs::write(dir.path().join("draw.py"), include_str!("drm_draw.py"))
         .expect("stage the drawer");
     let log = dir.path().join("frames.tsv");
     let mount = format!("/mnt={}", dir.path().display());
-    let out = bsx()
+    let out = tormoni()
         .arg("run")
         .arg("--root")
         .arg(guest_root())
@@ -998,7 +998,7 @@ fn a_frame_log_records_each_frame_the_guest_flushed() {
         .env_remove("WAYLAND_DISPLAY")
         .args(["--", "python3", "/mnt/draw.py", "4"])
         .output()
-        .expect("run bsx");
+        .expect("run tormoni");
     assert!(
         out.status.success(),
         "stderr: {}",
@@ -1032,7 +1032,7 @@ fn a_second_process_maps_the_frames_the_guest_draws() {
     if skipped("a_second_process_maps_the_frames_the_guest_draws") {
         return;
     }
-    let dir = bsx_test_support::ScratchDir::created("e2e-boundary");
+    let dir = tormoni_test_support::ScratchDir::created("e2e-boundary");
     let rt = dir.path().join("rt");
     std::fs::create_dir(&rt).expect("a runtime dir");
     std::fs::set_permissions(&rt, std::fs::Permissions::from_mode(0o700)).expect("private");
@@ -1044,7 +1044,7 @@ fn a_second_process_maps_the_frames_the_guest_draws() {
     let shot = dir.path().join("shot.ppm");
     let mount = format!("/mnt={}", mount_dir.display());
 
-    let up = bsx()
+    let up = tormoni()
         .env("XDG_RUNTIME_DIR", &rt)
         .env_remove("DISPLAY")
         .env_remove("WAYLAND_DISPLAY")
@@ -1061,7 +1061,7 @@ fn a_second_process_maps_the_frames_the_guest_draws() {
         .arg("--frame-log")
         .arg(&helper_log)
         .output()
-        .expect("run bsx up");
+        .expect("run tormoni up");
     assert!(
         up.status.success(),
         "up: {}",
@@ -1071,7 +1071,7 @@ fn a_second_process_maps_the_frames_the_guest_draws() {
     struct Stop(PathBuf);
     impl Drop for Stop {
         fn drop(&mut self) {
-            let _ = bsx()
+            let _ = tormoni()
                 .env("XDG_RUNTIME_DIR", &self.0)
                 .args(["stop", "boundary"])
                 .output();
@@ -1081,7 +1081,7 @@ fn a_second_process_maps_the_frames_the_guest_draws() {
 
     // The reader first, so it holds the lease while the guest draws, and reads until the stop
     // below: a late lease misses the first frames, so no count is safe.
-    let reader = bsx()
+    let reader = tormoni()
         .env("XDG_RUNTIME_DIR", &rt)
         .args(["__frames", "boundary"])
         .arg("--log")
@@ -1092,21 +1092,21 @@ fn a_second_process_maps_the_frames_the_guest_draws() {
         .stderr(std::process::Stdio::piped())
         .spawn()
         .expect("run the reader");
-    let drew = bsx()
+    let drew = tormoni()
         .env("XDG_RUNTIME_DIR", &rt)
         .args(["exec", "boundary", "--", "python3", "/mnt/draw.py", "4"])
         .output()
-        .expect("run bsx exec");
+        .expect("run tormoni exec");
     assert!(
         String::from_utf8_lossy(&drew.stdout).contains("DRAW setcrtc ok"),
         "the guest drew: {}",
         String::from_utf8_lossy(&drew.stderr)
     );
-    let stopped = bsx()
+    let stopped = tormoni()
         .env("XDG_RUNTIME_DIR", &rt)
         .args(["stop", "boundary"])
         .output()
-        .expect("run bsx stop");
+        .expect("run tormoni stop");
     assert!(
         stopped.status.success(),
         "stop: {}",
@@ -1165,9 +1165,9 @@ fn a_second_process_maps_the_frames_the_guest_draws() {
 /// The crash class found while building 3.3: a byte outside printable ASCII in the workload's
 /// argv aborted the whole VMM inside libkrun (SIGABRT, exit 134). It must be a typed refusal.
 #[test]
-#[ignore = "spawns the built bsx (no VM boots: the refusal is the test)"]
+#[ignore = "spawns the built tormoni (no VM boots: the refusal is the test)"]
 fn a_non_ascii_argument_is_refused_not_aborted_on() {
-    let out = bsx()
+    let out = tormoni()
         // `/tmp` is no image, so the results mount point it lacks would be refused first.
         .args([
             "run",
@@ -1179,7 +1179,7 @@ fn a_non_ascii_argument_is_refused_not_aborted_on() {
             "\u{e9}",
         ])
         .output()
-        .expect("run bsx");
+        .expect("run tormoni");
     assert_eq!(
         out.status.code(),
         Some(2),
@@ -1191,12 +1191,12 @@ fn a_non_ascii_argument_is_refused_not_aborted_on() {
 
 /// A root that is not a directory is refused before any boot, with the message naming the fix.
 #[test]
-#[ignore = "spawns the built bsx (no VM boots: the refusal is the test)"]
+#[ignore = "spawns the built tormoni (no VM boots: the refusal is the test)"]
 fn run_refuses_a_missing_root_before_booting() {
-    let out = bsx()
-        .args(["run", "--root", "/nonexistent-bsx-root", "--", "true"])
+    let out = tormoni()
+        .args(["run", "--root", "/nonexistent-tormoni-root", "--", "true"])
         .output()
-        .expect("run bsx");
+        .expect("run tormoni");
     assert_eq!(out.status.code(), Some(2));
     let err = String::from_utf8_lossy(&out.stderr);
     assert!(err.contains("build-rootfs"), "names the fix: {err}");
@@ -1212,7 +1212,7 @@ fn a_key_and_click_over_the_control_socket_reach_a_guest_process() {
     if skipped("a_key_and_click_over_the_control_socket_reach_a_guest_process") {
         return;
     }
-    let dir = bsx_test_support::ScratchDir::created("e2e-wire-input");
+    let dir = tormoni_test_support::ScratchDir::created("e2e-wire-input");
     let rt = dir.path().join("rt");
     std::fs::create_dir(&rt).expect("a runtime dir");
     std::fs::set_permissions(&rt, std::fs::Permissions::from_mode(0o700)).expect("private");
@@ -1220,7 +1220,7 @@ fn a_key_and_click_over_the_control_socket_reach_a_guest_process() {
     std::fs::create_dir(&mount_dir).expect("a mount dir");
     std::fs::write(mount_dir.join("read.py"), include_str!("input_read.py")).expect("stage");
     let mount = format!("/mnt={}", mount_dir.display());
-    let up = bsx()
+    let up = tormoni()
         .env("XDG_RUNTIME_DIR", &rt)
         .env_remove("DISPLAY")
         .env_remove("WAYLAND_DISPLAY")
@@ -1228,7 +1228,7 @@ fn a_key_and_click_over_the_control_socket_reach_a_guest_process() {
         .arg(guest_root())
         .args(["--name", "wired", "--display", "320x240", "--mount", &mount])
         .output()
-        .expect("run bsx up");
+        .expect("run tormoni up");
     assert!(
         up.status.success(),
         "up: {}",
@@ -1237,7 +1237,7 @@ fn a_key_and_click_over_the_control_socket_reach_a_guest_process() {
     struct Stop(PathBuf);
     impl Drop for Stop {
         fn drop(&mut self) {
-            let _ = bsx()
+            let _ = tormoni()
                 .env("XDG_RUNTIME_DIR", &self.0)
                 .args(["stop", "wired"])
                 .output();
@@ -1245,7 +1245,7 @@ fn a_key_and_click_over_the_control_socket_reach_a_guest_process() {
     }
     let _stop = Stop(rt.clone());
 
-    let mut reader = bsx()
+    let mut reader = tormoni()
         .env("XDG_RUNTIME_DIR", &rt)
         .args(["exec", "wired", "--", "python3", "/mnt/read.py", "20"])
         .stdin(std::process::Stdio::null())
@@ -1272,8 +1272,8 @@ fn a_key_and_click_over_the_control_socket_reach_a_guest_process() {
     );
     // Only now is the guest listening. The button left down is what the helper must release
     // when the session goes.
-    let socket = bsx_supervisor::socket::path_in(&rt, "wired").expect("a socket path");
-    let mut session = bsx_supervisor::control::input(&socket).expect("an input session");
+    let socket = tormoni_supervisor::socket::path_in(&rt, "wired").expect("a socket path");
+    let mut session = tormoni_supervisor::control::input(&socket).expect("an input session");
     for line in [
         "kbd 1 30 1",
         "kbd 0 0 0",
@@ -1321,7 +1321,7 @@ fn a_key_and_click_over_the_control_socket_reach_a_guest_process() {
 
 /// A `run` leaves a record (roadmap 4.12): the posture as settled, the command's stdout and
 /// stderr as the caller also got them, the exit as the run's end, and what the guest wrote to
-/// `/results` in the record's own directory; `bsx show` reads it back and `bsx rm` removes it.
+/// `/results` in the record's own directory; `tormoni show` reads it back and `tormoni rm` removes it.
 #[test]
 #[ignore = "boots a real guest: needs /dev/kvm and the guest tree"]
 fn a_run_leaves_its_record_output_and_results() {
@@ -1329,8 +1329,8 @@ fn a_run_leaves_its_record_output_and_results() {
         return;
     }
     let runs = runs_dir().join("run-record");
-    let out = bsx()
-        .env("BSX_RUNS_DIR", &runs)
+    let out = tormoni()
+        .env("TORMONI_RUNS_DIR", &runs)
         .args(["run", "--root"])
         .arg(guest_root())
         .args(["--name", "recorded", "--"])
@@ -1340,7 +1340,7 @@ fn a_run_leaves_its_record_output_and_results() {
             "echo out; echo err >&2; echo data > /results/file.txt; exit 3",
         ])
         .output()
-        .expect("run bsx");
+        .expect("run tormoni");
     assert_eq!(
         out.status.code(),
         Some(3),
@@ -1356,15 +1356,15 @@ fn a_run_leaves_its_record_output_and_results() {
         "stderr too"
     );
 
-    let store = bsx_record::Store::at(runs.clone()).expect("the store");
+    let store = tormoni_record::Store::at(runs.clone()).expect("the store");
     let record = store
         .find("recorded")
         .expect("read")
         .expect("a record for the run");
-    assert_eq!(record.verb, bsx_record::Verb::Run);
-    assert_eq!(record.end, Some(bsx_record::End::Exit(3)));
+    assert_eq!(record.verb, tormoni_record::Verb::Run);
+    assert_eq!(record.end, Some(tormoni_record::End::Exit(3)));
     assert!(record.posture.results, "results on by default");
-    assert_eq!(record.posture.network, bsx_record::Network::None);
+    assert_eq!(record.posture.network, tormoni_record::Network::None);
     assert!(record.ended_ms >= Some(record.started_ms));
     let dir = store.dir_of(&record.id);
     assert_eq!(
@@ -1380,21 +1380,21 @@ fn a_run_leaves_its_record_output_and_results() {
         std::fs::read_to_string(dir.results().join("file.txt")).expect("the guest wrote it"),
         "data\n"
     );
-    let shown = bsx()
-        .env("BSX_RUNS_DIR", &runs)
+    let shown = tormoni()
+        .env("TORMONI_RUNS_DIR", &runs)
         .args(["show", &record.id])
         .output()
-        .expect("run bsx show");
+        .expect("run tormoni show");
     let text = String::from_utf8_lossy(&shown.stdout);
     assert!(
         text.contains("end exit 3") && text.contains("result file.txt 5 bytes"),
         "{text}"
     );
-    let removed = bsx()
-        .env("BSX_RUNS_DIR", &runs)
+    let removed = tormoni()
+        .env("TORMONI_RUNS_DIR", &runs)
         .args(["rm", "recorded"])
         .output()
-        .expect("run bsx rm");
+        .expect("run tormoni rm");
     assert!(
         removed.status.success(),
         "{}",
@@ -1414,21 +1414,21 @@ fn an_up_sandbox_records_its_execs_and_its_stop() {
     if skipped("an_up_sandbox_records_its_execs_and_its_stop") {
         return;
     }
-    let dir = bsx_test_support::ScratchDir::created("e2e-up-record");
+    let dir = tormoni_test_support::ScratchDir::created("e2e-up-record");
     let rt = dir.path().join("rt");
     std::fs::create_dir(&rt).expect("a runtime dir");
     std::fs::set_permissions(&rt, std::fs::Permissions::from_mode(0o700)).expect("private");
     let runs = dir.path().join("runs");
-    let up = bsx()
+    let up = tormoni()
         .env("XDG_RUNTIME_DIR", &rt)
-        .env("BSX_RUNS_DIR", &runs)
+        .env("TORMONI_RUNS_DIR", &runs)
         .env_remove("DISPLAY")
         .env_remove("WAYLAND_DISPLAY")
         .args(["up", "--root"])
         .arg(guest_root())
         .args(["--name", "kept"])
         .output()
-        .expect("run bsx up");
+        .expect("run tormoni up");
     assert!(
         up.status.success(),
         "up: {}",
@@ -1437,23 +1437,23 @@ fn an_up_sandbox_records_its_execs_and_its_stop() {
     struct Stop(PathBuf);
     impl Drop for Stop {
         fn drop(&mut self) {
-            let _ = bsx()
+            let _ = tormoni()
                 .env("XDG_RUNTIME_DIR", &self.0)
                 .args(["stop", "kept"])
                 .output();
         }
     }
     let _stop = Stop(rt.clone());
-    let store = bsx_record::Store::at(runs.clone()).expect("the store");
+    let store = tormoni_record::Store::at(runs.clone()).expect("the store");
     let open = store
         .open_run("kept")
         .expect("read")
         .expect("an open record");
     assert!(open.pid.is_some(), "the VM's pid is recorded");
 
-    let ran = bsx()
+    let ran = tormoni()
         .env("XDG_RUNTIME_DIR", &rt)
-        .env("BSX_RUNS_DIR", &runs)
+        .env("TORMONI_RUNS_DIR", &runs)
         .args([
             "exec",
             "kept",
@@ -1463,7 +1463,7 @@ fn an_up_sandbox_records_its_execs_and_its_stop() {
             "echo hello-from-exec; echo to-err >&2",
         ])
         .output()
-        .expect("run bsx exec");
+        .expect("run tormoni exec");
     assert!(
         ran.status.success(),
         "{}",
@@ -1477,12 +1477,12 @@ fn an_up_sandbox_records_its_execs_and_its_stop() {
         "{log}"
     );
 
-    let listed = bsx()
+    let listed = tormoni()
         .env("XDG_RUNTIME_DIR", &rt)
-        .env("BSX_RUNS_DIR", &runs)
+        .env("TORMONI_RUNS_DIR", &runs)
         .args(["ls", "--all"])
         .output()
-        .expect("run bsx ls");
+        .expect("run tormoni ls");
     let text = String::from_utf8_lossy(&listed.stdout);
     assert!(text.lines().any(|l| l.starts_with("kept ")), "live: {text}");
     assert!(
@@ -1490,25 +1490,25 @@ fn an_up_sandbox_records_its_execs_and_its_stop() {
         "listing does not end a run whose VM answers"
     );
 
-    let stopped = bsx()
+    let stopped = tormoni()
         .env("XDG_RUNTIME_DIR", &rt)
-        .env("BSX_RUNS_DIR", &runs)
+        .env("TORMONI_RUNS_DIR", &runs)
         .args(["stop", "kept"])
         .output()
-        .expect("run bsx stop");
+        .expect("run tormoni stop");
     assert!(
         stopped.status.success(),
         "{}",
         String::from_utf8_lossy(&stopped.stderr)
     );
     let ended = store.find("kept").expect("read").expect("still there");
-    assert_eq!(ended.end, Some(bsx_record::End::Stopped));
-    let listed = bsx()
+    assert_eq!(ended.end, Some(tormoni_record::End::Stopped));
+    let listed = tormoni()
         .env("XDG_RUNTIME_DIR", &rt)
-        .env("BSX_RUNS_DIR", &runs)
+        .env("TORMONI_RUNS_DIR", &runs)
         .args(["ls", "--all"])
         .output()
-        .expect("run bsx ls");
+        .expect("run tormoni ls");
     let text = String::from_utf8_lossy(&listed.stdout);
     assert!(
         text.contains("stopped") && text.contains(&ended.id),
@@ -1525,7 +1525,7 @@ fn a_guest_that_sets_a_new_mode_is_followed_by_the_next_lease() {
     if skipped("a_guest_that_sets_a_new_mode_is_followed_by_the_next_lease") {
         return;
     }
-    let dir = bsx_test_support::ScratchDir::created("e2e-mode");
+    let dir = tormoni_test_support::ScratchDir::created("e2e-mode");
     let rt = dir.path().join("rt");
     std::fs::create_dir(&rt).expect("a runtime dir");
     std::fs::set_permissions(&rt, std::fs::Permissions::from_mode(0o700)).expect("private");
@@ -1534,7 +1534,7 @@ fn a_guest_that_sets_a_new_mode_is_followed_by_the_next_lease() {
     std::fs::write(mount_dir.join("mode.py"), include_str!("drm_mode.py")).expect("stage");
     let shot = dir.path().join("shot.ppm");
     let mount = format!("/mnt={}", mount_dir.display());
-    let up = bsx()
+    let up = tormoni()
         .env("XDG_RUNTIME_DIR", &rt)
         .env_remove("DISPLAY")
         .env_remove("WAYLAND_DISPLAY")
@@ -1542,7 +1542,7 @@ fn a_guest_that_sets_a_new_mode_is_followed_by_the_next_lease() {
         .arg(guest_root())
         .args(["--name", "moded", "--display", "640x480", "--mount", &mount])
         .output()
-        .expect("run bsx up");
+        .expect("run tormoni up");
     assert!(
         up.status.success(),
         "up: {}",
@@ -1551,7 +1551,7 @@ fn a_guest_that_sets_a_new_mode_is_followed_by_the_next_lease() {
     struct Stop(PathBuf);
     impl Drop for Stop {
         fn drop(&mut self) {
-            let _ = bsx()
+            let _ = tormoni()
                 .env("XDG_RUNTIME_DIR", &self.0)
                 .args(["stop", "moded"])
                 .output();
@@ -1560,7 +1560,7 @@ fn a_guest_that_sets_a_new_mode_is_followed_by_the_next_lease() {
     let _stop = Stop(rt.clone());
     // The reader holds a lease across the switch and re-leases after it; the screenshot is the
     // last frame of the last lease.
-    let reader = bsx()
+    let reader = tormoni()
         .env("XDG_RUNTIME_DIR", &rt)
         .args(["__frames", "moded"])
         .arg("--screenshot")
@@ -1570,7 +1570,7 @@ fn a_guest_that_sets_a_new_mode_is_followed_by_the_next_lease() {
         .spawn()
         .expect("run the reader");
     // Mode 0 is the preferred 640x480; mode 8 is the EDID's 800x500, the smallest other one.
-    let switched = bsx()
+    let switched = tormoni()
         .env("XDG_RUNTIME_DIR", &rt)
         .args([
             "exec",
@@ -1591,11 +1591,11 @@ fn a_guest_that_sets_a_new_mode_is_followed_by_the_next_lease() {
         "the guest set both modes: {out}\n{}",
         String::from_utf8_lossy(&switched.stderr)
     );
-    let stopped = bsx()
+    let stopped = tormoni()
         .env("XDG_RUNTIME_DIR", &rt)
         .args(["stop", "moded"])
         .output()
-        .expect("run bsx stop");
+        .expect("run tormoni stop");
     assert!(stopped.status.success());
     let read = reader.wait_with_output().expect("wait for the reader");
     let err = String::from_utf8_lossy(&read.stderr);

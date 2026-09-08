@@ -1,4 +1,4 @@
-//! `bsx-guest-agent`, the in-guest agent that runs a command and reports its result over the channel.
+//! `tormoni-guest-agent`, the in-guest agent that runs a command and reports its result over the channel.
 //!
 //! The agent carries exec and IO only. It is a convenience inside the isolation boundary, never part
 //! of the trust boundary: containment is the microVM, not this code.
@@ -40,15 +40,15 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
-use bsx_channel::{ChannelError, Request, Response, ServerConnection};
+use tormoni_channel::{ChannelError, Request, Response, ServerConnection};
 
 /// Agent-side ceiling on a command's runtime: a host-requested timeout is clamped to this, so a
 /// buggy host can't ask the agent to wait effectively forever.
 const MAX_EXEC_TIMEOUT: Duration = Duration::from_secs(3600); // 1 hour
 
 /// Exponential backoff for the child-exit poll, starting tight and widening toward a cap. Local
-/// rather than shared with `bsx`'s `PollBackoff`, because this crate is the static musl guest
-/// binary and takes no `bsx` dependency.
+/// rather than shared with `tormoni`'s `PollBackoff`, because this crate is the static musl guest
+/// binary and takes no `tormoni` dependency.
 struct WaitBackoff {
     next: Duration,
 }
@@ -127,7 +127,7 @@ impl std::error::Error for AgentError {
 impl AgentError {
     /// Returns `true` if the failure was caused by clean EOF or disconnect.
     ///
-    /// A handshake then a close is `bsx up`'s readiness probe working, not a session failing.
+    /// A handshake then a close is `tormoni up`'s readiness probe working, not a session failing.
     #[must_use]
     pub fn is_disconnect(&self) -> bool {
         matches!(self, Self::Channel(e) if e.is_disconnect())
@@ -289,7 +289,7 @@ where
             let mut cmd = Command::new("sh");
             cmd.arg("-c")
                 .arg(TRAMPOLINE_SCRIPT)
-                .arg("bsx-exec-trampoline") // $0
+                .arg("tormoni-exec-trampoline") // $0
                 .arg(&cg.path)
                 .arg(program)
                 .args(args);
@@ -455,7 +455,11 @@ fn effective_path(env: &[(String, String)]) -> Option<std::ffi::OsString> {
         .map(|(_, value)| std::ffi::OsString::from(value))
         .or_else(|| std::env::var_os("PATH"))
         // libkrun's init exports no `PATH`, so an agent it started inherits none.
-        .or_else(|| Some(std::ffi::OsString::from(bsx_channel::GUEST_DEFAULT_PATH)))
+        .or_else(|| {
+            Some(std::ffi::OsString::from(
+                tormoni_channel::GUEST_DEFAULT_PATH,
+            ))
+        })
 }
 
 /// Mirrors `execvp`'s lookup enough to report a missing program as a typed error before the
@@ -490,11 +494,11 @@ fn resolve_program(
     }
 }
 
-/// A `bsx-<what>-<pid>-<n>` name, unique within this agent process: the pid separates two agents
+/// A `tormoni-<what>-<pid>-<n>` name, unique within this agent process: the pid separates two agents
 /// sharing a guest, `seq` separates two names from one agent.
 fn unique_name(what: &str, seq: &AtomicU64) -> String {
     format!(
-        "bsx-{what}-{}-{}",
+        "tormoni-{what}-{}-{}",
         std::process::id(),
         seq.fetch_add(1, Ordering::Relaxed)
     )
@@ -659,7 +663,7 @@ impl RunDir {
         };
         // Before the read: `fs::read` would slurp a multi-GiB file and OOM-kill the agent.
         match std::fs::metadata(&real) {
-            Ok(md) if md.len() > bsx_channel::MAX_PAYLOAD as u64 => {
+            Ok(md) if md.len() > tormoni_channel::MAX_PAYLOAD as u64 => {
                 tracing::warn!(
                     "artifact {rel:?} exceeds the frame cap ({} bytes); skipped",
                     md.len()
@@ -924,11 +928,11 @@ mod tests {
         AgentError, AtomicU64, MAX_EXEC_TIMEOUT, RunDir, budget_from, effective_path,
         resolve_program, unique_name,
     };
-    use bsx_test_support::ScratchDir;
     use std::num::NonZeroU32;
     use std::os::unix::fs::PermissionsExt as _;
     use std::path::Path;
     use std::time::Duration;
+    use tormoni_test_support::ScratchDir;
 
     /// A session outlives one exec, so an earlier command can leave a symlink in the session dir
     /// and a later `PutFile` follows it. The host asked for a path inside the directory it named,

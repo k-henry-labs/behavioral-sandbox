@@ -1,9 +1,9 @@
-//! `bsx run`: boot a sandbox, run one command in it, exit with the command's status.
+//! `tormoni run`: boot a sandbox, run one command in it, exit with the command's status.
 //!
-//! The whole verb is a thin shape over the supervisor: build a [`bsx_supervisor::VmConfig`], spawn
+//! The whole verb is a thin shape over the supervisor: build a [`tormoni_supervisor::VmConfig`], spawn
 //! the helper that becomes the VM, wait, and translate how the helper ended into this process's
 //! exit code. The guest's output is this process's output because the helper inherits stdio, so
-//! `bsx run -- make test 2>/dev/null` behaves like the command it wraps.
+//! `tormoni run -- make test 2>/dev/null` behaves like the command it wraps.
 //!
 //! **Every `run` is a cold boot** (~300 ms on the development laptop, `scratch/ROADMAP.md` 2.9):
 //! libkrun has no snapshot surface, so there is no warm path to hide it. A sequence of commands
@@ -16,13 +16,13 @@ use std::process::ExitCode;
 
 use clap::Args;
 
-use bsx_record::{End, Posture, RESULTS_GUEST_PATH, Record, Store, Verb};
-use bsx_supervisor::{Console, Display, Exit, Net, RootFs, Vm, VmConfig};
+use tormoni_record::{End, Posture, RESULTS_GUEST_PATH, Record, Store, Verb};
+use tormoni_supervisor::{Console, Display, Exit, Net, RootFs, Vm, VmConfig};
 
 use crate::EXIT_OPERATIONAL;
 
 /// The network posture flag, shared by `run` and `shell`. A CLI-side mirror of
-/// [`bsx_supervisor::Net`], because clap's `ValueEnum` cannot derive on a type in another crate;
+/// [`tormoni_supervisor::Net`], because clap's `ValueEnum` cannot derive on a type in another crate;
 /// [`into`](NetArg::into) is the single crossing point and the only place the two can drift.
 #[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub(crate) enum NetArg {
@@ -43,7 +43,7 @@ impl NetArg {
 }
 
 /// The filesystem-posture flag, shared by `run` and `shell`. A CLI-side mirror of
-/// [`bsx_supervisor::RootFs`], for [`NetArg`]'s reason, with [`into_rootfs`](Self::into_rootfs)
+/// [`tormoni_supervisor::RootFs`], for [`NetArg`]'s reason, with [`into_rootfs`](Self::into_rootfs)
 /// as the single crossing point.
 #[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub(crate) enum RootFsArg {
@@ -83,13 +83,13 @@ pub(crate) fn parse_display(spec: &str) -> Result<Display, String> {
 #[derive(Args, Debug)]
 pub(crate) struct RunArgs {
     /// The guest root directory (a tree from `cargo xtask build-rootfs`). Falls back to
-    /// `$BSX_GUEST_ROOT`, then `~/.local/share/bsx/rootfs`.
+    /// `$TORMONI_GUEST_ROOT`, then `~/.local/share/tormoni/rootfs`.
     #[arg(long, value_name = "DIR")]
     pub(crate) root: Option<PathBuf>,
-    /// vCPUs for this sandbox. Falls back to `$BSX_VCPUS`, then 1.
+    /// vCPUs for this sandbox. Falls back to `$TORMONI_VCPUS`, then 1.
     #[arg(long, value_name = "N")]
     pub(crate) vcpus: Option<NonZeroU8>,
-    /// Guest RAM in MiB. Falls back to `$BSX_MEM_MIB`, then 512.
+    /// Guest RAM in MiB. Falls back to `$TORMONI_MEM_MIB`, then 512.
     #[arg(long, value_name = "MIB")]
     pub(crate) mem: Option<NonZeroU32>,
     /// The guest working directory.
@@ -154,7 +154,7 @@ pub(crate) fn run(args: &RunArgs) -> ExitCode {
     match execute(args) {
         Ok(code) => ExitCode::from(code),
         Err(msg) => {
-            eprintln!("bsx run: {msg}");
+            eprintln!("tormoni run: {msg}");
             ExitCode::from(EXIT_OPERATIONAL)
         }
     }
@@ -228,7 +228,7 @@ fn execute(args: &RunArgs) -> Result<u8, String> {
 fn tee(
     from: Option<impl std::io::Read + Send + 'static>,
     mut to: impl std::io::Write + Send + 'static,
-    mut keep: bsx_record::Capped,
+    mut keep: tormoni_record::Capped,
 ) -> std::thread::JoinHandle<()> {
     use std::io::Write;
     std::thread::spawn(move || {
@@ -249,27 +249,27 @@ fn tee(
 
 /// The record's spelling of a config's root posture.
 ///
-/// The two enums are separate because `bsx-record` is dependency-free and cannot name a type from
+/// The two enums are separate because `tormoni-record` is dependency-free and cannot name a type from
 /// the crate that links libkrun; `the_record_and_the_config_spell_the_posture_alike` holds them in
 /// step, and the wildcard is what `#[non_exhaustive]` requires of a match from another crate.
-fn record_rootfs(rootfs: bsx_supervisor::RootFs) -> bsx_record::Rootfs {
+fn record_rootfs(rootfs: tormoni_supervisor::RootFs) -> tormoni_record::Rootfs {
     match rootfs {
-        bsx_supervisor::RootFs::Writable => bsx_record::Rootfs::Writable,
-        _ => bsx_record::Rootfs::ReadOnly,
+        tormoni_supervisor::RootFs::Writable => tormoni_record::Rootfs::Writable,
+        _ => tormoni_record::Rootfs::ReadOnly,
     }
 }
 
 /// The record's spelling of a config's network posture.
-fn record_network(net: bsx_supervisor::Net) -> bsx_record::Network {
+fn record_network(net: tormoni_supervisor::Net) -> tormoni_record::Network {
     match net {
-        bsx_supervisor::Net::Tsi => bsx_record::Network::Tsi,
-        _ => bsx_record::Network::None,
+        tormoni_supervisor::Net::Tsi => tormoni_record::Network::Tsi,
+        _ => tormoni_record::Network::None,
     }
 }
 
 /// The record's spelling of a config's display.
-fn record_display(display: bsx_supervisor::Display) -> bsx_record::DisplayMode {
-    let mode = bsx_record::DisplayMode::new(display.width, display.height);
+fn record_display(display: tormoni_supervisor::Display) -> tormoni_record::DisplayMode {
+    let mode = tormoni_record::DisplayMode::new(display.width, display.height);
     match display.refresh {
         Some(hz) => mode.with_refresh(hz),
         None => mode,
@@ -359,13 +359,13 @@ pub(crate) fn print_posture(
     writeln!(out, "exec     {}", cfg.exec.display())
 }
 
-/// The guest root: the flag, else `$BSX_GUEST_ROOT`, else the per-user data directory. The same
+/// The guest root: the flag, else `$TORMONI_GUEST_ROOT`, else the per-user data directory. The same
 /// order as every other layered knob here (flag, then env, then default), with the config file
 /// layer deliberately absent until phase 3's config work decides its shape.
 pub(crate) fn resolve_root(flag: Option<&Path>) -> Result<PathBuf, String> {
     resolve_root_from(
         flag.map(Path::to_path_buf),
-        std::env::var_os("BSX_GUEST_ROOT"),
+        std::env::var_os("TORMONI_GUEST_ROOT"),
         std::env::var_os("XDG_DATA_HOME"),
         std::env::var_os("HOME"),
     )
@@ -382,11 +382,11 @@ fn resolve_root_from(
 ) -> Result<PathBuf, String> {
     let root = flag
         .or_else(|| env_root.map(PathBuf::from))
-        .or_else(|| data_dir(xdg_data, home).map(|d| d.join("bsx/rootfs")));
+        .or_else(|| data_dir(xdg_data, home).map(|d| d.join("tormoni/rootfs")));
     let Some(root) = root else {
         return Err(
-            "no guest root: pass --root, set BSX_GUEST_ROOT, or install a tree at \
-             ~/.local/share/bsx/rootfs (a checkout puts one there with `cargo xtask init`, or \
+            "no guest root: pass --root, set TORMONI_GUEST_ROOT, or install a tree at \
+             ~/.local/share/tormoni/rootfs (a checkout puts one there with `cargo xtask init`, or \
              builds the full image on Linux with `cargo xtask build-rootfs`)"
                 .to_string(),
         );
@@ -401,7 +401,7 @@ fn resolve_root_from(
     Ok(root)
 }
 
-/// A resource limit from its flag, else its `BSX_*` variable, else `None` (the supervisor's
+/// A resource limit from its flag, else its `TORMONI_*` variable, else `None` (the supervisor's
 /// default). The same flag-then-env order as the guest root, with the config-file layer still
 /// deferred with it.
 pub(crate) fn resolve_limit<T: std::str::FromStr>(
@@ -479,10 +479,10 @@ fn to_config(args: &RunArgs, root: PathBuf) -> Result<VmConfig, String> {
         args.screenshot.as_deref(),
         args.frame_log.as_deref(),
     )?;
-    if let Some(v) = resolve_limit(args.vcpus, "BSX_VCPUS")? {
+    if let Some(v) = resolve_limit(args.vcpus, "TORMONI_VCPUS")? {
         cfg.vcpus = v;
     }
-    if let Some(m) = resolve_limit(args.mem, "BSX_MEM_MIB")? {
+    if let Some(m) = resolve_limit(args.mem, "TORMONI_MEM_MIB")? {
         cfg.mem_mib = m;
     }
     cfg.workdir = args.workdir.clone();
@@ -535,13 +535,13 @@ mod tests {
     use std::path::Path;
 
     /// The record's posture words are the config's flag words. Two crates spell this vocabulary
-    /// because `bsx-record` is dependency-free, so the pairing is asserted rather than assumed:
+    /// because `tormoni-record` is dependency-free, so the pairing is asserted rather than assumed:
     /// a record saying `read-only` for a writable root would misreport what a sandbox could do.
     #[test]
     fn the_record_and_the_config_spell_the_posture_alike() {
         for rootfs in [
-            bsx_supervisor::RootFs::ReadOnly,
-            bsx_supervisor::RootFs::Writable,
+            tormoni_supervisor::RootFs::ReadOnly,
+            tormoni_supervisor::RootFs::Writable,
         ] {
             assert_eq!(
                 rootfs.as_flag(),
@@ -549,15 +549,15 @@ mod tests {
                 "{rootfs:?}"
             );
         }
-        for net in [bsx_supervisor::Net::None, bsx_supervisor::Net::Tsi] {
+        for net in [tormoni_supervisor::Net::None, tormoni_supervisor::Net::Tsi] {
             assert_eq!(net.as_flag(), record_network(net).as_word(), "{net:?}");
         }
         let hd = std::num::NonZeroU32::new(1920).expect("non-zero");
         let vd = std::num::NonZeroU32::new(1080).expect("non-zero");
         let hz = std::num::NonZeroU32::new(60).expect("non-zero");
         for display in [
-            bsx_supervisor::Display::new(hd, vd),
-            bsx_supervisor::Display::new(hd, vd).with_refresh(hz),
+            tormoni_supervisor::Display::new(hd, vd),
+            tormoni_supervisor::Display::new(hd, vd).with_refresh(hz),
         ] {
             assert_eq!(
                 display.as_spec(),
@@ -572,11 +572,11 @@ mod tests {
     use super::*;
     use crate::{Cli, Cmd};
 
-    /// The roadmap's own example, `bsx run -- echo hello`, must parse with the command intact and
+    /// The roadmap's own example, `tormoni run -- echo hello`, must parse with the command intact and
     /// hyphens in the command untouched, since everything after `--` belongs to the guest.
     #[test]
     fn the_command_after_the_separator_is_taken_verbatim() {
-        let cli = Cli::parse_from(["bsx", "run", "--", "sh", "-c", "echo hi"]);
+        let cli = Cli::parse_from(["tormoni", "run", "--", "sh", "-c", "echo hi"]);
         let Cmd::Run(args) = cli.cmd else {
             panic!("run must parse");
         };
@@ -602,12 +602,12 @@ mod tests {
         let err = resolve_root_from(None, None, None, None)
             .expect_err("nothing to resolve from is an error, not a guess");
         assert!(err.contains("--root"), "{err}");
-        assert!(err.contains("BSX_GUEST_ROOT"), "{err}");
+        assert!(err.contains("TORMONI_GUEST_ROOT"), "{err}");
 
         let home = Some(OsString::from("/nonexistent-home"));
         let err = resolve_root_from(None, None, None, home)
             .expect_err("the derived default is still checked for existence");
-        assert!(err.contains(".local/share/bsx/rootfs"), "{err}");
+        assert!(err.contains(".local/share/tormoni/rootfs"), "{err}");
     }
 
     /// Every flag lands in the config field it names, and the command splits into the guest
@@ -615,7 +615,7 @@ mod tests {
     #[test]
     fn the_flags_land_in_the_config_fields_they_name() {
         let cli = Cli::parse_from([
-            "bsx",
+            "tormoni",
             "run",
             "--vcpus",
             "2",
@@ -658,21 +658,23 @@ mod tests {
         let flag = NonZeroU8::new(4);
         let env = Some(OsString::from("2"));
         assert_eq!(
-            resolve_limit_from(flag, "BSX_VCPUS", env.clone()).expect("the flag wins"),
+            resolve_limit_from(flag, "TORMONI_VCPUS", env.clone()).expect("the flag wins"),
             flag
         );
         assert_eq!(
-            resolve_limit_from::<NonZeroU8>(None, "BSX_VCPUS", env).expect("the env fills in"),
+            resolve_limit_from::<NonZeroU8>(None, "TORMONI_VCPUS", env).expect("the env fills in"),
             NonZeroU8::new(2)
         );
         assert_eq!(
-            resolve_limit_from::<NonZeroU8>(None, "BSX_VCPUS", None).expect("unset means unset"),
+            resolve_limit_from::<NonZeroU8>(None, "TORMONI_VCPUS", None)
+                .expect("unset means unset"),
             None
         );
         for bad in ["zero-is-not-a-machine", "0", "-1", ""] {
-            let err = resolve_limit_from::<NonZeroU8>(None, "BSX_VCPUS", Some(OsString::from(bad)))
-                .expect_err("a set-but-broken limit must refuse");
-            assert!(err.contains("BSX_VCPUS"), "names the variable: {err}");
+            let err =
+                resolve_limit_from::<NonZeroU8>(None, "TORMONI_VCPUS", Some(OsString::from(bad)))
+                    .expect_err("a set-but-broken limit must refuse");
+            assert!(err.contains("TORMONI_VCPUS"), "names the variable: {err}");
         }
     }
 
@@ -683,7 +685,7 @@ mod tests {
         assert_eq!(NetArg::default(), NetArg::None);
         assert_eq!(NetArg::None.into_net(), Net::None);
         assert_eq!(NetArg::Tsi.into_net(), Net::Tsi);
-        let cli = Cli::parse_from(["bsx", "run", "--", "true"]);
+        let cli = Cli::parse_from(["tormoni", "run", "--", "true"]);
         let Cmd::Run(args) = cli.cmd else {
             panic!("run must parse");
         };
@@ -697,7 +699,7 @@ mod tests {
         assert_eq!(RootFsArg::default(), RootFsArg::ReadOnly);
         assert_eq!(RootFsArg::ReadOnly.into_rootfs(), RootFs::ReadOnly);
         assert_eq!(RootFsArg::Writable.into_rootfs(), RootFs::Writable);
-        let cli = Cli::parse_from(["bsx", "run", "--", "true"]);
+        let cli = Cli::parse_from(["tormoni", "run", "--", "true"]);
         let Cmd::Run(args) = cli.cmd else {
             panic!("run must parse");
         };
@@ -712,7 +714,7 @@ mod tests {
     #[test]
     fn the_posture_print_names_every_shared_thing_and_its_direction() {
         let cli = Cli::parse_from([
-            "bsx",
+            "tormoni",
             "run",
             "--rootfs",
             "writable",
@@ -809,7 +811,7 @@ mod tests {
     /// A malformed share is refused here, before a VM is spawned to die on it.
     #[test]
     fn a_malformed_share_is_refused_before_spawn() {
-        let cli = Cli::parse_from(["bsx", "run", "--share", "nopath", "--", "true"]);
+        let cli = Cli::parse_from(["tormoni", "run", "--share", "nopath", "--", "true"]);
         let Cmd::Run(args) = cli.cmd else {
             panic!("run must parse");
         };

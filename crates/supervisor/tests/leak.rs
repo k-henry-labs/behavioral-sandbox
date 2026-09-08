@@ -5,12 +5,12 @@
 //! can reboot, which is why design rule 5 names it and why this exists before the supervisor grows
 //! any more surface.
 //!
-//! These spawn real guests, so they need `/dev/kvm`, the guest tree and a built `bsx`. Each
+//! These spawn real guests, so they need `/dev/kvm`, the guest tree and a built `tormoni`. Each
 //! **skips with a printed reason** when a prerequisite is missing rather than passing quietly:
 //! cargo counts a skipped test as a pass, and a green suite that measured nothing is the failure
 //! this file exists to prevent.
 //!
-//! Run them with `cargo test -p bsx-supervisor --test leak -- --ignored --test-threads=1`. Serial,
+//! Run them with `cargo test -p tormoni-supervisor --test leak -- --ignored --test-threads=1`. Serial,
 //! because they count processes and sockets belonging to a private runtime directory and a sibling
 //! doing the same would see each other's.
 
@@ -33,7 +33,7 @@ const BOOT_GRACE: Duration = Duration::from_secs(5);
 /// Why this host cannot run these, or `None` when it can. The KVM check opens the device, since
 /// for a user outside the `kvm` group it exists and every boot still dies.
 fn skip_reason() -> Option<String> {
-    if let Some(why) = bsx_test_support::hypervisor_unusable() {
+    if let Some(why) = tormoni_test_support::hypervisor_unusable() {
         return Some(why);
     }
     if !guest_root().is_dir() {
@@ -42,10 +42,10 @@ fn skip_reason() -> Option<String> {
             guest_root().display()
         ));
     }
-    if !bsx_binary().is_file() {
+    if !tormoni_binary().is_file() {
         return Some(format!(
-            "no bsx binary at {} (run `cargo build -p bsx`)",
-            bsx_binary().display()
+            "no tormoni binary at {} (run `cargo build -p tormoni`)",
+            tormoni_binary().display()
         ));
     }
     None
@@ -82,14 +82,14 @@ fn guest_root() -> PathBuf {
     workspace_root().join("scratch/rootfs")
 }
 
-fn bsx_binary() -> PathBuf {
-    workspace_root().join("target/debug/bsx")
+fn tormoni_binary() -> PathBuf {
+    workspace_root().join("target/debug/tormoni")
 }
 
 /// Spawns a helper directly, with its runtime directory at `runtime`. Not through `Vm::spawn`,
 /// which re-executes `current_exe()` and would be the test binary.
 fn spawn_guest(name: &str, runtime: &Path) -> std::process::Child {
-    Command::new(bsx_binary())
+    Command::new(tormoni_binary())
         .args(["__vmm", "--name", name])
         .arg("--root")
         .arg(guest_root())
@@ -138,8 +138,8 @@ fn eventually(mut cond: impl FnMut() -> bool) -> bool {
 }
 
 /// A private runtime directory, so a test counts only its own VMs.
-fn runtime_dir(tag: &str) -> bsx_test_support::ScratchDir {
-    let dir = bsx_test_support::ScratchDir::created(tag);
+fn runtime_dir(tag: &str) -> tormoni_test_support::ScratchDir {
+    let dir = tormoni_test_support::ScratchDir::created(tag);
     std::fs::set_permissions(
         dir.path(),
         std::os::unix::fs::PermissionsExt::from_mode(0o700),
@@ -151,13 +151,13 @@ fn runtime_dir(tag: &str) -> bsx_test_support::ScratchDir {
 /// **The test this file exists for.** A supervisor that dies mid-boot must not leave the VM it was
 /// starting behind: kills the helper while the guest is still coming up.
 #[test]
-#[ignore = "boots a real guest: needs /dev/kvm, the guest tree and a built bsx"]
+#[ignore = "boots a real guest: needs /dev/kvm, the guest tree and a built tormoni"]
 fn a_supervisor_killed_mid_boot_leaves_no_vm() {
     if skipped("a_supervisor_killed_mid_boot_leaves_no_vm") {
         return;
     }
     let runtime = runtime_dir("leak-midboot");
-    let sock = runtime.path().join("bsx/midboot.sock");
+    let sock = runtime.path().join("tormoni/midboot.sock");
 
     let mut child = spawn_guest("midboot", runtime.path());
     let pid = child.id();
@@ -169,9 +169,9 @@ fn a_supervisor_killed_mid_boot_leaves_no_vm() {
     assert!(pid_is_live(pid), "the helper should still be running");
     // The positive first, against the directory the helpers were pointed at: a scan that never
     // sees the running VM makes the absence below vacuous.
-    let scan_dir = runtime.path().join("bsx");
+    let scan_dir = runtime.path().join("tormoni");
     assert!(
-        bsx_supervisor::discover::live_in(&scan_dir)
+        tormoni_supervisor::discover::live_in(&scan_dir)
             .expect("scan the private runtime directory")
             .iter()
             .any(|f| f.name == "midboot"),
@@ -186,11 +186,11 @@ fn a_supervisor_killed_mid_boot_leaves_no_vm() {
         "the helper process survived being killed mid-boot"
     );
     assert!(
-        !bsx_supervisor::socket::is_live(&sock),
+        !tormoni_supervisor::socket::is_live(&sock),
         "a control socket is still answering for a VM whose helper is dead"
     );
     assert!(
-        bsx_supervisor::discover::live_in(&scan_dir)
+        tormoni_supervisor::discover::live_in(&scan_dir)
             .expect("scan the private runtime directory")
             .iter()
             .all(|f| f.name != "midboot"),
@@ -198,16 +198,16 @@ fn a_supervisor_killed_mid_boot_leaves_no_vm() {
     );
 }
 
-/// Dropping a [`bsx_supervisor::Vm`] must take the VM with it, including when the guest is a live
+/// Dropping a [`tormoni_supervisor::Vm`] must take the VM with it, including when the guest is a live
 /// process rather than something that was about to exit anyway.
 #[test]
-#[ignore = "boots a real guest: needs /dev/kvm, the guest tree and a built bsx"]
+#[ignore = "boots a real guest: needs /dev/kvm, the guest tree and a built tormoni"]
 fn dropping_the_supervisor_takes_the_running_vm_with_it() {
     if skipped("dropping_the_supervisor_takes_the_running_vm_with_it") {
         return;
     }
     let runtime = runtime_dir("leak-drop");
-    let sock = runtime.path().join("bsx/dropme.sock");
+    let sock = runtime.path().join("tormoni/dropme.sock");
 
     let mut child = spawn_guest("dropme", runtime.path());
     let pid = child.id();
@@ -216,7 +216,7 @@ fn dropping_the_supervisor_takes_the_running_vm_with_it() {
         "the guest never reached a running vCPU: nothing to test the teardown against"
     );
     assert!(
-        bsx_supervisor::socket::is_live(&sock),
+        tormoni_supervisor::socket::is_live(&sock),
         "a running VM must be answering on its control socket"
     );
 
@@ -229,7 +229,7 @@ fn dropping_the_supervisor_takes_the_running_vm_with_it() {
         "the VM outlived its supervisor"
     );
     assert!(
-        !bsx_supervisor::socket::is_live(&sock),
+        !tormoni_supervisor::socket::is_live(&sock),
         "its socket still answers"
     );
 }
@@ -237,13 +237,13 @@ fn dropping_the_supervisor_takes_the_running_vm_with_it() {
 /// A killed VM leaves its socket *file* behind, which is expected, and the leftover must be
 /// recognisable as dead rather than counted as a running VM forever.
 #[test]
-#[ignore = "boots a real guest: needs /dev/kvm, the guest tree and a built bsx"]
+#[ignore = "boots a real guest: needs /dev/kvm, the guest tree and a built tormoni"]
 fn a_killed_vms_socket_is_left_but_never_counted_as_live() {
     if skipped("a_killed_vms_socket_is_left_but_never_counted_as_live") {
         return;
     }
     let runtime = runtime_dir("leak-stale");
-    let sock = runtime.path().join("bsx/stale.sock");
+    let sock = runtime.path().join("tormoni/stale.sock");
 
     let mut child = spawn_guest("stale", runtime.path());
     let pid = child.id();
@@ -252,13 +252,13 @@ fn a_killed_vms_socket_is_left_but_never_counted_as_live() {
         "the guest never reached a running vCPU"
     );
     assert!(
-        bsx_supervisor::socket::is_live(&sock),
+        tormoni_supervisor::socket::is_live(&sock),
         "a running VM answers"
     );
     child.kill().expect("kill the VM");
     child.wait().expect("reap it");
 
-    assert!(eventually(|| !bsx_supervisor::socket::is_live(&sock)));
+    assert!(eventually(|| !tormoni_supervisor::socket::is_live(&sock)));
     // The file surviving is the documented consequence of libkrun exiting the process without
     // unwinding, so this asserts the state is *recognised*, not that it does not happen.
     assert!(
@@ -266,7 +266,7 @@ fn a_killed_vms_socket_is_left_but_never_counted_as_live() {
         "the socket file outlives the helper, as designed"
     );
     assert!(
-        bsx_supervisor::socket::clear_if_stale(&sock).expect("clear the leftover"),
+        tormoni_supervisor::socket::clear_if_stale(&sock).expect("clear the leftover"),
         "the leftover was not recognised as stale"
     );
     assert!(!sock.exists());

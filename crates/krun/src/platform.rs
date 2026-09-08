@@ -23,7 +23,7 @@ mod imp {
     pub(crate) fn size_locked_fd(len: usize) -> io::Result<OwnedFd> {
         use rustix::fs::{MemfdFlags, SealFlags};
         let fd = rustix::fs::memfd_create(
-            "bsx-frames",
+            "tormoni-frames",
             MemfdFlags::CLOEXEC | MemfdFlags::ALLOW_SEALING,
         )?;
         rustix::fs::ftruncate(&fd, len as u64)?;
@@ -88,7 +88,7 @@ mod imp {
         let mut last = None;
         for _ in 0..16 {
             let name = format!(
-                "/bsx.{}.{}",
+                "/tormoni.{}.{}",
                 std::process::id(),
                 NEXT_NAME.fetch_add(1, Ordering::Relaxed)
             );

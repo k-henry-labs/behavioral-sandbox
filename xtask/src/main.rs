@@ -46,7 +46,7 @@ enum Cmd {
     /// missing. Asks this host's own question, so it names KVM on Linux and Hypervisor.framework
     /// on macOS rather than a device one of them has not got.
     Setup,
-    /// Sign the built `bsx` for Hypervisor.framework so it can start a VM (macOS). A later cargo
+    /// Sign the built `tormoni` for Hypervisor.framework so it can start a VM (macOS). A later cargo
     /// build or test replaces the binary and the signature with it, so this runs after a build
     /// rather than once. Elsewhere it says there is nothing to sign and exits.
     Sign {
@@ -58,8 +58,8 @@ enum Cmd {
     /// `crates/app/fonts/lucide.ttf`. A dev step: the cut font is committed, since the app
     /// compiles it in and the gate builds with no network.
     Icons,
-    /// Assemble `artifacts/Behavioral Sandbox.app` from the built binaries, so the window runs as
-    /// `Behavioral Sandbox` rather than as the file name `bsx-app` (macOS). `bsx` is copied in
+    /// Assemble `artifacts/Tormoni.app` from the built binaries, so the window runs as
+    /// `Tormoni` rather than as the file name `tormoni-app` (macOS). `tormoni` is copied in
     /// beside it and signed there. Elsewhere it says there is nothing to bundle and exits.
     Bundle {
         /// Bundle the release build rather than the debug one.
@@ -86,11 +86,11 @@ enum Cmd {
         #[arg(long, value_name = "REV")]
         baseline: Option<String>,
     },
-    /// Put a bootable guest tree where `bsx` looks for one, on any host: the pinned Alpine
+    /// Put a bootable guest tree where `tormoni` looks for one, on any host: the pinned Alpine
     /// minirootfs plus the static agent, so `run`, `up`, `exec` and `shell` all answer. The
     /// runtimes and the locked closure need `build-rootfs`, whose installer only runs on Linux.
     Init {
-        /// Where the tree goes. Falls back to `$BSX_GUEST_ROOT`, then `~/.local/share/bsx/rootfs`.
+        /// Where the tree goes. Falls back to `$TORMONI_GUEST_ROOT`, then `~/.local/share/tormoni/rootfs`.
         #[arg(long, value_name = "DIR")]
         root: Option<PathBuf>,
         /// The guest's architecture (`x86_64` or `aarch64`), defaulting to this host's.
@@ -106,7 +106,7 @@ enum Cmd {
     #[command(visible_alias = "rootfs")]
     BuildRootfs {
         /// Build the desktop image instead, at `artifacts/rootfs-desktop`: the base plus a
-        /// Wayland compositor (cage), a terminal (foot), seatd and udev, and the `bsx-session`
+        /// Wayland compositor (cage), a terminal (foot), seatd and udev, and the `tormoni-session`
         /// program that starts them under `--display`.
         #[arg(long)]
         desktop: bool,
@@ -132,7 +132,7 @@ enum Cmd {
     },
     /// Measure cold-boot latency as nearest-rank percentiles: spawn → a running vCPU, and
     /// spawn → the exit of a guest running `/bin/true`. Needs `/dev/kvm`, the guest tree and a
-    /// **release** `bsx`.
+    /// **release** `tormoni`.
     BenchBoot {
         /// How many boots to time. Default 100, the floor at which a `p99` has any sample above
         /// it; below that it prints `—`.
@@ -141,7 +141,7 @@ enum Cmd {
     },
     /// Measure the per-sandbox memory footprint of a cohort of idle VMs kept alive together:
     /// per-VMM Pss and Rss as percentiles, plus the whole-host `MemAvailable` drop per VM. Needs
-    /// `/dev/kvm`, the guest tree and a **release** `bsx`.
+    /// `/dev/kvm`, the guest tree and a **release** `tormoni`.
     BenchFootprint {
         /// How many idle VMs to bring up (stops earlier at the memory floor). Default 8.
         #[arg(long, default_value_t = 8)]
@@ -153,7 +153,7 @@ enum Cmd {
     },
     /// Measure the guest-to-host frame path: frame arrival intervals as percentiles, with the
     /// guest's own view beside them. Headless, so it measures throughput into the host process,
-    /// not presentation. Needs `/dev/kvm`, the guest tree and a **release** `bsx`.
+    /// not presentation. Needs `/dev/kvm`, the guest tree and a **release** `tormoni`.
     BenchFrames {
         /// The display the guest gets, `WIDTHxHEIGHT[@HZ]`; `@HZ` is what the guest paces its
         /// page flips to. Default 640x480.
@@ -162,7 +162,7 @@ enum Cmd {
         /// Frames per run. Default 300.
         #[arg(long, default_value_t = 300)]
         frames: usize,
-        /// Also run the frames through `bsx-app`, which opens a window on this desktop.
+        /// Also run the frames through `tormoni-app`, which opens a window on this desktop.
         #[arg(long)]
         app: bool,
     },
@@ -419,7 +419,7 @@ fn ci() -> Result<()> {
     deny_detached_workspaces(workspace_root())?;
     lint_detached_workspaces(workspace_root())?;
     // Last, because a signature does not reliably outlive a later cargo command: `codesign` writes
-    // a new inode, breaking the hardlink `target/debug/bsx` is uplifted from, and cargo sometimes
+    // a new inode, breaking the hardlink `target/debug/tormoni` is uplifted from, and cargo sometimes
     // re-links the unsigned artifact over it. Signing earlier signs something a later step may
     // replace.
     sign::sign_for_hypervisor(false)?;
@@ -433,7 +433,7 @@ fn ci() -> Result<()> {
 fn announce_compiled_out() {
     if !cfg!(target_os = "linux") {
         println!(
-            "\nnot covered on this host: bsx-guest-agent and its four suites compile to nothing \
+            "\nnot covered on this host: tormoni-guest-agent and its four suites compile to nothing \
              off Linux, because the agent reaps through a pidfd and listens on AF_VSOCK. The \
              helper's own window is compiled out too: its event loop needs a thread other than \
              the main one, which X11 and Wayland allow and macOS does not. The benches read \
@@ -687,7 +687,7 @@ fn hypervisor_answers() -> (bool, &'static str) {
 
 /// Print a checklist of the host prerequisites; read-only, never fails the build.
 fn setup() -> Result<()> {
-    println!("bsx: host capability check\n");
+    println!("tormoni: host capability check\n");
 
     let (answers, asked) = hypervisor_answers();
     check(asked, answers);
@@ -700,17 +700,19 @@ fn setup() -> Result<()> {
             dev_tool_path("codesign").is_some(),
         );
         check(
-            &match bsx_krun::KRUNFW_DIR {
+            &match tormoni_krun::KRUNFW_DIR {
                 Some(dir) => format!("libkrunfw found, at {dir} (libkrun's kernel payload)"),
-                None => "libkrunfw (libkrun's kernel payload; set BSX_KRUNFW_LIB_DIR)".to_string(),
+                None => {
+                    "libkrunfw (libkrun's kernel payload; set TORMONI_KRUNFW_LIB_DIR)".to_string()
+                }
             },
-            bsx_krun::KRUNFW_DIR.is_some(),
+            tormoni_krun::KRUNFW_DIR.is_some(),
         );
     }
 
     check(
         "libkrun gpu feature (what a `--gpu` guest needs; a probe, never a version)",
-        bsx_krun::has_feature(bsx_krun::KRUN_FEATURE_GPU).unwrap_or(false),
+        tormoni_krun::has_feature(tormoni_krun::KRUN_FEATURE_GPU).unwrap_or(false),
     );
 
     // Verified, not announced: a row printing the pin while any version satisfied it is hollow.
@@ -745,7 +747,7 @@ fn setup() -> Result<()> {
 /// The crates whose public API a `v0.1.0` tag would freeze: the surface `AGENTS.md`'s `api`-scope
 /// rule names. The wire framing, and the spawn/discovery API both shipped binaries drive their
 /// VMs through.
-const PINNED_SURFACE_CRATES: [&str; 2] = ["bsx-channel", "bsx-supervisor"];
+const PINNED_SURFACE_CRATES: [&str; 2] = ["tormoni-channel", "tormoni-supervisor"];
 
 /// `cargo xtask semver-check`: the pinned surface against a baseline rev.
 ///
@@ -861,11 +863,11 @@ fn artifacts_dir() -> PathBuf {
     workspace_root().join("artifacts")
 }
 
-/// The local vendor mirror, if the operator set `BSX_VENDOR_DIR`: the offline source for every
+/// The local vendor mirror, if the operator set `TORMONI_VENDOR_DIR`: the offline source for every
 /// sha-pinned upstream input (`cargo xtask vendor`), so a build never reaches the Alpine CDN.
 /// `None` means fetch from pinned upstream (the default).
 fn vendor_dir() -> Option<PathBuf> {
-    std::env::var_os("BSX_VENDOR_DIR")
+    std::env::var_os("TORMONI_VENDOR_DIR")
         .filter(|v| !v.is_empty())
         .map(PathBuf::from)
 }
@@ -1405,7 +1407,7 @@ exclude = ["fuzz"]
         );
 
         // The seed corpus. A target with no directory here is passed no seeds at all, silently,
-        // since `cargo_fuzz_run_argv` only appends one that exists. `bsx-channel`'s
+        // since `cargo_fuzz_run_argv` only appends one that exists. `tormoni-channel`'s
         // `the_committed_seeds_are_what_the_encoders_produce` owns their bytes; this owns the set.
         let mut seeded = Vec::new();
         for entry in std::fs::read_dir(root.join("fuzz/seeds")).unwrap() {

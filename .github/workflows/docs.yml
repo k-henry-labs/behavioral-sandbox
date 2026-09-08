@@ -1,4 +1,4 @@
-# Deploy mdBook documentation to GitHub Pages (kendricklawton.github.io/behavioral-sandbox).
+# Deploy mdBook documentation to GitHub Pages (kendricklawton.github.io/tormoni).
 name: Docs
 
 # The paths are every input this workflow reads, not just the book source. `mdbook test` compiles

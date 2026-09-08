@@ -1,4 +1,4 @@
-//! `bsx __vmm`, the hidden subcommand that **becomes** a virtual machine.
+//! `tormoni __vmm`, the hidden subcommand that **becomes** a virtual machine.
 //!
 //! `krun_start_enter` does not return: it takes over the calling process and exits with the guest's
 //! status. So a VM is not a thread or an object a supervisor holds, it is a *process*, and this
@@ -7,7 +7,7 @@
 //! - **Hidden, not private.** `#[command(hide = true)]` keeps it out of `--help` because it is not
 //!   a verb anyone types, but it stays a normal subcommand: a caller debugging a boot can run it by
 //!   hand and see exactly what the supervisor would have run.
-//! - **Reached through `current_exe()`, never `PATH`.** A supervisor that spawned `bsx` by name
+//! - **Reached through `current_exe()`, never `PATH`.** A supervisor that spawned `tormoni` by name
 //!   would run whatever `PATH` resolved to, which on a shared host is somebody else's binary. The
 //!   helper is *this* executable, re-executed; the spawn side of that lives in the supervisor
 //!   (`scratch/ROADMAP.md` 2.4), and this module is only the side that gets re-executed.
@@ -152,28 +152,28 @@ pub(crate) enum NetPosture {
 
 impl NetPosture {
     /// The supervisor's spelling of this posture, for the control socket's answer.
-    fn into_net(self) -> bsx_supervisor::Net {
+    fn into_net(self) -> tormoni_supervisor::Net {
         match self {
-            Self::None => bsx_supervisor::Net::None,
-            Self::Tsi => bsx_supervisor::Net::Tsi,
+            Self::None => tormoni_supervisor::Net::None,
+            Self::Tsi => tormoni_supervisor::Net::Tsi,
         }
     }
 }
 
 impl RootFsPosture {
     /// The supervisor's spelling of this posture, for the control socket's answer.
-    fn into_rootfs(self) -> bsx_supervisor::RootFs {
+    fn into_rootfs(self) -> tormoni_supervisor::RootFs {
         match self {
-            Self::ReadOnly => bsx_supervisor::RootFs::ReadOnly,
-            Self::Writable => bsx_supervisor::RootFs::Writable,
+            Self::ReadOnly => tormoni_supervisor::RootFs::ReadOnly,
+            Self::Writable => tormoni_supervisor::RootFs::Writable,
         }
     }
 
     /// The virtiofs device flag this posture is.
-    fn into_access(self) -> bsx_krun::FsAccess {
+    fn into_access(self) -> tormoni_krun::FsAccess {
         match self {
-            Self::ReadOnly => bsx_krun::FsAccess::ReadOnly,
-            Self::Writable => bsx_krun::FsAccess::ReadWrite,
+            Self::ReadOnly => tormoni_krun::FsAccess::ReadOnly,
+            Self::Writable => tormoni_krun::FsAccess::ReadWrite,
         }
     }
 }
@@ -202,7 +202,7 @@ pub(crate) fn split_vsock(spec: &str) -> Option<(u32, &Path)> {
 /// A `WIDTHxHEIGHT` or `WIDTHxHEIGHT@HZ` display spec as `(width, height, refresh)`, or `None`
 /// for anything whose numbers are not all non-zero.
 pub(crate) fn split_display(spec: &str) -> Option<(NonZeroU32, NonZeroU32, Option<NonZeroU32>)> {
-    let mode = bsx_record::DisplayMode::parse(spec)?;
+    let mode = tormoni_record::DisplayMode::parse(spec)?;
     Some((mode.width, mode.height, mode.refresh))
 }
 
@@ -241,7 +241,7 @@ fn sh_quote(s: &str) -> String {
 ///
 /// **The tag is what the guest mounts by**, so two devices sharing one leave the kernel matching
 /// whichever it saw first, silently.
-const RESERVED_TAG_PREFIX: &str = "bsx-";
+const RESERVED_TAG_PREFIX: &str = "tormoni-";
 
 /// The virtiofs tag for mount `i`. Ours by construction, since [`RESERVED_TAG_PREFIX`] is refused
 /// to callers, so it needs no quoting or validation beyond staying under virtio's 36-byte tag
@@ -258,7 +258,7 @@ fn mount_preamble(mounts: &[(&Path, &Path)], exec: &Path, args: &[String]) -> St
     for (i, (guest, _)) in mounts.iter().enumerate() {
         let dir = sh_quote(&guest.to_string_lossy());
         script.push_str(&format!(
-            "mkdir -p {dir} && mount -t virtiofs {tag} {dir} || {{ echo 'bsx: mounting' {dir} \
+            "mkdir -p {dir} && mount -t virtiofs {tag} {dir} || {{ echo 'tormoni: mounting' {dir} \
              'failed' >&2; exit 2; }}; ",
             tag = mount_tag(i),
         ));
@@ -300,7 +300,7 @@ pub(crate) fn run(args: &VmmArgs) -> ExitCode {
     match build_and_enter(args) {
         Ok(never) => match never {},
         Err(e) => {
-            eprintln!("bsx __vmm: {e}");
+            eprintln!("tormoni __vmm: {e}");
             ExitCode::from(crate::EXIT_OPERATIONAL)
         }
     }
@@ -415,7 +415,7 @@ enum HelperError {
     /// The control socket could not be placed or bound.
     Socket(std::io::Error),
     /// libkrun refused a call, including the one that was supposed to never return.
-    Krun(bsx_krun::Error),
+    Krun(tormoni_krun::Error),
 }
 
 impl std::fmt::Display for HelperError {
@@ -499,8 +499,8 @@ impl std::fmt::Display for HelperError {
     }
 }
 
-impl From<bsx_krun::Error> for HelperError {
-    fn from(e: bsx_krun::Error) -> Self {
+impl From<tormoni_krun::Error> for HelperError {
+    fn from(e: tormoni_krun::Error) -> Self {
         Self::Krun(e)
     }
 }
@@ -543,7 +543,7 @@ fn build_and_enter(args: &VmmArgs) -> Result<std::convert::Infallible, HelperErr
     require_backable_mem(args.mem.get())?;
     if args.vcpus.get() > MEASURED_VCPU_CLAMP {
         eprintln!(
-            "bsx __vmm: warning: libkrun was measured silently clamping vCPU counts above \
+            "tormoni __vmm: warning: libkrun was measured silently clamping vCPU counts above \
              {MEASURED_VCPU_CLAMP}; the guest may see fewer than the {} asked for",
             args.vcpus
         );
@@ -579,7 +579,7 @@ fn build_and_enter(args: &VmmArgs) -> Result<std::convert::Infallible, HelperErr
         )?;
     }
 
-    let mut machine = bsx_krun::Context::new()?
+    let mut machine = tormoni_krun::Context::new()?
         .root(&args.root, args.rootfs.into_access())?
         .vm_config(args.vcpus, args.mem)?;
 
@@ -594,25 +594,25 @@ fn build_and_enter(args: &VmmArgs) -> Result<std::convert::Infallible, HelperErr
     // `None` replaces libkrun's TSI-hijacking implicit device; `Tsi` keeps it but names it.
     let tsi = match args.net {
         NetPosture::None => 0,
-        NetPosture::Tsi => bsx_krun::KRUN_TSI_HIJACK_INET,
+        NetPosture::Tsi => tormoni_krun::KRUN_TSI_HIJACK_INET,
     };
     machine = machine.vsock(tsi)?;
     if let Some((port, path)) = vsock {
         // `listen = true` per the header: the guest listens on the port and connections are
         // initiated from the host side, which is the agent-channel direction.
-        machine = machine.vsock_port(port, path, bsx_krun::VsockInitiator::Host)?;
+        machine = machine.vsock_port(port, path, tormoni_krun::VsockInitiator::Host)?;
         restrict_when_bound(path);
     }
     // Rule 3: the guest issuing GPU commands is a named hole. Probed like sound, because a
     // build without gpu exports the symbol and adds no device.
-    if args.gpu && !bsx_krun::has_feature(bsx_krun::KRUN_FEATURE_GPU)? {
+    if args.gpu && !tormoni_krun::has_feature(tormoni_krun::KRUN_FEATURE_GPU)? {
         return Err(HelperError::GpuUnsupported);
     }
     // libkrun takes one gpu-options call per context, so --gpu and --display merge into it here.
     if args.gpu {
-        machine = machine.gpu_device(bsx_krun::GpuMode::Accelerated)?;
+        machine = machine.gpu_device(tormoni_krun::GpuMode::Accelerated)?;
     } else if display.is_some() {
-        machine = machine.gpu_device(bsx_krun::GpuMode::Display)?;
+        machine = machine.gpu_device(tormoni_krun::GpuMode::Display)?;
     }
     // The window runs on its own thread from here, this one being about to become the guest.
     if let Some((width, height, refresh)) = display {
@@ -625,10 +625,10 @@ fn build_and_enter(args: &VmmArgs) -> Result<std::convert::Infallible, HelperErr
         // Shared, not heap: the slots live in a memfd so a `display` lease over the control
         // socket can hand them to another process without a copy (4.9).
         let (with_backend, framebuffer) =
-            with_display.display_backend(bsx_krun::MemoryFramebuffer::shared())?;
+            with_display.display_backend(tormoni_krun::MemoryFramebuffer::shared())?;
         let _ = display_share.set(Arc::clone(&framebuffer));
-        let (with_keyboard, keyboard) = with_backend.input_device(bsx_input::keyboard())?;
-        let (with_pointer, pointer) = with_keyboard.input_device(bsx_input::pointer())?;
+        let (with_keyboard, keyboard) = with_backend.input_device(tormoni_input::keyboard())?;
+        let (with_pointer, pointer) = with_keyboard.input_device(tormoni_input::pointer())?;
         machine = with_pointer;
         let inputs = crate::input::Inputs { keyboard, pointer };
         let _ = input_share.set(inputs.clone());
@@ -649,7 +649,7 @@ fn build_and_enter(args: &VmmArgs) -> Result<std::convert::Infallible, HelperErr
     // Off unless asked (rule 3): a two-way path to the host's sound server is a named hole.
     // Probed, because a build without snd exports the symbol and adds no device.
     if args.sound {
-        if !bsx_krun::has_feature(bsx_krun::KRUN_FEATURE_SND)? {
+        if !tormoni_krun::has_feature(tormoni_krun::KRUN_FEATURE_SND)? {
             return Err(HelperError::SoundUnsupported);
         }
         machine = machine.sound_device()?;
@@ -683,12 +683,12 @@ fn build_and_enter(args: &VmmArgs) -> Result<std::convert::Infallible, HelperErr
     Err(HelperError::Krun(machine.enter()))
 }
 
-/// What this VM answers `bsx ls` with: its shape as configured, and whether an agent is reachable.
+/// What this VM answers `tormoni ls` with: its shape as configured, and whether an agent is reachable.
 ///
 /// Read off the arguments, because libkrun reports nothing back and clamps some of them (see
 /// [`MEASURED_VCPU_CLAMP`]). This is the ask, which is what `ps` shows too.
-fn control_info(args: &VmmArgs) -> bsx_supervisor::control::Info {
-    use bsx_supervisor::control::{Channel, Info};
+fn control_info(args: &VmmArgs) -> tormoni_supervisor::control::Info {
+    use tormoni_supervisor::control::{Channel, Info};
     Info::new(
         std::process::id(),
         args.vcpus,
@@ -707,20 +707,20 @@ fn control_info(args: &VmmArgs) -> bsx_supervisor::control::Info {
 ///
 /// How a caller that did not start this VM reaches it, and what discovery reads: a VM is listed
 /// for exactly as long as it can answer.
-type DisplayShare = Arc<OnceLock<Arc<Mutex<bsx_krun::MemoryFramebuffer>>>>;
+type DisplayShare = Arc<OnceLock<Arc<Mutex<tormoni_krun::MemoryFramebuffer>>>>;
 /// The device senders an `input` session feeds, filled beside the framebuffer.
 type InputShare = Arc<OnceLock<crate::input::Inputs>>;
 
 fn bind_control_socket(
     name: &str,
-    info: bsx_supervisor::control::Info,
+    info: tormoni_supervisor::control::Info,
     display: DisplayShare,
     inputs: InputShare,
 ) -> Result<(), HelperError> {
-    let path = bsx_supervisor::socket::path_for(name).map_err(HelperError::Socket)?;
+    let path = tormoni_supervisor::socket::path_for(name).map_err(HelperError::Socket)?;
     // A leftover from a previous helper with this name would make `bind` fail with EADDRINUSE. Only
     // cleared when nothing is listening, so a name genuinely in use still refuses.
-    bsx_supervisor::socket::clear_if_stale(&path).map_err(HelperError::Socket)?;
+    tormoni_supervisor::socket::clear_if_stale(&path).map_err(HelperError::Socket)?;
     let listener = std::os::unix::net::UnixListener::bind(&path).map_err(HelperError::Socket)?;
     // `bind` applies the umask, commonly leaving the socket world-connectable. The `0700`
     // runtime directory is the first lock; this is the second.
@@ -728,7 +728,7 @@ fn bind_control_socket(
         .map_err(HelperError::Socket)?;
 
     std::thread::Builder::new()
-        .name(format!("bsx-ctl-{name}"))
+        .name(format!("tormoni-ctl-{name}"))
         .spawn(move || serve_control(&listener, &info, &display, &inputs))
         .map_err(HelperError::Socket)?;
     Ok(())
@@ -744,11 +744,11 @@ const CONTROL_IO_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2
 /// nowhere to report to, and a panic would take a running VM down over one failed accept.
 fn serve_control(
     listener: &std::os::unix::net::UnixListener,
-    info: &bsx_supervisor::control::Info,
+    info: &tormoni_supervisor::control::Info,
     display: &DisplayShare,
     inputs: &InputShare,
 ) {
-    use bsx_supervisor::control::{Request, read_request, write_answer};
+    use tormoni_supervisor::control::{Request, read_request, write_answer};
 
     for stream in listener.incoming() {
         let Ok(mut stream) = stream else { continue };
@@ -786,7 +786,7 @@ fn serve_control(
 fn serve_input(mut stream: std::os::unix::net::UnixStream, inputs: Option<&crate::input::Inputs>) {
     use std::io::Write;
 
-    use bsx_supervisor::control::write_refusal;
+    use tormoni_supervisor::control::write_refusal;
     let Some(inputs) = inputs else {
         let _ = write_refusal(&mut stream, "this VM has no display");
         return;
@@ -802,9 +802,9 @@ fn serve_input(mut stream: std::os::unix::net::UnixStream, inputs: Option<&crate
 /// so a client that cannot take it is dropped rather than waited for.
 fn lease_display(
     stream: std::os::unix::net::UnixStream,
-    framebuffer: Option<&Arc<Mutex<bsx_krun::MemoryFramebuffer>>>,
+    framebuffer: Option<&Arc<Mutex<tormoni_krun::MemoryFramebuffer>>>,
 ) {
-    use bsx_supervisor::control::{
+    use tormoni_supervisor::control::{
         Damage, RECONFIGURED_SLOT, Scanout, write_display_answer, write_present, write_refusal,
     };
     let mut stream = stream;
@@ -818,7 +818,7 @@ fn lease_display(
     let shared = match guard.share(SCANOUT) {
         Ok(Some(shared)) => shared,
         Ok(None) => {
-            let _ = write_refusal(&mut stream, bsx_supervisor::control::NOT_READY);
+            let _ = write_refusal(&mut stream, tormoni_supervisor::control::NOT_READY);
             return;
         }
         Err(e) => {
@@ -846,7 +846,7 @@ fn lease_display(
     let generation = layout.generation;
     let whole = Damage::new(0, 0, layout.width, layout.height);
     guard.watch(move |event| match *event {
-        bsx_krun::Event::Presented {
+        tormoni_krun::Event::Presented {
             scanout_id: SCANOUT,
             frame_id,
             slot,
@@ -855,14 +855,14 @@ fn lease_display(
             let damage = damage.map_or(whole, |r| Damage::new(r.x, r.y, r.width, r.height));
             write_present(&mut &stream, frame_id, slot, damage).is_ok()
         }
-        bsx_krun::Event::Reconfigured {
+        tormoni_krun::Event::Reconfigured {
             scanout_id: SCANOUT,
             generation: now,
         } if now != generation => {
             let _ = write_present(&mut &stream, 0, RECONFIGURED_SLOT, whole);
             false
         }
-        bsx_krun::Event::Disabled {
+        tormoni_krun::Event::Disabled {
             scanout_id: SCANOUT,
         } => {
             let _ = write_present(&mut &stream, 0, RECONFIGURED_SLOT, whole);
@@ -895,7 +895,7 @@ fn restrict_when_bound(path: &Path) {
     // Best-effort by construction: a VM whose socket could not be tightened still runs, and a
     // failure here has nowhere to be reported once the main thread is inside libkrun.
     let _ = std::thread::Builder::new()
-        .name("bsx-chan-mode".to_string())
+        .name("tormoni-chan-mode".to_string())
         .spawn(move || {
             let deadline = std::time::Instant::now() + BIND_WAIT;
             while std::time::Instant::now() < deadline {
@@ -982,7 +982,7 @@ mod tests {
     /// which is the one failure a supervisor cannot see.
     #[test]
     fn a_root_that_is_not_a_directory_is_refused_before_boot() {
-        let missing = Path::new("/nonexistent-bsx-root");
+        let missing = Path::new("/nonexistent-tormoni-root");
         let err = require_dir(Subject::Root, missing).expect_err("a missing root cannot boot");
         assert!(
             matches!(&err, HelperError::NotADirectory { what, path }
@@ -997,7 +997,7 @@ mod tests {
         // the match above: they are what tells a reader which argument was wrong.
         assert!(
             err.to_string()
-                .starts_with("the root /nonexistent-bsx-root"),
+                .starts_with("the root /nonexistent-tormoni-root"),
             "the message names which argument: {err}"
         );
         // A file is not a directory either, and is the likelier mistake of the two.
@@ -1033,7 +1033,8 @@ mod tests {
                 "every invented tag must be inside the reserved namespace"
             );
         }
-        let (tag, _) = split_share("bsx-mnt-0=/tmp").expect("it parses; the refusal is separate");
+        let (tag, _) =
+            split_share("tormoni-mnt-0=/tmp").expect("it parses; the refusal is separate");
         assert!(tag.starts_with(RESERVED_TAG_PREFIX));
         assert!(
             !split_share("data=/tmp")
@@ -1101,7 +1102,9 @@ mod tests {
             !script.contains('"'),
             "no double quote, or the codec corrupts it: {script}"
         );
-        assert!(script.contains("mkdir -p '/project' && mount -t virtiofs bsx-mnt-0 '/project'"));
+        assert!(
+            script.contains("mkdir -p '/project' && mount -t virtiofs tormoni-mnt-0 '/project'")
+        );
         assert!(
             script.contains("'/it'\\''s here'"),
             "a quote in a guest path is escaped, not spliced: {script}"
@@ -1205,7 +1208,7 @@ mod tests {
         use clap::Parser;
 
         let argv = [
-            "bsx",
+            "tormoni",
             HELPER_SUBCOMMAND,
             "--root",
             "/srv/root",
@@ -1270,7 +1273,7 @@ mod tests {
         use clap::Parser;
 
         let parsed = Cli::parse_from([
-            "bsx",
+            "tormoni",
             HELPER_SUBCOMMAND,
             "--root",
             "/srv/root",

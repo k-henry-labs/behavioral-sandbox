@@ -1,12 +1,12 @@
 //! The `.app` the window runs as, so macOS names it what a person calls it.
 //!
 //! - **The menu bar reads a bundle, not a binary.** A bare executable is named in the menu bar by
-//!   its file name, which is why a `target/debug/bsx-app` window says `bsx-app`. `CFBundleName` is
+//!   its file name, which is why a `target/debug/tormoni-app` window says `tormoni-app`. `CFBundleName` is
 //!   what replaces it, and only a bundle has one.
-//! - **The pair travels together.** `bsx` is copied in beside `bsx-app`, because that is the
-//!   second place `bsx_path` looks and the only one a double-clicked app can rely on: Finder
+//! - **The pair travels together.** `tormoni` is copied in beside `tormoni-app`, because that is the
+//!   second place `tormoni_path` looks and the only one a double-clicked app can rely on: Finder
 //!   starts it with a login `PATH` that no `cargo` layout is on.
-//! - **The copy is signed, not the original.** `codesign` writes a new inode, so the `bsx` inside
+//! - **The copy is signed, not the original.** `codesign` writes a new inode, so the `tormoni` inside
 //!   the bundle is entitled after it is copied; entitling the one in `target/` would not travel.
 //! - **Assembled, never edited in place.** The bundle is removed and rebuilt, so a stale binary
 //!   from an older build cannot survive inside it.
@@ -18,17 +18,17 @@ use anyhow::{Context, Result, bail};
 use crate::{artifacts_dir, sign, target_dir};
 
 /// What the menu bar, the Dock, Finder and the About window call it: the application's name.
-/// `bsx` is its short name, which stays on the binaries, where a person types it.
-const APP_NAME: &str = "Behavioral Sandbox";
+/// The binaries keep the lowercase form, where a person types it.
+const APP_NAME: &str = "Tormoni";
 
 /// The bundle's own directory name, which Finder shows as the application's.
-const BUNDLE: &str = "Behavioral Sandbox.app";
+const BUNDLE: &str = "Tormoni.app";
 
 /// The binary the bundle runs, and the one copied in beside it.
-const EXECUTABLE: &str = "bsx-app";
-const CLI: &str = "bsx";
+const EXECUTABLE: &str = "tormoni-app";
+const CLI: &str = "tormoni";
 
-/// Assembles `artifacts/Behavioral Sandbox.app` from the built binaries, or explains why there is
+/// Assembles `artifacts/Tormoni.app` from the built binaries, or explains why there is
 /// nothing to do.
 pub(crate) fn bundle_app(release: bool) -> Result<()> {
     if !cfg!(target_os = "macos") {
@@ -86,7 +86,7 @@ fn info_plist(version: &str) -> String {
     <key>CFBundleDisplayName</key>
     <string>{APP_NAME}</string>
     <key>CFBundleIdentifier</key>
-    <string>dev.bsx.app</string>
+    <string>dev.tormoni.app</string>
     <key>CFBundleExecutable</key>
     <string>{EXECUTABLE}</string>
     <key>CFBundlePackageType</key>
@@ -150,16 +150,16 @@ mod tests {
     }
 
     /// The layout is Apple's: the executable sits under `Contents/MacOS`, which is where
-    /// `CFBundleExecutable` is resolved from and where `bsx` lands beside it.
+    /// `CFBundleExecutable` is resolved from and where `tormoni` lands beside it.
     #[test]
     fn the_executable_sits_where_macos_looks_for_it() {
-        let app = Path::new("/tmp/Behavioral Sandbox.app");
+        let app = Path::new("/tmp/Tormoni.app");
         assert_eq!(
             executable_in(app),
-            Path::new("/tmp/Behavioral Sandbox.app/Contents/MacOS/bsx-app")
+            Path::new("/tmp/Tormoni.app/Contents/MacOS/tormoni-app")
         );
         assert!(
-            bundle_path().ends_with("artifacts/Behavioral Sandbox.app"),
+            bundle_path().ends_with("artifacts/Tormoni.app"),
             "{:?}",
             bundle_path()
         );

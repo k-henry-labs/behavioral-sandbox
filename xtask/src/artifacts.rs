@@ -18,7 +18,7 @@ pub(crate) struct Artifact {
     pub(crate) dest: PathBuf,
 }
 
-/// Obtains one artifact into place, from the `BSX_VENDOR_DIR` mirror when set and its pinned URL
+/// Obtains one artifact into place, from the `TORMONI_VENDOR_DIR` mirror when set and its pinned URL
 /// otherwise. The sha256 is the contract either way, and every build path comes through here.
 pub(crate) fn fetch_one(a: &Artifact) -> Result<()> {
     match vendor_dir() {
@@ -48,7 +48,7 @@ fn restore_from_vendor(a: &Artifact, vendor: &Path) -> Result<()> {
     if !src.is_file() {
         bail!(
             "vendored input {name} not found in {} — run `cargo xtask vendor` to populate the \
-             mirror (or unset BSX_VENDOR_DIR to fetch from upstream)",
+             mirror (or unset TORMONI_VENDOR_DIR to fetch from upstream)",
             vendor.display()
         );
     }

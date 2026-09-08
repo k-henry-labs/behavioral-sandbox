@@ -1,4 +1,4 @@
-//! `bsx shell`: an interactive shell (or any command) on a pseudo-terminal inside a fresh sandbox.
+//! `tormoni shell`: an interactive shell (or any command) on a pseudo-terminal inside a fresh sandbox.
 //!
 //! The console cannot do this: libkrun wires the workload's stdio through pipes, so a guest
 //! command never sees a tty there no matter what the host side is (measured, `scratch/ROADMAP.md`
@@ -21,21 +21,21 @@ use std::process::ExitCode;
 
 use clap::Args;
 
-use bsx_channel::{GUEST_AGENT_PATH, GUEST_DEFAULT_PATH, VSOCK_PORT};
-use bsx_supervisor::{Console, Vm, VmConfig};
+use tormoni_channel::{GUEST_AGENT_PATH, GUEST_DEFAULT_PATH, VSOCK_PORT};
+use tormoni_supervisor::{Console, Vm, VmConfig};
 
 use crate::EXIT_OPERATIONAL;
 
 /// Open an interactive shell in a fresh sandbox.
 #[derive(Args, Debug)]
 pub(crate) struct ShellArgs {
-    /// The guest root directory. Falls back like `bsx run`'s.
+    /// The guest root directory. Falls back like `tormoni run`'s.
     #[arg(long, value_name = "DIR")]
     pub(crate) root: Option<PathBuf>,
-    /// vCPUs for this sandbox. Falls back to `$BSX_VCPUS`, then 1.
+    /// vCPUs for this sandbox. Falls back to `$TORMONI_VCPUS`, then 1.
     #[arg(long, value_name = "N")]
     pub(crate) vcpus: Option<std::num::NonZeroU8>,
-    /// Guest RAM in MiB. Falls back to `$BSX_MEM_MIB`, then 512.
+    /// Guest RAM in MiB. Falls back to `$TORMONI_MEM_MIB`, then 512.
     #[arg(long, value_name = "MIB")]
     pub(crate) mem: Option<std::num::NonZeroU32>,
     /// A host directory made read-write at a guest path, as `GUESTDIR=HOSTDIR`: the project
@@ -65,7 +65,7 @@ pub(crate) struct ShellArgs {
     /// runs; `WIDTHxHEIGHT@HZ` also tells the guest its refresh rate. Closing the window stops
     /// the sandbox.
     #[arg(long, value_name = "WIDTHxHEIGHT[@HZ]", value_parser = crate::run::parse_display)]
-    pub(crate) display: Option<bsx_supervisor::Display>,
+    pub(crate) display: Option<tormoni_supervisor::Display>,
     /// Keep PATH holding the display's latest frame as a binary PPM. Needs `--display`.
     #[arg(long, value_name = "PATH")]
     pub(crate) screenshot: Option<PathBuf>,
@@ -95,7 +95,7 @@ pub(crate) fn run(args: &ShellArgs) -> ExitCode {
     match session(args) {
         Ok(code) => ExitCode::from(code),
         Err(msg) => {
-            eprintln!("bsx shell: {msg}");
+            eprintln!("tormoni shell: {msg}");
             ExitCode::from(EXIT_OPERATIONAL)
         }
     }
@@ -119,7 +119,7 @@ fn session(args: &ShellArgs) -> Result<u8, String> {
     // `warn`, because the agent's stderr is the guest console. A `PATH` because libkrun exports
     // none, so a bare program name resolves nowhere in the guest.
     cfg.env = vec![
-        "BSX_LOG=warn".into(),
+        "TORMONI_LOG=warn".into(),
         format!("PATH={GUEST_DEFAULT_PATH}").into(),
     ];
     cfg.vsock = Some((VSOCK_PORT, channel_sock.clone()));
@@ -134,10 +134,10 @@ fn session(args: &ShellArgs) -> Result<u8, String> {
         args.screenshot.as_deref(),
         args.frame_log.as_deref(),
     )?;
-    if let Some(v) = crate::run::resolve_limit(args.vcpus, "BSX_VCPUS")? {
+    if let Some(v) = crate::run::resolve_limit(args.vcpus, "TORMONI_VCPUS")? {
         cfg.vcpus = v;
     }
-    if let Some(m) = crate::run::resolve_limit(args.mem, "BSX_MEM_MIB")? {
+    if let Some(m) = crate::run::resolve_limit(args.mem, "TORMONI_MEM_MIB")? {
         cfg.mem_mib = m;
     }
     for spec in &args.shares {
@@ -170,17 +170,19 @@ fn session(args: &ShellArgs) -> Result<u8, String> {
     if command.is_empty() {
         command = vec!["/bin/sh".to_string()];
     }
-    let store = bsx_record::Store::open().map_err(|e| e.to_string())?;
-    let mut record = bsx_record::Record::begin(
+    let store = tormoni_record::Store::open().map_err(|e| e.to_string())?;
+    let mut record = tormoni_record::Record::begin(
         &name,
-        bsx_record::Verb::Shell,
+        tormoni_record::Verb::Shell,
         command.clone(),
         crate::run::posture_of(&cfg, results),
     );
     let run = store.create(&record).map_err(|e| e.to_string())?;
     if results {
-        cfg.mounts
-            .push((PathBuf::from(bsx_record::RESULTS_GUEST_PATH), run.results()));
+        cfg.mounts.push((
+            PathBuf::from(tormoni_record::RESULTS_GUEST_PATH),
+            run.results(),
+        ));
     }
     let mut log = run.append(&run.shell_log()).map_err(|e| e.to_string())?;
     let outcome = attach(
@@ -194,8 +196,8 @@ fn session(args: &ShellArgs) -> Result<u8, String> {
         &store,
     );
     record.finish(match &outcome {
-        Ok(code) => bsx_record::End::Exit(i32::from(*code)),
-        Err(_) => bsx_record::End::Failed,
+        Ok(code) => tormoni_record::End::Exit(i32::from(*code)),
+        Err(_) => tormoni_record::End::Failed,
     });
     store.save(&record).map_err(|e| e.to_string())?;
     outcome
@@ -210,9 +212,9 @@ fn attach(
     channel_sock: &Path,
     name: String,
     command: Vec<String>,
-    log: &mut bsx_record::Capped,
-    record: &mut bsx_record::Record,
-    store: &bsx_record::Store,
+    log: &mut tormoni_record::Capped,
+    record: &mut tormoni_record::Record,
+    store: &tormoni_record::Store,
 ) -> Result<u8, String> {
     let mut vm = Vm::spawn(name, cfg).map_err(|e| e.to_string())?;
     record.pid = Some(vm.pid());
@@ -243,7 +245,7 @@ struct SessionDir {
 impl SessionDir {
     fn create() -> Result<Self, String> {
         use std::os::unix::fs::DirBuilderExt;
-        let path = std::env::temp_dir().join(format!("bsx-shell-{}", std::process::id()));
+        let path = std::env::temp_dir().join(format!("tormoni-shell-{}", std::process::id()));
         let mut b = std::fs::DirBuilder::new();
         b.recursive(true);
         b.mode(0o700);
@@ -270,13 +272,13 @@ mod tests {
     /// No command means `/bin/sh`, and a command after `--` arrives verbatim, hyphens and all.
     #[test]
     fn the_shell_command_defaults_to_sh_and_passes_verbatim() {
-        let cli = Cli::parse_from(["bsx", "shell"]);
+        let cli = Cli::parse_from(["tormoni", "shell"]);
         let Cmd::Shell(args) = cli.cmd else {
             panic!("shell must parse");
         };
         assert!(args.command.is_empty(), "empty means the default shell");
 
-        let cli = Cli::parse_from(["bsx", "shell", "--", "top", "-d", "1"]);
+        let cli = Cli::parse_from(["tormoni", "shell", "--", "top", "-d", "1"]);
         let Cmd::Shell(args) = cli.cmd else {
             panic!("shell must parse");
         };

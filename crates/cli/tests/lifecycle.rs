@@ -1,5 +1,5 @@
 //! End-to-end tests for a sandbox that outlives the command that started it, and for the verbs
-//! that reach one: `bsx up`, `ls`, `exec`, `stop`.
+//! that reach one: `tormoni up`, `ls`, `exec`, `stop`.
 //!
 //! Every one of these is a **separate process** from the one that started the VM, which is the
 //! property under test: there is no daemon and no handle, only a socket in the runtime directory.
@@ -20,11 +20,11 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::time::Duration;
 
-use bsx_test_support::ScratchDir;
+use tormoni_test_support::ScratchDir;
 
 /// Why this host cannot run these, or `None` when it can.
 fn skip_reason() -> Option<String> {
-    if let Some(why) = bsx_test_support::hypervisor_unusable() {
+    if let Some(why) = tormoni_test_support::hypervisor_unusable() {
         return Some(why);
     }
     if !guest_root().is_dir() {
@@ -63,9 +63,9 @@ fn runtime(tag: &str) -> ScratchDir {
     dir
 }
 
-/// The `bsx` cargo built for this run, pointed at `rt` rather than the operator's own VMs.
-fn bsx(rt: &ScratchDir) -> Command {
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_bsx"));
+/// The `tormoni` cargo built for this run, pointed at `rt` rather than the operator's own VMs.
+fn tormoni(rt: &ScratchDir) -> Command {
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_tormoni"));
     cmd.env("XDG_RUNTIME_DIR", rt.path());
     cmd
 }
@@ -79,7 +79,7 @@ struct Started<'a> {
 
 impl Started<'_> {
     fn pid(&self) -> Option<u32> {
-        let out = bsx(self.rt).arg("ls").output().expect("run bsx ls");
+        let out = tormoni(self.rt).arg("ls").output().expect("run tormoni ls");
         String::from_utf8_lossy(&out.stdout)
             .lines()
             .find(|l| l.starts_with(&self.name))
@@ -89,22 +89,22 @@ impl Started<'_> {
 
 impl Drop for Started<'_> {
     fn drop(&mut self) {
-        let _ = bsx(self.rt).args(["stop", &self.name]).output();
+        let _ = tormoni(self.rt).args(["stop", &self.name]).output();
     }
 }
 
 /// Boots a long-lived sandbox and returns the guard that will stop it.
 fn up<'a>(rt: &'a ScratchDir, name: &str) -> Started<'a> {
-    let out = bsx(rt)
+    let out = tormoni(rt)
         .arg("up")
         .arg("--root")
         .arg(guest_root())
         .args(["--name", name])
         .output()
-        .expect("run bsx up");
+        .expect("run tormoni up");
     assert!(
         out.status.success(),
-        "bsx up failed: {}",
+        "tormoni up failed: {}",
         String::from_utf8_lossy(&out.stderr)
     );
     assert_eq!(
@@ -149,7 +149,7 @@ fn pid_is_live(pid: u32) -> bool {
     })
 }
 
-/// The 3.9 contract: `bsx up` returns and the VM is still there. Every `bsx run` pays a cold boot
+/// The 3.9 contract: `tormoni up` returns and the VM is still there. Every `tormoni run` pays a cold boot
 /// because libkrun has no snapshot surface, and this is the only way to stop paying it per
 /// command: the process that started the VM is gone and the VM is not.
 #[test]
@@ -168,7 +168,7 @@ fn a_sandbox_started_by_up_outlives_the_command_that_started_it() {
     );
     // Its stderr is the log beside its sockets, not the caller's: an inherited one is a pipe a
     // detached VM holds open forever.
-    let log = rt.path().join("bsx/outlives.log");
+    let log = rt.path().join("tormoni/outlives.log");
     assert_eq!(
         std::fs::read_link(format!("/proc/{pid}/fd/2")).expect("the VM's stderr"),
         log,
@@ -183,15 +183,21 @@ fn a_sandbox_started_by_up_outlives_the_command_that_started_it() {
     // itself there, so a healthy boot proves the plumbing.
     let announced = std::fs::read_to_string(&log).expect("the log is readable");
     assert!(
-        announced.contains(bsx_channel::GUEST_READY_MARKER),
+        announced.contains(tormoni_channel::GUEST_READY_MARKER),
         "the guest console did not reach the log: {announced:?}"
     );
 
     // The channel runs commands in the sandbox, so it carries the lock its control socket does.
     // libkrun binds it under the caller's umask, which left it world-connectable (measured).
     for (sock, what) in [
-        (rt.path().join("bsx/outlives.agent"), "the agent channel"),
-        (rt.path().join("bsx/outlives.sock"), "the control socket"),
+        (
+            rt.path().join("tormoni/outlives.agent"),
+            "the agent channel",
+        ),
+        (
+            rt.path().join("tormoni/outlives.sock"),
+            "the control socket",
+        ),
     ] {
         let mode = std::fs::metadata(&sock)
             .expect("the socket exists")
@@ -203,15 +209,15 @@ fn a_sandbox_started_by_up_outlives_the_command_that_started_it() {
 
     // The `up` process is gone: `output()` waited for it. So the VM has no parent holding it, and
     // it is still answering.
-    let out = bsx(&rt)
+    let out = tormoni(&rt)
         .args(["exec", "outlives", "--", "echo", "still-here"])
         .output()
-        .expect("run bsx exec");
+        .expect("run tormoni exec");
     assert_eq!(stdout_of(&out), "still-here");
 }
 
 /// The 3.8 contract: `ls`, `exec` and `stop` all reach a VM this process did not start. Each
-/// `bsx` here is its own process, holding no handle to the VM, which is what the control socket
+/// `tormoni` here is its own process, holding no handle to the VM, which is what the control socket
 /// in the runtime directory exists for.
 #[test]
 #[ignore = "boots a real guest: needs /dev/kvm and the guest tree (with the agent baked in)"]
@@ -225,7 +231,7 @@ fn the_lifecycle_verbs_reach_a_vm_this_process_did_not_start() {
 
     // `ls` names it and reports the posture the VM itself answers with, not one the lister
     // guessed: the row comes from the VM's own process.
-    let listed = stdout_of(&bsx(&rt).arg("ls").output().expect("run bsx ls"));
+    let listed = stdout_of(&tormoni(&rt).arg("ls").output().expect("run tormoni ls"));
     let row = listed
         .lines()
         .find(|l| l.starts_with("verbs"))
@@ -235,48 +241,48 @@ fn the_lifecycle_verbs_reach_a_vm_this_process_did_not_start() {
     }
 
     // `exec` runs in it and hands back the guest's own exit code.
-    let out = bsx(&rt)
+    let out = tormoni(&rt)
         .args(["exec", "verbs", "--", "sh", "-c", "echo out; exit 9"])
         .output()
-        .expect("run bsx exec");
+        .expect("run tormoni exec");
     assert_eq!(stdout_of(&out), "out");
     assert_eq!(out.status.code(), Some(9), "the guest's code is the verb's");
 
     // Sessions compose: the agent serves every connection from one working directory, so a second
     // exec sees what the first left. This is what makes a long-lived VM worth having.
-    let out = bsx(&rt)
+    let out = tormoni(&rt)
         .args(["exec", "verbs", "--", "sh", "-c", "echo kept > state"])
         .output()
-        .expect("run bsx exec");
+        .expect("run tormoni exec");
     assert!(
         out.status.success(),
         "writing the session state failed: {}",
         String::from_utf8_lossy(&out.stderr)
     );
-    let out = bsx(&rt)
+    let out = tormoni(&rt)
         .args(["exec", "verbs", "--", "cat", "state"])
         .output()
-        .expect("run bsx exec");
+        .expect("run tormoni exec");
     assert_eq!(stdout_of(&out), "kept");
 
     // `stop` ends it, and the VM is gone rather than merely unlisted.
-    let out = bsx(&rt)
+    let out = tormoni(&rt)
         .args(["stop", "verbs"])
         .output()
-        .expect("run bsx stop");
+        .expect("run tormoni stop");
     assert!(
         out.status.success(),
-        "bsx stop failed: {}",
+        "tormoni stop failed: {}",
         String::from_utf8_lossy(&out.stderr)
     );
     assert!(!pid_is_live(pid), "the stopped VM's process is still there");
-    let listed = stdout_of(&bsx(&rt).arg("ls").output().expect("run bsx ls"));
+    let listed = stdout_of(&tormoni(&rt).arg("ls").output().expect("run tormoni ls"));
     assert!(!listed.contains("verbs"), "a stopped VM is still listed");
     // Its sockets went with it: a channel left behind is one `exec` would connect to and wait on
     // forever.
     for leftover in ["verbs.sock", "verbs.agent"] {
         assert!(
-            !rt.path().join("bsx").join(leftover).exists(),
+            !rt.path().join("tormoni").join(leftover).exists(),
             "{leftover} outlived the VM"
         );
     }
@@ -299,19 +305,19 @@ fn stdin_reaches_the_guest_command_even_when_it_cannot_be_read_at_once() {
         if nonblocking {
             rustix::io::ioctl_fionbio(&read, true).expect("make the read end non-blocking");
         }
-        let child = bsx(&rt)
+        let child = tormoni(&rt)
             .args(["exec", "instdin", "-i", "--", "cat"])
             .stdin(std::process::Stdio::from(read))
             .stdout(std::process::Stdio::piped())
             .spawn()
-            .expect("run bsx exec");
+            .expect("run tormoni exec");
         // Written after the spawn, so a non-blocking reader meets an empty pipe first and has to
         // wait: reading once and giving up would come back with nothing.
         std::thread::sleep(std::time::Duration::from_millis(200));
         rustix::io::write(&write, b"through-the-pipe\n").expect("write the payload");
         drop(write);
-        let out = child.wait_with_output().expect("wait for bsx exec");
-        assert!(out.status.success(), "bsx exec failed on stdin");
+        let out = child.wait_with_output().expect("wait for tormoni exec");
+        assert!(out.status.success(), "tormoni exec failed on stdin");
         String::from_utf8_lossy(&out.stdout).trim().to_string()
     };
 
@@ -325,25 +331,25 @@ fn stdin_reaches_the_guest_command_even_when_it_cannot_be_read_at_once() {
     // An stdin nobody closes must not be read, so the write end stays open here. Waited with a
     // deadline rather than `output()`, because the failure being pinned is a hang.
     let (read, _write) = cloexec_pipe();
-    let mut child = bsx(&rt)
+    let mut child = tormoni(&rt)
         .args(["exec", "instdin", "--", "echo", "unblocked"])
         .stdin(std::process::Stdio::from(read))
         .stdout(std::process::Stdio::piped())
         .spawn()
-        .expect("run bsx exec");
+        .expect("run tormoni exec");
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
     let status = loop {
-        if let Some(status) = child.try_wait().expect("poll bsx exec") {
+        if let Some(status) = child.try_wait().expect("poll tormoni exec") {
             break status;
         }
         if std::time::Instant::now() >= deadline {
             let _ = child.kill();
             let _ = child.wait();
-            panic!("bsx exec read an stdin nobody ever closes, and never returned");
+            panic!("tormoni exec read an stdin nobody ever closes, and never returned");
         }
         std::thread::sleep(std::time::Duration::from_millis(25));
     };
-    assert!(status.success(), "bsx exec failed: {status}");
+    assert!(status.success(), "tormoni exec failed: {status}");
     // Read after it exited, so the pipe is at EOF and this cannot block either.
     let mut said = String::new();
     child
@@ -364,7 +370,7 @@ fn exec_names_a_vm_with_no_agent_channel_rather_than_dialling_nothing() {
         return;
     }
     let rt = runtime("lifecycle-nochannel");
-    let mut plain = bsx(&rt)
+    let mut plain = tormoni(&rt)
         .arg("run")
         .arg("--root")
         .arg(guest_root())
@@ -372,10 +378,10 @@ fn exec_names_a_vm_with_no_agent_channel_rather_than_dialling_nothing() {
         // test kills it either way, so the number is headroom and not a wait anyone pays.
         .args(["--name", "plain", "--", "sleep", "120"])
         .spawn()
-        .expect("run bsx run");
+        .expect("run tormoni run");
     // The VM is up once it is listed; polling beats a fixed sleep under a loaded gate.
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
-    while !stdout_of(&bsx(&rt).arg("ls").output().expect("run bsx ls")).contains("plain") {
+    while !stdout_of(&tormoni(&rt).arg("ls").output().expect("run tormoni ls")).contains("plain") {
         assert!(
             std::time::Instant::now() < deadline,
             "the VM never appeared"
@@ -383,14 +389,14 @@ fn exec_names_a_vm_with_no_agent_channel_rather_than_dialling_nothing() {
         std::thread::sleep(std::time::Duration::from_millis(25));
     }
 
-    let out = bsx(&rt)
+    let out = tormoni(&rt)
         .args(["exec", "plain", "--", "true"])
         .output()
-        .expect("run bsx exec");
+        .expect("run tormoni exec");
     assert_eq!(out.status.code(), Some(2));
     let err = String::from_utf8_lossy(&out.stderr);
     assert!(err.contains("no agent channel"), "{err}");
-    assert!(err.contains("bsx up"), "names what starts one: {err}");
+    assert!(err.contains("tormoni up"), "names what starts one: {err}");
     let _ = plain.kill();
     let _ = plain.wait();
 }
@@ -398,20 +404,20 @@ fn exec_names_a_vm_with_no_agent_channel_rather_than_dialling_nothing() {
 /// A name nothing is running under is a refusal naming the verb that would have listed it, not a
 /// connection error about a socket path the caller never typed.
 #[test]
-#[ignore = "spawns the built bsx (no VM boots: the refusal is the test)"]
+#[ignore = "spawns the built tormoni (no VM boots: the refusal is the test)"]
 fn the_verbs_refuse_a_name_nothing_is_running_under() {
     let rt = runtime("lifecycle-absent");
     for verb in ["exec", "stop"] {
-        let mut cmd = bsx(&rt);
+        let mut cmd = tormoni(&rt);
         cmd.args([verb, "no-such-vm"]);
         if verb == "exec" {
             cmd.args(["--", "true"]);
         }
-        let out = cmd.output().expect("run bsx");
+        let out = cmd.output().expect("run tormoni");
         assert_eq!(out.status.code(), Some(2), "{verb}");
         let err = String::from_utf8_lossy(&out.stderr);
         assert!(err.contains("no VM named"), "{verb}: {err}");
-        assert!(err.contains("bsx ls"), "{verb} names the lister: {err}");
+        assert!(err.contains("tormoni ls"), "{verb} names the lister: {err}");
     }
 }
 
@@ -426,17 +432,17 @@ fn a_name_already_running_is_refused_before_a_second_vm_boots() {
     let rt = runtime("lifecycle-name");
     let _vm = up(&rt, "taken");
 
-    let out = bsx(&rt)
+    let out = tormoni(&rt)
         .arg("up")
         .arg("--root")
         .arg(guest_root())
         .args(["--name", "taken"])
         .output()
-        .expect("run bsx up");
+        .expect("run tormoni up");
     assert_eq!(out.status.code(), Some(2));
     let err = String::from_utf8_lossy(&out.stderr);
     assert!(err.contains("already running"), "{err}");
-    let listed = stdout_of(&bsx(&rt).arg("ls").output().expect("run bsx ls"));
+    let listed = stdout_of(&tormoni(&rt).arg("ls").output().expect("run tormoni ls"));
     assert_eq!(
         listed.lines().filter(|l| l.starts_with("taken")).count(),
         1,
@@ -448,28 +454,28 @@ fn a_name_already_running_is_refused_before_a_second_vm_boots() {
 /// is `cat`, so anything near this is a path that stopped moving, not a slow guest.
 const ROUND_TRIP_GRACE: Duration = Duration::from_secs(30);
 
-/// One `bsx-channel` frame crosses the host unix socket into the guest and back (roadmap 0.7),
-/// spoken by the protocol crate rather than by `bsx exec`: the evidence is *what* crosses.
+/// One `tormoni-channel` frame crosses the host unix socket into the guest and back (roadmap 0.7),
+/// spoken by the protocol crate rather than by `tormoni exec`: the evidence is *what* crosses.
 ///
 /// The payload is stdin the guest hands back, so an empty or truncated frame cannot pass.
 #[test]
 #[ignore = "boots a real guest: needs /dev/kvm and the guest tree (with the agent baked in)"]
 fn a_channel_frame_crosses_the_vsock_mapping_to_the_guest_and_back() {
-    use bsx_channel::{ClientConnection, Response};
+    use tormoni_channel::{ClientConnection, Response};
 
     if skipped("a_channel_frame_crosses_the_vsock_mapping_to_the_guest_and_back") {
         return;
     }
     let rt = runtime("channel-round-trip");
     let _vm = up(&rt, "framed");
-    let socket = rt.path().join("bsx").join("framed.agent");
+    let socket = rt.path().join("tormoni").join("framed.agent");
     assert!(
         socket.exists(),
         "the VM's agent channel is the host end of the vsock mapping"
     );
 
     // The whole exchange by hand: connect, handshake, one `Exec` frame out, frames back until the
-    // terminal one. No `bsx exec`, no CLI agent module.
+    // terminal one. No `tormoni exec`, no CLI agent module.
     let sent = b"ping-1024".to_vec();
     let mut client = {
         let stream = UnixStream::connect(&socket).expect("dial the guest agent");
@@ -529,10 +535,10 @@ fn a_channel_frame_crosses_the_vsock_mapping_to_the_guest_and_back() {
         Response::Exit { .. }
     ) {}
 
-    let out = bsx(&rt)
+    let out = tormoni(&rt)
         .args(["exec", "framed", "--", "cat", "from-two"])
         .output()
-        .expect("run bsx exec");
+        .expect("run tormoni exec");
     assert_eq!(
         stdout_of(&out),
         "second",

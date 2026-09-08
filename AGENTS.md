@@ -1,4 +1,4 @@
-# BSX: engineering disciplines
+# Tormoni: engineering disciplines
 
 **A local-first desktop sandbox.** Untrusted code runs in a virtual machine through **libkrun**, a
 library that makes the calling process the virtual machine monitor. Hardware virtualization gives
@@ -36,26 +36,26 @@ A checkbox there means done **and** evidenced, never merely attempted.
 **The tree boots sandboxes, and there is no release.** The Firecracker engine was deleted rather
 than carried alongside its replacement; the libkrun supervisor (phase 2) and the headless verbs
 (phase 3) are in. On a host whose hypervisor answers (`/dev/kvm` on Linux, Hypervisor.framework
-on macOS ARM64) and a guest image the tree builds, `bsx run` runs one command in a sandbox,
-`bsx shell` opens a session on a guest pty, `bsx up` starts a sandbox that outlives the command,
-and `bsx ls`, `bsx exec` and `bsx stop` reach one this process did not start.
+on macOS ARM64) and a guest image the tree builds, `tormoni run` runs one command in a sandbox,
+`tormoni shell` opens a session on a guest pty, `tormoni up` starts a sandbox that outlives the command,
+and `tormoni ls`, `tormoni exec` and `tormoni stop` reach one this process did not start.
 `--display` gives a guest a virtio-gpu display shown in a window, and the window's keyboard and
 pointer reach the guest as two virtio-input devices (4.2, 4.3), the desktop image boots to a
 terminal in a Wayland session under it (4.5), and `--sound` gives the guest a virtio-snd card
 backed by the host audio server (4.7). A second process leases a display over the control socket
-as a sealed memfd and a record per present (4.9), and `bsx-app` shows one in an iced window through
+as a sealed memfd and a record per present (4.9), and `tormoni-app` shows one in an iced window through
 a wgpu texture upload (4.10), and its keyboard and pointer reach the guest as lines down an `input`
 session on that socket (4.11). Every run leaves a record under the local data dir (posture, captured
-output, the guest's `/results`), which `bsx ls --all`, `show`, `rm` and `export` (one ustar file
-per run) read (4.12), and `bsx-app` is the notebook of those runs: a sidebar over the
+output, the guest's `/results`), which `tormoni ls --all`, `show`, `rm` and `export` (one ustar file
+per run) read (4.12), and `tormoni-app` is the notebook of those runs: a sidebar over the
 list, one run's record with its display and output, a start form whose posture sentence is
 confirmed before anything boots, stop, re-run, delete, export, clearing the ended runs behind an
 inline confirm, a Settings screen whose palette, scale and landing screen persist beside the runs
-directory, and a shell through `bsx exec --tty` in the operator's terminal (4.13). Frame pacing
+directory, and a shell through `tormoni exec --tty` in the operator's terminal (4.13). Frame pacing
 through the app on this panel is measured (4.14). On macOS ARM64 (phase 6) the tree builds, signs
 (`cargo xtask sign`) and boots the same sandboxes under Hypervisor.framework; this platform's
 libkrun builds neither the `--sound` nor the guest input backend, the display helper's own window
-is compiled out (its event loop needs the main thread), so a display there is viewed in `bsx-app`,
+is compiled out (its event loop needs the main thread), so a display there is viewed in `tormoni-app`,
 and the guest image build stays on Linux. `--gpu` (phase 5) offers a guest the 3D path (virgl +
 Venus) behind `krun_has_feature`; acceleration is unproven on every measured host, and the ML
 guest image is a scaffold no host has built.
@@ -94,29 +94,29 @@ shows as a design error, not as a trade-off.
 
 ## Repo layout
 
-The project is one workspace. **Directories stay short, and packages carry the `bsx-` prefix.** Thus
+The project is one workspace. **Directories stay short, and packages carry the `tormoni-` prefix.** Thus
 a package name is its directory plus that prefix. There is **exactly one exception**: `crates/cli`
-builds `bsx`, because the bare name is the word that a user types. This one exception is the reason
-that `-p` takes the **package** (`-p bsx-channel`) and that paths take the **directory**
+builds `tormoni`, because the bare name is the word that a user types. This one exception is the reason
+that `-p` takes the **package** (`-p tormoni-channel`) and that paths take the **directory**
 (`crates/channel`). `cargo xtask ci` checks every `-p` in every tracked text file against the real
 list of packages. Therefore a stale `-p` fails the gate, not the terminal of a reader.
 
 | Path | Package | What it is |
 |---|---|---|
-| `crates/supervisor` | `bsx-supervisor` | Spawn, track, stop and reap the helper processes that **are** VMs. One `Vm` per live helper, `Drop` tears it down. Writes the helper argv that `crates/cli` parses. |
-| `crates/krun` | `bsx-krun` | The safe wrapper over libkrun: a builder that puts the library's call-ordering rules in types, and its negative-errno returns into a typed error. The raw declarations sit under it in a **private** module, so this API is the only way to reach libkrun. **The one crate that may use `unsafe`**, because the library is C. |
-| `crates/channel` | `bsx-channel` | Host↔guest framing. It has almost no dependencies. `zeroize` (for the secret wipe) is the one dependency. Both ends share it without change, so a wire change reaches both in one commit. |
-| `crates/guest-agent` | `bsx-guest-agent` | In-guest exec and IO: it binds a socket, accepts a connection, and serves repeated execs from one session directory. It does no init work and is not the security boundary. Static musl, baked into the guest image. Its binary keeps the bare name `guest-agent`, because the image build bakes in that path. |
-| `crates/record` | `bsx-record` | The run record: one directory per run under the local data dir with the posture as settled, the captured output (capped), and `results/`, the directory the guest sees as `/results`. Written by the CLI at start and end, read by both binaries; `export` writes one as a ustar file. |
-| `crates/input` | `bsx-input` | The guest's keyboard and pointer: the two device shapes, the reports a window's events become, and the `kbd\|ptr TYPE CODE VALUE` line grammar every feeder speaks (the replay file, the `input` request). Both binaries translate through it. |
-| `crates/cli` | `bsx` | The `bsx` binary and its verbs. The package, the binary, and the command are all `bsx`. Its library half is the internals of the CLI, not a public API. |
-| `crates/app` | `bsx-app` | The GUI application, on iced: the notebook of runs (live and past, from `bsx-record`), one run's record with its display (leased over the control socket, uploaded to a wgpu texture by its damage rectangle) and its captured output, a start form, stop, re-run, delete, and a shell in the operator's terminal. Starting, stopping and the shell go through the `bsx` binary beside it. Its `chrome` module is the second crate that may use `unsafe`, for the one AppKit call that gives the window a toolbar. |
-| `crates/test-support` | `bsx-test-support` | Test fixtures: a self-reclaiming scratch dir, a log sink, and the deterministic generator the in-gate fuzz suites use. |
+| `crates/supervisor` | `tormoni-supervisor` | Spawn, track, stop and reap the helper processes that **are** VMs. One `Vm` per live helper, `Drop` tears it down. Writes the helper argv that `crates/cli` parses. |
+| `crates/krun` | `tormoni-krun` | The safe wrapper over libkrun: a builder that puts the library's call-ordering rules in types, and its negative-errno returns into a typed error. The raw declarations sit under it in a **private** module, so this API is the only way to reach libkrun. **The one crate that may use `unsafe`**, because the library is C. |
+| `crates/channel` | `tormoni-channel` | Host↔guest framing. It has almost no dependencies. `zeroize` (for the secret wipe) is the one dependency. Both ends share it without change, so a wire change reaches both in one commit. |
+| `crates/guest-agent` | `tormoni-guest-agent` | In-guest exec and IO: it binds a socket, accepts a connection, and serves repeated execs from one session directory. It does no init work and is not the security boundary. Static musl, baked into the guest image. Its binary keeps the bare name `guest-agent`, because the image build bakes in that path. |
+| `crates/record` | `tormoni-record` | The run record: one directory per run under the local data dir with the posture as settled, the captured output (capped), and `results/`, the directory the guest sees as `/results`. Written by the CLI at start and end, read by both binaries; `export` writes one as a ustar file. |
+| `crates/input` | `tormoni-input` | The guest's keyboard and pointer: the two device shapes, the reports a window's events become, and the `kbd\|ptr TYPE CODE VALUE` line grammar every feeder speaks (the replay file, the `input` request). Both binaries translate through it. |
+| `crates/cli` | `tormoni` | The `tormoni` binary and its verbs. The package, the binary, and the command are all `tormoni`. Its library half is the internals of the CLI, not a public API. |
+| `crates/app` | `tormoni-app` | The GUI application, on iced: the notebook of runs (live and past, from `tormoni-record`), one run's record with its display (leased over the control socket, uploaded to a wgpu texture by its damage rectangle) and its captured output, a start form, stop, re-run, delete, and a shell in the operator's terminal. Starting, stopping and the shell go through the `tormoni` binary beside it. Its `chrome` module is the second crate that may use `unsafe`, for the one AppKit call that gives the window a toolbar. |
+| `crates/test-support` | `tormoni-test-support` | Test fixtures: a self-reclaiming scratch dir, a log sink, and the deterministic generator the in-gate fuzz suites use. |
 | `xtask` | `xtask` | Dev orchestration: the gate, artifact builds, benchmarks, and packaging. It is never shipped and never renamed (`cargo xtask` is a `--package xtask` alias). |
 | `docs/` | | mdBook. `SUMMARY.md` is the index. The names are flat `topic-subtopic.md`. The hierarchy is in `SUMMARY.md`, not in directories. |
 
-**Two binaries will ship**, from one workspace: `bsx` (the CLI, which also carries the hidden
-helper subcommand that becomes a VM) and the GUI application, `bsx-app`, the notebook. Neither is a
+**Two binaries will ship**, from one workspace: `tormoni` (the CLI, which also carries the hidden
+helper subcommand that becomes a VM) and the GUI application, `tormoni-app`, the notebook. Neither is a
 daemon. A VM registers a socket
 under the runtime directory, and both binaries find live VMs by reading it, so a VM started by one
 is visible to the other. `scratch/ROADMAP.md` holds the reasoning.
@@ -140,7 +140,7 @@ cargo install cargo-deny                      # run by the gate
 group. No part of the build or the run needs root.
 
 **A guest tree comes from one of two commands.** `cargo xtask init` writes the pinned minirootfs
-and the static agent to `bsx`'s own default root and runs anywhere, because neither step needs
+and the static agent to `tormoni`'s own default root and runs anywhere, because neither step needs
 `apk`; it installs no runtimes, locks no closure, and makes no reproducibility claim. The image
 below is the built one.
 
@@ -157,20 +157,20 @@ so no Apple Developer identity), reads the granted **value** back off the binary
 that says so on other platforms.
 
 **A signature does not reliably outlive a later cargo command.** `codesign` writes a new inode,
-which breaks the hardlink cargo uplifts `target/debug/bsx` from, and cargo then sometimes re-links
+which breaks the hardlink cargo uplifts `target/debug/tormoni` from, and cargo then sometimes re-links
 the unsigned artifact out of `deps/` over it: observed both ways on this host for the same commands,
 with the binary's mtime going *backwards*, and the trigger not pinned down. So treat a signature as
 lost after any build. `cargo xtask sign` is idempotent and cheap, `cargo xtask ci` runs it last, and
-anything that needs a signed `bsx` should sign rather than assume.
+anything that needs a signed `tormoni` should sign rather than assume.
 
 ```console
 cargo xtask setup            # what this host can and cannot do
-cargo xtask init             # a guest tree where `bsx` looks for one: minirootfs + the agent
+cargo xtask init             # a guest tree where `tormoni` looks for one: minirootfs + the agent
 cargo xtask ci               # the gate (and signs what it built, on macOS)
-cargo xtask sign             # macOS only: re-entitle the built `bsx` after any other build
-cargo xtask bundle           # macOS only: assemble artifacts/Behavioral Sandbox.app from the built pair
+cargo xtask sign             # macOS only: re-entitle the built `tormoni` after any other build
+cargo xtask bundle           # macOS only: assemble artifacts/Tormoni.app from the built pair
 cargo xtask build-rootfs     # the guest image (Alpine + the GUEST_PACKAGES runtimes + static agent)
-cargo xtask build-rootfs --desktop   # the desktop image (+ cage, foot, seatd, udev, and bsx-session)
+cargo xtask build-rootfs --desktop   # the desktop image (+ cage, foot, seatd, udev, and tormoni-session)
 cargo xtask build-rootfs --arch aarch64   # an image for the other arch, from either Linux builder
 ```
 
@@ -214,9 +214,9 @@ cargo xtask build-rootfs --arch aarch64   # an image for the other arch, from ei
     and drifts like every copy.
 - **Write the code, then read it back as a stranger, then comment what you misread.** A diff whose
   comment lines approach a quarter of its code lines is explaining code instead of fixing it.
-- `tracing` logs to stderr. A run writes its structured result to stdout, so a `bsx … 2>/dev/null`
-  stays pipe-clean. Config is layered: flags, then env (`BSX_*`), then the nearest `.bsx.toml` above
-  the cwd, then `~/.bsx.toml`, then defaults. The project file carries the house defaults and the
+- `tracing` logs to stderr. A run writes its structured result to stdout, so a `tormoni … 2>/dev/null`
+  stays pipe-clean. Config is layered: flags, then env (`TORMONI_*`), then the nearest `.tormoni.toml` above
+  the cwd, then `~/.tormoni.toml`, then defaults. The project file carries the house defaults and the
   ceilings. The keys that name a host binary, a guest image, or a write root are read from the user
   file, because a file above the cwd can arrive with the code it configures.
 - **An em-dash is the exception, not the default.** Repo docs, code comments, and commit messages
@@ -236,8 +236,8 @@ cargo xtask build-rootfs --arch aarch64   # an image for the other arch, from ei
   imperative and describe **what you did** ("fix: bound session reads by a deadline"). A mixed change
   takes its most significant type (`fix` before `refactor` before `test`). **Public-API changes carry
   the `api` scope** (`feat(api):` or `fix(api)!:`), so you can audit a downstream pin bump from the
-  log alone. The surface is the wire framing of `bsx-channel` and the spawn and discovery API of
-  `bsx-supervisor`; `PINNED_SURFACE_CRATES` in `xtask/src/main.rs` is the list
+  log alone. The surface is the wire framing of `tormoni-channel` and the spawn and discovery API of
+  `tormoni-supervisor`; `PINNED_SURFACE_CRATES` in `xtask/src/main.rs` is the list
   `the_manual_names_the_whole_pinned_surface` holds this page to.
 - **Backwards compatibility follows the direction of the data.** Structs that the caller constructs
   (`Limits`, `BootConfig`) take a builder or `Default`, so a new knob is additive and you can still

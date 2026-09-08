@@ -1,22 +1,22 @@
 # Control socket and host/guest IPC
 
-Behavioral Sandbox (BSX) uses a two-tier IPC design for host management and host↔guest
+Tormoni uses a two-tier IPC design for host management and host↔guest
 communication: a host control socket for local process discovery and display leasing, and a
 virtio-vsock wire protocol for in-guest command execution.
 
 ## Host control socket
 
-There is no background daemon. A running sandbox is a helper process (`bsx __vmm`) listening on a
+There is no background daemon. A running sandbox is a helper process (`tormoni __vmm`) listening on a
 Unix domain socket under the user's runtime directory.
 
 ### Socket resolution and discovery
 
-Sockets live in `$XDG_RUNTIME_DIR/bsx/<name>.sock` (falling back to `$TMPDIR/bsx/<name>.sock` or
-`/tmp/bsx/<name>.sock`). The directory is created `0700` and its ownership and mode are checked at
+Sockets live in `$XDG_RUNTIME_DIR/tormoni/<name>.sock` (falling back to `$TMPDIR/tormoni/<name>.sock` or
+`/tmp/tormoni/<name>.sock`). The directory is created `0700` and its ownership and mode are checked at
 runtime, before a socket in it is trusted, because the fallbacks are shared temporary directories.
 
 The socket directory acts as the VM registry:
-- **Discovery**: `bsx ls` scans the socket directory for files ending in `.sock`.
+- **Discovery**: `tormoni ls` scans the socket directory for files ending in `.sock`.
 - **Liveness probe**: Rather than relying on file existence, `socket::is_live` attempts a
   non-blocking `UnixStream::connect`. A socket file whose process has died is cleaned up via
   `socket::clear_if_stale`.
@@ -32,9 +32,9 @@ The control socket speaks line-delimited JSON for management requests:
   helper's virtio-input devices using the `kbd|ptr TYPE CODE VALUE` line protocol.
 - `STOP`: Sends a termination request to the VMM helper process.
 
-## Host↔guest wire framing (`bsx-channel`)
+## Host↔guest wire framing (`tormoni-channel`)
 
-Command execution inside a guest goes through `bsx-channel`, a length-prefixed wire protocol
+Command execution inside a guest goes through `tormoni-channel`, a length-prefixed wire protocol
 operating over AF_VSOCK (port 1024) or a Unix socket fallback.
 
 ### Handshake and framing
@@ -73,7 +73,7 @@ The wire protocol defines discrete frame discriminants:
   ASCII control characters and Unicode bidirectional control code points (`Bidi_Control`), which are
   what a terminal would otherwise act on and what Trojan Source relies on.
 
-## In-guest agent (`bsx-guest-agent`)
+## In-guest agent (`tormoni-guest-agent`)
 
 The guest agent is a statically linked Rust binary (`guest-agent`, compiled against
 `x86_64-unknown-linux-musl` or `aarch64-unknown-linux-musl`) baked into the guest image at

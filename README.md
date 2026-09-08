@@ -1,5 +1,5 @@
 <div align="center">
-  <h1>Behavioral Sandbox</h1>
+  <h1>Tormoni</h1>
 
   <p>
     <strong>A local-first desktop sandbox for running untrusted code in a hardware-isolated
@@ -8,7 +8,7 @@
   </p>
 
   <p>
-    <a href="https://github.com/kendricklawton/behavioral-sandbox/actions/workflows/ci.yml"><img src="https://github.com/kendricklawton/behavioral-sandbox/actions/workflows/ci.yml/badge.svg" alt="build status" /></a>
+    <a href="https://github.com/kendricklawton/tormoni/actions/workflows/ci.yml"><img src="https://github.com/kendricklawton/tormoni/actions/workflows/ci.yml/badge.svg" alt="build status" /></a>
     <img src="https://img.shields.io/badge/status-pre--release-orange.svg" alt="pre-release" />
     <img src="https://img.shields.io/badge/rustc-1.98%2B-green.svg" alt="supported rustc 1.98+" />
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="Apache-2.0" /></a>
@@ -37,26 +37,26 @@ a VM **is** a process: every VM is a helper the supervisor spawned and reaps.
 On a host whose hypervisor answers (`/dev/kvm` on Linux, Hypervisor.framework on macOS ARM64) and a
 guest image the tree builds:
 
-* **Run something.** `bsx run` runs one command in a sandbox and exits with its status, `bsx shell`
-  opens a session on a pty inside the guest, and `bsx up` starts a sandbox that outlives the command
-  that started it. `bsx ls`, `bsx exec` and `bsx stop` reach a sandbox this process did not start.
+* **Run something.** `tormoni run` runs one command in a sandbox and exits with its status, `tormoni shell`
+  opens a session on a pty inside the guest, and `tormoni up` starts a sandbox that outlives the command
+  that started it. `tormoni ls`, `tormoni exec` and `tormoni stop` reach a sandbox this process did not start.
 * **See it.** `--display WIDTHxHEIGHT` shows a guest's screen in a window whose keyboard and pointer
   go to the guest, the desktop image boots to a terminal in a Wayland session there, and `--sound`
   adds a virtio-snd card.
 * **Keep it.** Every run leaves a record: the posture as settled, the captured output, and the
-  guest's `/results`. `bsx show`, `bsx rm` and `bsx export` read, remove and package them, one ustar
+  guest's `/results`. `tormoni show`, `tormoni rm` and `tormoni export` read, remove and package them, one ustar
   file per run.
-* **Drive it from a window.** `bsx-app` is the notebook: every run on the machine, live and past; a
+* **Drive it from a window.** `tormoni-app` is the notebook: every run on the machine, live and past; a
   live run's display with your keyboard and pointer going in; a form that shows a sandbox's posture
   before it boots. A sidebar reaches its screens, and its palette, interface scale and landing
   screen persist across launches.
 
-macOS ARM64 builds, signs (`cargo xtask sign`), bundles as `Behavioral Sandbox.app` (`cargo xtask bundle`) and
+macOS ARM64 builds, signs (`cargo xtask sign`), bundles as `Tormoni.app` (`cargo xtask bundle`) and
 boots the same sandboxes under Hypervisor.framework.
 
 **Status.** Pre-release: one maintainer, no external review, and no release to install. macOS's
 libkrun builds neither the `--sound` nor the guest input backend, and the display helper's own
-window is compiled out there, so a display on macOS is viewed in `bsx-app`. `--gpu` offers a guest
+window is compiled out there, so a display on macOS is viewed in `tormoni-app`. `--gpu` offers a guest
 the 3D path (virgl + Venus) where libkrun reports the feature, but no host measured so far carries a
 Venus-built renderer, so guest acceleration is unproven.
 
@@ -80,7 +80,7 @@ the mechanism serving it; the full text is [docs/architecture.md](docs/architect
 
 The host path is `#![forbid(unsafe_code)]`, enforced by the compiler and checked by
 `every_crate_forbids_unsafe` in the gate. Two crates are excepted, each for a library written in
-another language: `bsx-krun`, because libkrun is C, and `bsx-app`'s `chrome`, because AppKit is
+another language: `tormoni-krun`, because libkrun is C, and `tormoni-app`'s `chrome`, because AppKit is
 Objective-C. The gate asserts that list exactly, so a third cannot appear quietly.
 
 ## Building
@@ -92,7 +92,7 @@ does not reliably outlive the next cargo build, so re-sign after building. No pa
 the run needs root on either platform.
 
 `cargo xtask init` is what gets a sandbox booting: it puts the pinned Alpine minirootfs and the
-static agent where `bsx` looks for a root, on either platform, since neither step needs `apk`. The
+static agent where `tormoni` looks for a root, on either platform, since neither step needs `apk`. The
 runtimes and the locked package closure come from `cargo xtask build-rootfs`, which runs on Linux.
 
 libkrun and its kernel payload install from the system package manager (`pacman -S libkrun
@@ -103,31 +103,31 @@ what executes during the build is `apk.static`, a Linux binary.
 
 ```console
 cargo xtask setup            # what this host can and cannot do
-cargo xtask init             # a guest tree where bsx looks for one, so a sandbox can boot
+cargo xtask init             # a guest tree where tormoni looks for one, so a sandbox can boot
 cargo xtask ci               # the gate: fmt, prose drift, clippy, build, test, docs, deny
-cargo xtask sign             # macOS: re-entitle the built bsx after any other build
-cargo xtask bundle           # macOS: assemble artifacts/Behavioral Sandbox.app from the built pair
+cargo xtask sign             # macOS: re-entitle the built tormoni after any other build
+cargo xtask bundle           # macOS: assemble artifacts/Tormoni.app from the built pair
 cargo xtask build-rootfs     # the guest image (Alpine + runtimes + the static agent)
 cargo xtask build-rootfs --desktop   # the desktop image (+ a Wayland compositor and a terminal)
 ```
 
 ## Repo layout
 
-Directories stay short and packages carry the `bsx-` prefix, so a package is its directory plus that
-prefix, with one exception: `crates/cli` builds `bsx`, the bare name going to the command a user
+Directories stay short and packages carry the `tormoni-` prefix, so a package is its directory plus that
+prefix, with one exception: `crates/cli` builds `tormoni`, the bare name going to the command a user
 types. `cargo … -p` takes the package, a path takes the directory.
 
 | Path | Package | Role |
 |------|---------|------|
-| `crates/supervisor` | `bsx-supervisor` | Spawn, track, stop and reap the helper processes that are VMs. One value per live VM; `Drop` tears it down. |
-| `crates/krun` | `bsx-krun` | The safe wrapper over libkrun, with the raw declarations private beneath it. The one crate that may use `unsafe`, because the library is C. |
-| `crates/channel` | `bsx-channel` | The host↔guest wire protocol: nearly dependency-free length-prefixed framing (`zeroize`, for the post-send secret wipe, is the one dependency), shared by both ends. |
-| `crates/guest-agent` | `bsx-guest-agent` | The in-guest agent: runs one command per connection, streams stdout/stderr/exit. Exec/IO only, not the trust boundary. |
-| `crates/record` | `bsx-record` | The run record the notebook keeps: posture, captured output, and the guest's `/results`, one directory per run, exportable as one tar file. |
-| `crates/input` | `bsx-input` | The guest's keyboard and pointer: device shapes, reports, and the line grammar the replay file and the control socket feed. |
-| `crates/cli` | `bsx` | The `bsx` CLI and its verbs. The binary on `PATH` is `bsx`. |
-| `crates/app` | `bsx-app` | The GUI application, on iced: the notebook of runs reached from a sidebar, a run's record with its display and output, a start form, stop, re-run, delete, export, clear history, a persisted palette, scale and landing screen, and a shell in your terminal. One AppKit call gives its window a toolbar, which is what puts the window's own buttons on the line its head is drawn to. |
-| `crates/test-support` | `bsx-test-support` | Shared test fixtures: a self-reclaiming scratch dir, a log sink, a deterministic generator. Dev-only, never shipped. |
+| `crates/supervisor` | `tormoni-supervisor` | Spawn, track, stop and reap the helper processes that are VMs. One value per live VM; `Drop` tears it down. |
+| `crates/krun` | `tormoni-krun` | The safe wrapper over libkrun, with the raw declarations private beneath it. The one crate that may use `unsafe`, because the library is C. |
+| `crates/channel` | `tormoni-channel` | The host↔guest wire protocol: nearly dependency-free length-prefixed framing (`zeroize`, for the post-send secret wipe, is the one dependency), shared by both ends. |
+| `crates/guest-agent` | `tormoni-guest-agent` | The in-guest agent: runs one command per connection, streams stdout/stderr/exit. Exec/IO only, not the trust boundary. |
+| `crates/record` | `tormoni-record` | The run record the notebook keeps: posture, captured output, and the guest's `/results`, one directory per run, exportable as one tar file. |
+| `crates/input` | `tormoni-input` | The guest's keyboard and pointer: device shapes, reports, and the line grammar the replay file and the control socket feed. |
+| `crates/cli` | `tormoni` | The `tormoni` CLI and its verbs. The binary on `PATH` is `tormoni`. |
+| `crates/app` | `tormoni-app` | The GUI application, on iced: the notebook of runs reached from a sidebar, a run's record with its display and output, a start form, stop, re-run, delete, export, clear history, a persisted palette, scale and landing screen, and a shell in your terminal. One AppKit call gives its window a toolbar, which is what puts the window's own buttons on the line its head is drawn to. |
+| `crates/test-support` | `tormoni-test-support` | Shared test fixtures: a self-reclaiming scratch dir, a log sink, a deterministic generator. Dev-only, never shipped. |
 | `docs` | | This documentation, as an mdBook. |
 | `xtask` | `xtask` | Dev orchestration: `cargo xtask ci`, the guest image build, the vendor mirror. Never shipped. |
 

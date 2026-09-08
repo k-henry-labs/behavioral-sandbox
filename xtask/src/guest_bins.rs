@@ -41,7 +41,13 @@ fn build_guest_musl(arch: GuestArch) -> Result<PathBuf> {
         "release/guest-agent",
         "guest agent",
     );
-    let mut args = vec!["build", "--release", "--locked", "-p", "bsx-guest-agent"];
+    let mut args = vec![
+        "build",
+        "--release",
+        "--locked",
+        "-p",
+        "tormoni-guest-agent",
+    ];
     args.extend_from_slice(selector);
     args.extend_from_slice(&["--target", target]);
     // The toolchain's own linker on every host, rather than whatever `cc` is: a macOS `cc` cannot

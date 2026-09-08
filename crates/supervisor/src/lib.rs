@@ -7,7 +7,7 @@
 //! - **One [`Vm`] per live helper, and `Drop` tears it down.** A supervisor that leaks a helper
 //!   leaks somebody's laptop RAM, so the teardown is tied to the value rather than to a code path
 //!   that an early `?` can skip.
-//! - **The helper is reached through `current_exe()`, never `PATH`.** Spawning `bsx` by name would
+//! - **The helper is reached through `current_exe()`, never `PATH`.** Spawning `tormoni` by name would
 //!   run whatever the environment resolves, which on a shared host is not necessarily this build.
 //! - **The argv spelling lives here**, because this crate writes it and `crates/cli` parses it with
 //!   no dependency edge between them. `the_helper_flags_match_the_parser` in `xtask` holds the two
@@ -33,7 +33,7 @@ pub const HELPER_SUBCOMMAND: &str = "__vmm";
 ///
 /// **This stops a fork bomb**: [`Vm::spawn`] re-executes `current_exe()`, so a binary that does
 /// not dispatch [`HELPER_SUBCOMMAND`] re-executes itself without bound.
-const HELPER_MARKER: &str = "BSX_VMM";
+const HELPER_MARKER: &str = "TORMONI_VMM";
 
 /// The guest's network posture, mirrored from the CLI so the supervisor writes the helper flag
 /// from one definition. [`None`](Self::None) is the default because libkrun's own default is a
@@ -200,7 +200,7 @@ pub struct VmConfig {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[non_exhaustive]
 pub enum Console {
-    /// The caller's own stdin and stdout, which is what makes `bsx run` behave like the command
+    /// The caller's own stdin and stdout, which is what makes `tormoni run` behave like the command
     /// it wraps.
     #[default]
     Inherited,
@@ -209,7 +209,7 @@ pub enum Console {
     /// caller's stdin.
     Detached,
     /// The caller's stdin, and pipes for the console and the helper's stderr that the caller
-    /// drains through [`Vm::take_stdout`] and [`Vm::take_stderr`]: how `bsx run` copies the
+    /// drains through [`Vm::take_stdout`] and [`Vm::take_stderr`]: how `tormoni run` copies the
     /// guest's output to its own and to the run's record. [`VmConfig::log`] is not used.
     Piped,
 }
@@ -408,7 +408,7 @@ pub struct Vm {
     /// handed to somebody else. Taking the child out is what makes that unrepresentable, rather
     /// than a `reaped: bool` two code paths have to keep in step.
     child: Option<Child>,
-    /// The name a caller gave this VM. The helper binds `<runtime>/bsx/<name>.sock` with it, which
+    /// The name a caller gave this VM. The helper binds `<runtime>/tormoni/<name>.sock` with it, which
     /// is what [`discover`] lists.
     name: String,
 }
@@ -598,7 +598,7 @@ fn helper_command_unless_helper(
 /// setting the variable at all replaces it.
 #[cfg(target_os = "macos")]
 fn kernel_payload_path() -> Option<OsString> {
-    let dir = bsx_krun::KRUNFW_DIR?;
+    let dir = tormoni_krun::KRUNFW_DIR?;
     let mut value = std::env::var_os("DYLD_FALLBACK_LIBRARY_PATH").unwrap_or_default();
     if !value.is_empty() {
         value.push(":");
@@ -630,7 +630,7 @@ pub mod socket {
     use std::path::{Path, PathBuf};
 
     /// The directory holding one socket per live VM.
-    const DIR_NAME: &str = "bsx";
+    const DIR_NAME: &str = "tormoni";
 
     /// Longest a VM name may be. Not a taste limit: the socket path goes into `sockaddr_un.sun_path`,
     /// which is 108 bytes on Linux and 104 on macOS, and an over-long path fails at `bind` with a
@@ -657,7 +657,7 @@ pub mod socket {
     }
 
     /// Refuses a runtime directory anyone else can write or own: under `/tmp` another user could
-    /// create `bsx/` first. Checked on every resolution, since the directory outlives its maker.
+    /// create `tormoni/` first. Checked on every resolution, since the directory outlives its maker.
     fn require_private(dir: &Path) -> io::Result<()> {
         use std::os::unix::fs::MetadataExt;
         let meta = std::fs::metadata(dir)?;
@@ -1508,7 +1508,7 @@ pub mod control {
     }
 
     impl InputSession {
-        /// Sends one `kbd|ptr TYPE CODE VALUE` line. The grammar is `bsx-input`'s; this carries
+        /// Sends one `kbd|ptr TYPE CODE VALUE` line. The grammar is `tormoni-input`'s; this carries
         /// the text.
         pub fn send(&mut self, line: &str) -> io::Result<()> {
             writeln!(self.stream, "{line}")
@@ -1585,7 +1585,7 @@ pub mod discover {
     }
 
     /// [`live`] against an explicit directory, for a caller whose helpers were pointed elsewhere:
-    /// a test giving its VMs a private `XDG_RUNTIME_DIR` scans `<that>/bsx`, where the real one
+    /// a test giving its VMs a private `XDG_RUNTIME_DIR` scans `<that>/tormoni`, where the real one
     /// would mix in whatever else is running.
     pub fn live_in(dir: &Path) -> io::Result<Vec<Found>> {
         let mut found: Vec<Found> = entries_in(dir)?
@@ -1791,7 +1791,7 @@ mod tests {
     }
 
     /// The helper is this executable. Under the test harness that is the test binary, which is the
-    /// same property a shipped `bsx` relies on: re-execute *me*, not whatever `PATH` says.
+    /// same property a shipped `tormoni` relies on: re-execute *me*, not whatever `PATH` says.
     #[test]
     fn the_helper_is_this_executable() {
         let path = helper_path().expect("current_exe resolves");
@@ -1799,7 +1799,7 @@ mod tests {
         assert!(path.exists(), "names a real file: {path:?}");
     }
 
-    /// The program is **this executable**, through `current_exe`, not "bsx" on a `PATH` search.
+    /// The program is **this executable**, through `current_exe`, not "tormoni" on a `PATH` search.
     /// Checked on the `Command`, since a spawned child would race its own exit.
     #[test]
     fn the_spawn_command_runs_this_executable_not_a_path_lookup() {
@@ -1821,9 +1821,9 @@ mod tests {
     #[cfg(target_os = "macos")]
     #[test]
     fn the_helper_is_told_where_the_kernel_payload_is() {
-        let Some(dir) = bsx_krun::KRUNFW_DIR else {
+        let Some(dir) = tormoni_krun::KRUNFW_DIR else {
             eprintln!(
-                "skipped: no libkrunfw was found when bsx-krun was built, so there is no \
+                "skipped: no libkrunfw was found when tormoni-krun was built, so there is no \
                  directory to hand the helper"
             );
             return;
@@ -2171,7 +2171,7 @@ mod socket_tests {
     /// shutdown leaves one, because `krun_start_enter` exits the process without unwinding.
     #[test]
     fn a_listening_socket_is_live_and_a_leftover_file_is_not() {
-        let dir = bsx_test_support::ScratchDir::created("sock-live");
+        let dir = tormoni_test_support::ScratchDir::created("sock-live");
         let path = dir.path().join("vm.sock");
 
         let listener = UnixListener::bind(&path).expect("bind a socket");
@@ -2201,7 +2201,7 @@ mod socket_tests {
     /// before it bound should not have to distinguish the two.
     #[test]
     fn clearing_an_absent_socket_is_not_an_error() {
-        let dir = bsx_test_support::ScratchDir::created("sock-absent");
+        let dir = tormoni_test_support::ScratchDir::created("sock-absent");
         let missing = dir.path().join("never-existed.sock");
         assert!(!socket::clear_if_stale(&missing).expect("an absent socket is fine"));
     }
@@ -2318,7 +2318,7 @@ mod control_tests {
     fn a_display_answer_carries_the_layout_the_fd_and_then_records() {
         use std::os::fd::AsRawFd;
         let (server, client) = std::os::unix::net::UnixStream::pair().expect("a socket pair");
-        let dir = bsx_test_support::ScratchDir::created("display-lease");
+        let dir = tormoni_test_support::ScratchDir::created("display-lease");
         let file = std::fs::File::create(dir.path().join("frames")).expect("a file to hand over");
         let scanout = control::Scanout::new(320, 240, 2, 1280, 4, 307_200, 3);
         let answered = std::thread::spawn(move || {
@@ -2454,7 +2454,7 @@ mod discover_tests {
     /// not a socket nor one whose name the API would refuse becomes an entry.
     #[test]
     fn a_scan_reports_listeners_and_skips_everything_else() {
-        let dir = bsx_test_support::ScratchDir::created("discover");
+        let dir = tormoni_test_support::ScratchDir::created("discover");
         let d = dir.path();
 
         let _listener = UnixListener::bind(d.join("alive.sock")).expect("bind the live one");
@@ -2488,7 +2488,7 @@ mod discover_tests {
         assert_ne!(control, agent);
         assert!(!agent.to_string_lossy().ends_with(".sock"), "{agent:?}");
 
-        let dir = bsx_test_support::ScratchDir::created("agent-socket-scan");
+        let dir = tormoni_test_support::ScratchDir::created("agent-socket-scan");
         let listener =
             std::os::unix::net::UnixListener::bind(dir.path().join("live.agent")).expect("bind");
         assert_eq!(
@@ -2503,7 +2503,7 @@ mod discover_tests {
     /// a path `exec` would connect to and then wait on forever, for a VM that has ended.
     #[test]
     fn reaping_a_dead_vm_takes_its_agent_channel_too() {
-        let dir = bsx_test_support::ScratchDir::created("agent-socket-reap");
+        let dir = tormoni_test_support::ScratchDir::created("agent-socket-reap");
         let control = dir.path().join("gone.sock");
         let channel = socket::agent_in(dir.path(), "gone");
         std::fs::write(&control, b"").expect("stage a leftover control socket");
@@ -2517,7 +2517,7 @@ mod discover_tests {
     /// Listing must not delete: a leftover survives a scan, and only `reap_stale` removes it.
     #[test]
     fn a_scan_does_not_remove_leftovers_but_reaping_does() {
-        let dir = bsx_test_support::ScratchDir::created("discover-reap");
+        let dir = tormoni_test_support::ScratchDir::created("discover-reap");
         let d = dir.path();
         let leftover = d.join("ended.sock");
         let _listener = UnixListener::bind(d.join("alive.sock")).expect("bind the live one");

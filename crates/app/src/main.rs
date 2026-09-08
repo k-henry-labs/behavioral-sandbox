@@ -1,12 +1,12 @@
-//! `bsx-app`: the notebook. Runs on this machine, live and past, one row each; a run opens to
+//! `tormoni-app`: the notebook. Runs on this machine, live and past, one row each; a run opens to
 //! its record, and a live one to its display with the keyboard and pointer going in.
 //!
-//! - **Everything here the CLI can do.** The records are `bsx-record`'s, read straight from the
-//!   runs directory; starting, stopping and a shell go through the `bsx` binary beside this one,
+//! - **Everything here the CLI can do.** The records are `tormoni-record`'s, read straight from the
+//!   runs directory; starting, stopping and a shell go through the `tormoni` binary beside this one,
 //!   so the app grows no verb the CLI lacks and an agent driving the CLI and a person at this
 //!   window see one notebook.
 //! - **Nothing leaves the machine.** The runs directory is local, the sockets are local, and the
-//!   only processes started are `bsx` and, for a shell, the operator's terminal.
+//!   only processes started are `tormoni` and, for a shell, the operator's terminal.
 //! - **Bounded.** The list is what retention keeps, the output pane shows the tail of a file up
 //!   to a fixed size, the frame history is capped, and a display lease is shut down when its run
 //!   is left, so nothing grows with time in the window.
@@ -33,9 +33,9 @@ use clap::Parser;
 use iced::animation::Easing;
 use iced::{Animation, Element, Size, Subscription, Task};
 
-use bsx_krun::SharedFrames;
-use bsx_record::{Record, Store};
-use bsx_supervisor::control::Damage;
+use tormoni_krun::SharedFrames;
+use tormoni_record::{Record, Store};
+use tormoni_supervisor::control::Damage;
 
 /// Exit code for an operational failure, the CLI's convention.
 const EXIT_OPERATIONAL: u8 = 2;
@@ -65,7 +65,7 @@ const _: () = assert!(MAX_THUMBNAILS < frame::MAX_TEXTURES);
 
 #[derive(Parser)]
 #[command(
-    name = "bsx-app",
+    name = "tormoni-app",
     version,
     about = "The notebook: sandboxes on this machine, live and past, and their displays."
 )]
@@ -87,7 +87,7 @@ struct Cli {
     #[arg(long)]
     exit_with_lease: bool,
     /// The mode to draw in: `light`, `dark`, or `system`, which follows the desktop. Case is
-    /// ignored. Falls back to `$BSX_THEME`, then to the pick in Settings, then to `system`. An
+    /// ignored. Falls back to `$TORMONI_THEME`, then to the pick in Settings, then to `system`. An
     /// unknown name is refused with the three.
     #[arg(long, value_name = "NAME")]
     theme: Option<String>,
@@ -177,7 +177,7 @@ fn main() -> ExitCode {
     let (mode, theme_note) = match theme::startup(asked.as_deref(), saved.theme.as_deref()) {
         Ok(pair) => pair,
         Err(why) => {
-            eprintln!("bsx-app: {why}");
+            eprintln!("tormoni-app: {why}");
             return ExitCode::from(EXIT_OPERATIONAL);
         }
     };
@@ -185,14 +185,14 @@ fn main() -> ExitCode {
     let sinks = match frame::Sinks::open(cli.drawn_log.as_deref(), cli.input_log.as_deref()) {
         Ok(sinks) => Arc::new(sinks),
         Err(e) => {
-            eprintln!("bsx-app: opening a log: {e}");
+            eprintln!("tormoni-app: opening a log: {e}");
             return ExitCode::from(EXIT_OPERATIONAL);
         }
     };
     let store = match Store::open() {
         Ok(store) => store,
         Err(e) => {
-            eprintln!("bsx-app: the runs directory: {e}");
+            eprintln!("tormoni-app: the runs directory: {e}");
             return ExitCode::from(EXIT_OPERATIONAL);
         }
     };
@@ -249,7 +249,7 @@ fn main() -> ExitCode {
     match ran {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
-            eprintln!("bsx-app: {e}");
+            eprintln!("tormoni-app: {e}");
             ExitCode::from(EXIT_OPERATIONAL)
         }
     }
@@ -330,7 +330,7 @@ pub(crate) enum Stream {
 
 impl Stream {
     /// The file this stream is in a run's directory.
-    fn path(self, dir: &bsx_record::RunDir) -> PathBuf {
+    fn path(self, dir: &tormoni_record::RunDir) -> PathBuf {
         match self {
             Self::Stdout => dir.stdout(),
             Self::Stderr => dir.stderr(),
@@ -340,11 +340,11 @@ impl Stream {
     }
 
     /// The streams a run of `verb` has.
-    pub(crate) fn of(verb: bsx_record::Verb) -> &'static [Self] {
+    pub(crate) fn of(verb: tormoni_record::Verb) -> &'static [Self] {
         match verb {
-            bsx_record::Verb::Run => &[Self::Stdout, Self::Stderr],
-            bsx_record::Verb::Shell => &[Self::Shell],
-            bsx_record::Verb::Up => &[Self::Exec],
+            tormoni_record::Verb::Run => &[Self::Stdout, Self::Stderr],
+            tormoni_record::Verb::Shell => &[Self::Shell],
+            tormoni_record::Verb::Up => &[Self::Exec],
             _ => &[],
         }
     }
@@ -409,7 +409,7 @@ impl Form {
         Self {
             name: String::new(),
             root: p.root.display().to_string(),
-            writable_root: p.rootfs == bsx_record::Rootfs::Writable,
+            writable_root: p.rootfs == tormoni_record::Rootfs::Writable,
             command: record.command.join(" "),
             mounts: p
                 .mounts
@@ -423,7 +423,7 @@ impl Form {
                 .map(|(t, h)| format!("{t}={}", h.display()))
                 .collect::<Vec<_>>()
                 .join(" "),
-            network: p.network == bsx_record::Network::Tsi,
+            network: p.network == tormoni_record::Network::Tsi,
             display: p.display.is_some(),
             display_size: p
                 .display
@@ -535,7 +535,7 @@ pub(crate) struct App {
     runs: Vec<Record>,
     /// The names answering on their control sockets as of the last tick.
     live: BTreeSet<RunName>,
-    /// Where `bsx` and the guest root are, as of the last tick: what the menu reports.
+    /// Where `tormoni` and the guest root are, as of the last tick: what the menu reports.
     platform: cli::Platform,
     form: Form,
     /// The last thing worth telling the operator: an error, or what just happened.
@@ -555,7 +555,7 @@ pub(crate) struct App {
     mode: theme::Mode,
     /// What the desktop is showing, as the toolkit last reported it: what `System` follows.
     desktop: iced::theme::Mode,
-    /// Whether --theme or $BSX_THEME set it, which outranks a pick at the next launch.
+    /// Whether --theme or $TORMONI_THEME set it, which outranks a pick at the next launch.
     theme_overridden: bool,
     /// The interface scale in percent; Settings changes it live.
     scale: u16,
@@ -630,11 +630,11 @@ impl App {
 
     fn title(&self) -> String {
         match &self.screen {
-            Screen::Settings => "Behavioral Sandbox › settings".to_string(),
-            Screen::List => "Behavioral Sandbox › sandboxes".to_string(),
-            Screen::New => "Behavioral Sandbox › new run".to_string(),
+            Screen::Settings => "Tormoni › settings".to_string(),
+            Screen::List => "Tormoni › sandboxes".to_string(),
+            Screen::New => "Tormoni › new run".to_string(),
             Screen::Run(id) => format!(
-                "Behavioral Sandbox › {}",
+                "Tormoni › {}",
                 self.record(id).map_or(id.as_str(), |r| r.name.as_str())
             ),
         }
@@ -656,10 +656,10 @@ impl App {
     }
 
     /// Rereads the notebook: the records, which names answer, and marks the open records whose
-    /// VM does not answer as gone (the one bookkeeping a listing does, as `bsx ls --all`).
+    /// VM does not answer as gone (the one bookkeeping a listing does, as `tormoni ls --all`).
     fn refresh(&mut self) {
         self.platform = cli::probe();
-        self.live = bsx_supervisor::discover::live()
+        self.live = tormoni_supervisor::discover::live()
             .map(|found| {
                 found
                     .into_iter()
@@ -670,7 +670,7 @@ impl App {
         let mut runs = self.store.list().unwrap_or_default();
         for record in &mut runs {
             if record.is_open() && !self.live.contains(&RunName::started(record.name.clone())) {
-                record.finish(bsx_record::End::Gone);
+                record.finish(tormoni_record::End::Gone);
                 let _ = self.store.save(record);
             }
         }
@@ -919,7 +919,7 @@ impl App {
             Message::Start => {
                 let form = self.form.clone();
                 Task::perform(
-                    async move { cli::start(&cli::bsx_path(), &form) },
+                    async move { cli::start(&cli::tormoni_path(), &form) },
                     Message::Started,
                 )
             }
@@ -945,11 +945,11 @@ impl App {
                 Task::none()
             }
             Message::Stop(name) => Task::perform(
-                async move { cli::stop(&cli::bsx_path(), name.as_str()) },
+                async move { cli::stop(&cli::tormoni_path(), name.as_str()) },
                 Message::Acted,
             ),
             Message::Shell(name) => Task::perform(
-                async move { cli::open_shell(&cli::bsx_path(), name.as_str()) },
+                async move { cli::open_shell(&cli::tormoni_path(), name.as_str()) },
                 Message::Acted,
             ),
             Message::Rerun(id) => {
@@ -1016,7 +1016,7 @@ impl App {
             Message::Mapped(name, frames) => {
                 let layout = frames.layout();
                 eprintln!(
-                    "bsx-app: mapped {name} {}x{} {:?}, stride {}, {} slots",
+                    "tormoni-app: mapped {name} {}x{} {:?}, stride {}, {} slots",
                     layout.width, layout.height, layout.format, layout.stride, layout.slots
                 );
                 // A new scanout, so the history starts again; a reconfigure leaves input open.
@@ -1059,7 +1059,7 @@ impl App {
             Message::Input(name, lines) => {
                 if let Some(display) = self.displays.get_mut(&name) {
                     display.input = Some(lines);
-                    eprintln!("bsx-app: the keyboard and pointer reach {name}");
+                    eprintln!("tormoni-app: the keyboard and pointer reach {name}");
                 }
                 Task::none()
             }
@@ -1070,7 +1070,7 @@ impl App {
             Message::Ended(name, why) => {
                 let read = self.displays.get(&name).map_or(0, |d| d.read);
                 eprintln!(
-                    "bsx-app: {name}: {why}; read {read} presents, uploaded {} frames",
+                    "tormoni-app: {name}: {why}; read {read} presents, uploaded {} frames",
                     self.sinks.uploaded()
                 );
                 self.displays.remove(&name);
@@ -1210,7 +1210,7 @@ mod tests {
     /// the store.
     #[test]
     fn an_export_lands_in_downloads_then_home_then_beside_the_store() {
-        let dir = bsx_test_support::ScratchDir::created("app-export-dest");
+        let dir = tormoni_test_support::ScratchDir::created("app-export-dest");
         let store = Store::at(dir.path().join("data/runs")).expect("a store");
         let home = dir.path().join("home");
         std::fs::create_dir_all(home.join("Downloads")).expect("a downloads dir");
@@ -1226,7 +1226,7 @@ mod tests {
     /// The pane shows the tail of a file and its whole size, and an absent file is empty.
     #[test]
     fn the_output_pane_shows_the_tail() {
-        let dir = std::env::temp_dir().join(format!("bsx-app-tail-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("tormoni-app-tail-{}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("a dir");
         let path = dir.join("stdout");
         std::fs::write(&path, "0123456789").expect("written");
@@ -1238,15 +1238,15 @@ mod tests {
 
     /// A run with a display, live or not, for the watch-set tests.
     fn displayed(name: &str, with_display: bool) -> Record {
-        let mut p = bsx_record::Posture::new(PathBuf::from("/img"), 1, 512);
+        let mut p = tormoni_record::Posture::new(PathBuf::from("/img"), 1, 512);
         p.display = with_display
-            .then(|| bsx_record::DisplayMode::parse("640x480"))
+            .then(|| tormoni_record::DisplayMode::parse("640x480"))
             .flatten();
-        Record::begin(name, bsx_record::Verb::Run, vec!["true".into()], p)
+        Record::begin(name, tormoni_record::Verb::Run, vec!["true".into()], p)
     }
 
     fn app_with(runs: Vec<Record>, live: &[&str]) -> App {
-        let dir = bsx_test_support::ScratchDir::created("app-watches");
+        let dir = tormoni_test_support::ScratchDir::created("app-watches");
         let store = Store::at(dir.path().join("runs")).expect("a store");
         let sinks = Arc::new(frame::Sinks::open(None, None).expect("sinks"));
         let mut app = App::new(store, None, None, sinks, false);
@@ -1315,12 +1315,12 @@ mod tests {
         app.screen = Screen::List;
         // A real mapping, so what is dropped is the memfd and the region, not a stand-in.
         let frames = {
-            use bsx_krun::DisplayBackend as _;
-            let mut fb = bsx_krun::MemoryFramebuffer::shared();
-            fb.configure_scanout(0, 64, 32, 64, 32, bsx_krun::PixelFormat::B8G8R8X8Unorm)
+            use tormoni_krun::DisplayBackend as _;
+            let mut fb = tormoni_krun::MemoryFramebuffer::shared();
+            fb.configure_scanout(0, 64, 32, 64, 32, tormoni_krun::PixelFormat::B8G8R8X8Unorm)
                 .expect("a scanout");
             let (fd, layout) = fb.share(0).expect("shareable").expect("a scanout");
-            Arc::new(bsx_krun::SharedFrames::map(fd, layout).expect("mapped"))
+            Arc::new(tormoni_krun::SharedFrames::map(fd, layout).expect("mapped"))
         };
         for name in ["alpha", "beta"] {
             app.displays.insert(
@@ -1345,7 +1345,7 @@ mod tests {
     /// The window opens on the menu; naming a run on the command line skips straight to it.
     #[test]
     fn the_window_opens_on_the_notebook_and_a_deep_link_skips_it() {
-        let dir = bsx_test_support::ScratchDir::created("app-boot");
+        let dir = tormoni_test_support::ScratchDir::created("app-boot");
         let store = Store::at(dir.path().join("runs")).expect("a store");
         let record = displayed("opened", false);
         store.create(&record).expect("created");
@@ -1408,17 +1408,17 @@ mod tests {
     /// leaving the list disarms an armed confirm.
     #[test]
     fn clearing_removes_every_ended_run_and_only_behind_the_confirm() {
-        let dir = bsx_test_support::ScratchDir::created("app-clear");
+        let dir = tormoni_test_support::ScratchDir::created("app-clear");
         let store = Store::at(dir.path().join("runs")).expect("a store");
         let name = format!("clear-live-{}", std::process::id());
-        let sock = bsx_supervisor::socket::path_for(&name).expect("a socket path");
+        let sock = tormoni_supervisor::socket::path_for(&name).expect("a socket path");
         let _ = std::fs::remove_file(&sock);
         let listener = std::os::unix::net::UnixListener::bind(&sock).expect("a live socket");
 
         let mut gone = displayed("gone", false);
-        gone.finish(bsx_record::End::Exit(0));
+        gone.finish(tormoni_record::End::Exit(0));
         let mut failed = displayed("failed", false);
-        failed.finish(bsx_record::End::Failed);
+        failed.finish(tormoni_record::End::Failed);
         let live = displayed(&name, false);
         for r in [&gone, &failed, &live] {
             store.create(r).expect("created");
@@ -1463,16 +1463,16 @@ mod tests {
     /// A re-run's form is the record's command and posture again.
     #[test]
     fn a_rerun_form_is_the_records_posture_again() {
-        let mut p = bsx_record::Posture::new(PathBuf::from("/img"), 2, 768);
-        p.rootfs = bsx_record::Rootfs::Writable;
+        let mut p = tormoni_record::Posture::new(PathBuf::from("/img"), 2, 768);
+        p.rootfs = tormoni_record::Rootfs::Writable;
         p.mounts
             .push((PathBuf::from("/mnt"), PathBuf::from("/home/x/out")));
-        p.network = bsx_record::Network::Tsi;
-        p.display = bsx_record::DisplayMode::parse("800x600");
+        p.network = tormoni_record::Network::Tsi;
+        p.display = tormoni_record::DisplayMode::parse("800x600");
         p.results = false;
-        let record = bsx_record::Record::begin(
+        let record = tormoni_record::Record::begin(
             "r",
-            bsx_record::Verb::Run,
+            tormoni_record::Verb::Run,
             vec!["python3".into(), "x.py".into()],
             p,
         );

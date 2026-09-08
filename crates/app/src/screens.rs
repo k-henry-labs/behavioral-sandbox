@@ -3,7 +3,7 @@
 //! - **The posture is the layout.** A row shows what a run could touch before its name is read
 //!   twice; a run's pane spells it out; the form's sentence is `Posture::sentence`, generated
 //!   from the fields, so starting is confirming what the record will say (rule 3 as a screen).
-//! - **Nothing here is a verb.** Every button becomes a `bsx` call or a file read; the CLI does
+//! - **Nothing here is a verb.** Every button becomes a `tormoni` call or a file read; the CLI does
 //!   the same thing with the same words.
 
 use iced::widget::{
@@ -12,7 +12,7 @@ use iced::widget::{
 };
 use iced::{Element, Fill, Font, Length};
 
-use bsx_record::{Record, Verb};
+use tormoni_record::{Record, Verb};
 
 use crate::{App, Field, Form, Message, Stream, Switch, cli, icons};
 
@@ -48,10 +48,12 @@ fn status_colour(theme: &iced::Theme, record: &Record, live: bool) -> iced::Colo
         return palette.success.base.color;
     }
     match record.end {
-        Some(bsx_record::End::Exit(0)) => palette.background.strong.text,
-        Some(bsx_record::End::Exit(_) | bsx_record::End::Signal(_) | bsx_record::End::Failed) => {
-            palette.danger.base.color
-        }
+        Some(tormoni_record::End::Exit(0)) => palette.background.strong.text,
+        Some(
+            tormoni_record::End::Exit(_)
+            | tormoni_record::End::Signal(_)
+            | tormoni_record::End::Failed,
+        ) => palette.danger.base.color,
         _ => palette.background.strong.text,
     }
 }
@@ -297,12 +299,14 @@ fn muted_line<'a>(line: impl text::IntoFragment<'a>, size: f32) -> Element<'a, M
         .into()
 }
 
-/// Where the `bsx` this window would spawn is, or what to set when it is nowhere.
-fn bsx_line(app: &App) -> String {
+/// Where the `tormoni` this window would spawn is, or what to set when it is nowhere.
+fn tormoni_line(app: &App) -> String {
     let home = std::env::var("HOME").ok();
-    match &app.platform.bsx {
+    match &app.platform.tormoni {
         Some(path) => tilde(home.as_deref(), path),
-        None => "Not found: set $BSX_CLI, or put bsx beside bsx-app or on PATH.".to_string(),
+        None => {
+            "Not found: set $TORMONI_CLI, or put tormoni beside tormoni-app or on PATH.".to_string()
+        }
     }
 }
 
@@ -314,7 +318,7 @@ fn root_line(app: &App) -> String {
         cli::GuestRoot::Absent(path) => {
             format!("{} (nothing there yet)", tilde(home.as_deref(), path))
         }
-        cli::GuestRoot::Unset => "None: set $BSX_GUEST_ROOT.".to_string(),
+        cli::GuestRoot::Unset => "None: set $TORMONI_GUEST_ROOT.".to_string(),
     }
 }
 
@@ -341,7 +345,7 @@ pub(crate) fn settings(app: &App) -> Element<'_, Message> {
     }))
     .spacing(6);
     let theme_note = if app.theme_overridden {
-        "Started with --theme or $BSX_THEME, which outranks this pick at the next launch."
+        "Started with --theme or $TORMONI_THEME, which outranks this pick at the next launch."
     } else {
         "Light, dark, or whichever the desktop is showing."
     };
@@ -363,7 +367,7 @@ pub(crate) fn settings(app: &App) -> Element<'_, Message> {
     let mut body = column![
         setting(
             None,
-            "Behavioral Sandbox",
+            "Tormoni",
             format!("version {}", env!("CARGO_PKG_VERSION")),
             space().width(0)
         ),
@@ -391,7 +395,7 @@ pub(crate) fn settings(app: &App) -> Element<'_, Message> {
         setting(
             Some(icons::TERMINAL),
             "Command line",
-            bsx_line(app),
+            tormoni_line(app),
             space().width(0)
         ),
         setting(
@@ -684,7 +688,7 @@ pub(crate) fn list(app: &App) -> Element<'_, Message> {
     }
     if app.runs.is_empty() {
         rows = rows.push(
-            text("No runs yet. Start one here, or with `bsx run`, `bsx shell` or `bsx up`.")
+            text("No runs yet. Start one here, or with `tormoni run`, `tormoni shell` or `tormoni up`.")
                 .size(BODY)
                 .style(|t| text::Style {
                     color: Some(muted(t)),
@@ -843,14 +847,16 @@ fn run_row<'a>(app: &'a App, record: &'a Record) -> Element<'a, Message> {
     let state = if live {
         format!(
             "running {}",
-            bsx_record::format_duration(bsx_record::now_ms().saturating_sub(record.started_ms))
+            tormoni_record::format_duration(
+                tormoni_record::now_ms().saturating_sub(record.started_ms)
+            )
         )
     } else {
         let end = record.end.map(|e| e.to_string()).unwrap_or_default();
         match record.ended_ms {
             Some(ended) => format!(
                 "{end} · {}",
-                bsx_record::format_duration(ended.saturating_sub(record.started_ms))
+                tormoni_record::format_duration(ended.saturating_sub(record.started_ms))
             ),
             None => end,
         }
@@ -967,14 +973,14 @@ fn posture_tags(record: &Record) -> String {
         parts.push(display.as_spec().replace('x', "\u{d7}"));
     }
     parts.push(
-        if p.network == bsx_record::Network::Tsi {
+        if p.network == tormoni_record::Network::Tsi {
             "network via host"
         } else {
             "no network"
         }
         .to_string(),
     );
-    if p.rootfs == bsx_record::Rootfs::Writable {
+    if p.rootfs == tormoni_record::Rootfs::Writable {
         parts.push("writable root".to_string());
     }
     // One share is worth naming; several are worth counting, or the line outgrows the card.
@@ -991,7 +997,7 @@ fn posture_tags(record: &Record) -> String {
         (m, sh) => parts.push(format!("{} host directories", m + sh)),
     }
     if p.results {
-        parts.push(bsx_record::RESULTS_GUEST_PATH.to_string());
+        parts.push(tormoni_record::RESULTS_GUEST_PATH.to_string());
     }
     if p.sound {
         parts.push("sound".to_string());
@@ -1157,7 +1163,7 @@ fn posture_lines(record: &Record) -> Vec<(String, String)> {
     lines.push((
         "results".to_string(),
         if p.results {
-            bsx_record::RESULTS_GUEST_PATH
+            tormoni_record::RESULTS_GUEST_PATH
         } else {
             "off"
         }
@@ -1184,7 +1190,7 @@ fn run_lines(record: &Record, live: bool) -> Vec<(String, String)> {
         ("verb".to_string(), record.verb.as_word().to_string()),
         (
             "started".to_string(),
-            bsx_record::format_time(record.started_ms),
+            tormoni_record::format_time(record.started_ms),
         ),
     ];
     if !record.command.is_empty() {
@@ -1196,7 +1202,7 @@ fn run_lines(record: &Record, live: bool) -> Vec<(String, String)> {
     match (live, record.end, record.ended_ms) {
         (true, _, _) => lines.push(("state".to_string(), "running".to_string())),
         (false, Some(end), Some(ended)) => {
-            lines.push(("ended".to_string(), bsx_record::format_time(ended)));
+            lines.push(("ended".to_string(), tormoni_record::format_time(ended)));
             lines.push(("end".to_string(), end.to_string()));
         }
         (false, Some(end), None) => lines.push(("end".to_string(), end.to_string())),
@@ -1291,20 +1297,20 @@ pub(crate) fn new_run<'a>(app: &'a App, form: &'a Form) -> Element<'a, Message> 
             .size(CHECK)
             .on_toggle(move |v| Message::Switch(which, v))
     };
-    let mut posture = bsx_record::Posture::new(
+    let mut posture = tormoni_record::Posture::new(
         std::path::PathBuf::from(form.root.trim()),
         form.vcpus.trim().parse().unwrap_or(1),
         form.mem_mib.trim().parse().unwrap_or(512),
     );
     posture.rootfs = if form.writable_root {
-        bsx_record::Rootfs::Writable
+        tormoni_record::Rootfs::Writable
     } else {
-        bsx_record::Rootfs::ReadOnly
+        tormoni_record::Rootfs::ReadOnly
     };
     posture.network = if form.network {
-        bsx_record::Network::Tsi
+        tormoni_record::Network::Tsi
     } else {
-        bsx_record::Network::None
+        tormoni_record::Network::None
     };
     posture.mounts = form
         .mounts
@@ -1320,7 +1326,7 @@ pub(crate) fn new_run<'a>(app: &'a App, form: &'a Form) -> Element<'a, Message> 
         .collect();
     posture.display = form
         .display
-        .then(|| bsx_record::DisplayMode::parse(form.display_size.trim()))
+        .then(|| tormoni_record::DisplayMode::parse(form.display_size.trim()))
         .flatten();
     posture.sound = form.sound;
     posture.gpu = form.gpu;

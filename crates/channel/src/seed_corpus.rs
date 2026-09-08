@@ -7,7 +7,7 @@
 //!   the raw decoder, and the `tag · body` twin (`.body`) for the `_wellformed` one, which supplies
 //!   a header of its own.
 //! - **A comparison, not a build step.** The test below rewrites the tree only under
-//!   `BSX_UPDATE_FUZZ_SEEDS`; otherwise it compares, and an orphaned directory is an extra key.
+//!   `TORMONI_UPDATE_FUZZ_SEEDS`; otherwise it compares, and an orphaned directory is an extra key.
 
 use std::collections::BTreeMap;
 use std::num::NonZeroU32;
@@ -20,7 +20,7 @@ use crate::{
 };
 
 /// Turns the comparison into a rewrite, for the commit that follows a wire change.
-const UPDATE: &str = "BSX_UPDATE_FUZZ_SEEDS";
+const UPDATE: &str = "TORMONI_UPDATE_FUZZ_SEEDS";
 
 /// The bytes an encoder writes, for a fixture the encoder must accept.
 fn encoded(write: impl FnOnce(&mut Vec<u8>) -> Result<(), ChannelError>) -> Vec<u8> {
@@ -247,7 +247,7 @@ fn the_committed_seeds_are_what_the_encoders_produce() {
         return;
     }
     let have = on_disk(&root);
-    let fix = format!("re-generate them with `{UPDATE}=1 cargo test -p bsx-channel`");
+    let fix = format!("re-generate them with `{UPDATE}=1 cargo test -p tormoni-channel`");
 
     let missing: Vec<&String> = want.keys().filter(|k| !have.contains_key(*k)).collect();
     assert!(

@@ -30,7 +30,7 @@ edition = "2024"
 rust-version = "1.98"
 license = "Apache-2.0"
 authors = ["Kendrick Lawton"]
-repository = "https://github.com/kendricklawton/behavioral-sandbox"
+repository = "https://github.com/kendricklawton/tormoni"
 
 # Dependency-light by design. The host path is `unsafe`-free and the CLI parses with clap.
 [workspace.dependencies]
@@ -40,7 +40,7 @@ anyhow = "1"
 # terminal. That is not hypothetical here, since a `///` on a clap field *is* the user interface,
 # and the CLI's `-h` ran 19 lines past 80 columns before this was set.
 clap = { version = "4", features = ["derive", "wrap_help"] }
-# Scrubs a secret from memory after `bsx-channel` sends it, so it doesn't linger in freed memory.
+# Scrubs a secret from memory after `tormoni-channel` sends it, so it doesn't linger in freed memory.
 zeroize = "1"
 # Safe wrappers over the pty, termios and signal syscalls the interactive shell path needs on both
 # ends; already in the graph through clap's `terminal_size`. Each crate names only the features it

@@ -9,7 +9,7 @@
 //! 3. **The `#fragment` on those links.** It must name a heading on the page it points at, since a moved
 //!    section leaves the file resolving and the anchor dead, which check 2 cannot see.
 //! 4. **Cargo package names.** A `cargo … -p <name>` handed to a reader must name a workspace package.
-//!    A crate's directory is not always its package (`crates/cli` builds `bsx`), so this is invisible to
+//!    A crate's directory is not always its package (`crates/cli` builds `tormoni`), so this is invisible to
 //!    check 1: the path resolves while the command does not run. Unlike checks 1 to 3 this reads **every**
 //!    tracked text file rather than just `.rs` and `.md`, because a copy-pasteable command is a command
 //!    wherever it is printed.
@@ -134,7 +134,7 @@ pub fn check(root: &Path) -> Result<()> {
 }
 
 /// Every package name in the workspace, read from the tracked `Cargo.toml` files rather than from
-/// directory names: the two differ (`crates/cli` builds `bsx`), and it is the name `-p` takes.
+/// directory names: the two differ (`crates/cli` builds `tormoni`), and it is the name `-p` takes.
 fn package_names(root: &Path, tracked: &BTreeSet<String>) -> Result<BTreeSet<String>> {
     let mut names = BTreeSet::new();
     for rel in tracked.iter().filter(|p| p.ends_with("Cargo.toml")) {
@@ -188,7 +188,7 @@ fn cargo_package_refs(text: &str) -> Vec<(usize, String)> {
             if pkg.starts_with(['<', '{', '$', '"']) {
                 continue;
             }
-            // Trailing shell/prose punctuation (`-p bsx-example,` `-p bsx-example`.) is not part of the name.
+            // Trailing shell/prose punctuation (`-p tormoni-example,` `-p tormoni-example`.) is not part of the name.
             let pkg =
                 pkg.trim_matches(|c: char| !c.is_ascii_alphanumeric() && c != '-' && c != '_');
             if pkg.is_empty() || pkg.starts_with('-') {
@@ -583,7 +583,7 @@ mod tests {
     #[test]
     fn heading_anchors_match_how_mdbook_slugs_them() {
         let text = "\
-# Configuration of `bsx`
+# Configuration of `tormoni`
 ## Setting `require_jail`
 ## Semver & API stability
 ## Minimum supported `rustc` version (MSRV)
@@ -598,7 +598,7 @@ mod tests {
 ";
         let got = heading_anchors(text);
         for want in [
-            "configuration-of-bsx",
+            "configuration-of-tormoni",
             // A code span's *contents* are part of the anchor; only the backticks come out.
             "setting-require_jail",
             // `&` drops out and leaves the two spaces around it, so the slug doubles its hyphen.

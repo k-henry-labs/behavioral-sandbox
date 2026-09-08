@@ -1,4 +1,4 @@
-# Contributing to BSX
+# Contributing to Tormoni
 
 Thanks for your interest. **Outside contributions are welcome.** A few things are worth knowing
 before you spend time on one.
@@ -6,7 +6,7 @@ before you spend time on one.
 **Open an issue first for anything non-trivial.** Bug fixes, tests, and documentation can go
 straight to a pull request. For a new capability, a change to a public API, or a refactor that moves
 code between crates, open an issue and settle the shape first. That is not gatekeeping: the project
-is pre-1.0 and its surface still moves (the `bsx-channel` framing, the `bsx-supervisor` spawn and
+is pre-1.0 and its surface still moves (the `tormoni-channel` framing, the `tormoni-supervisor` spawn and
 discovery API, and the crate names all change without notice until the first supported release,
 `v0.1.0`), and an issue is how you avoid building against a shape that is about to change under
 you.
@@ -30,7 +30,7 @@ behavior under test, see the assertion fire, then revert.
 **`cargo xtask ci` is the gate and needs no privilege.** The tests that boot a guest are
 `#[ignore]`d and each names its own prerequisite (`/dev/kvm` and a guest tree from
 `cargo xtask build-rootfs`), because a test whose prerequisite is missing skips itself and cargo
-counts a skipped test as a pass; run them with `cargo test -p bsx --test e2e -- --ignored`.
+counts a skipped test as a pass; run them with `cargo test -p tormoni --test e2e -- --ignored`.
 `cargo xtask setup` reports what your host can do.
 
 **Expect review to take a while.** One maintainer, no service commitment, and a security-sensitive

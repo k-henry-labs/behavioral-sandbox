@@ -80,7 +80,7 @@ pub(crate) fn cut_icon_font() -> Result<()> {
         before.len() / 1024,
         after.len() / 1024
     );
-    println!("icons: `cargo test -p bsx-app` checks the cut against what the app names");
+    println!("icons: `cargo test -p tormoni-app` checks the cut against what the app names");
     Ok(())
 }
 

@@ -7,8 +7,8 @@
 //! - **A build drops the signature**, because cargo writes a new binary on every relink. So this is
 //!   a step *after* a build rather than a setup done once, and re-running it is the normal case.
 //! - **Ad-hoc is enough**: `codesign -s -` needs no Apple Developer identity.
-//! - **`bsx` alone.** It carries the `__vmm` helper that calls `krun_start_enter`, the only call in
-//!   the tree that asks a hypervisor for anything. `bsx-app` maps shared frames and spawns `bsx`.
+//! - **`tormoni` alone.** It carries the `__vmm` helper that calls `krun_start_enter`, the only call in
+//!   the tree that asks a hypervisor for anything. `tormoni-app` maps shared frames and spawns `tormoni`.
 //! - **Signing is verified, not assumed**: `codesign` can report success having applied nothing, so
 //!   the entitlement is read back off the binary and its absence is an error.
 
@@ -25,10 +25,10 @@ const ENTITLEMENTS: &str = "xtask/hypervisor.entitlements";
 /// The key the signed binary must carry, and what a verification reads back.
 const HYPERVISOR_KEY: &str = "com.apple.security.hypervisor";
 
-/// The binary that becomes a VM. `bsx-app` is not here: it never calls into a hypervisor.
-const SIGNED_BIN: &str = "bsx";
+/// The binary that becomes a VM. `tormoni-app` is not here: it never calls into a hypervisor.
+const SIGNED_BIN: &str = "tormoni";
 
-/// Signs the built `bsx` so it can reach the hypervisor, or explains why there is nothing to do.
+/// Signs the built `tormoni` so it can reach the hypervisor, or explains why there is nothing to do.
 pub(crate) fn sign_for_hypervisor(release: bool) -> Result<()> {
     if !cfg!(target_os = "macos") {
         // Said rather than passed over: a step that silently does nothing reads as a step that
@@ -40,7 +40,7 @@ pub(crate) fn sign_for_hypervisor(release: bool) -> Result<()> {
     let bin = binary_path(release);
     if !bin.is_file() {
         bail!(
-            "no {} at {} — build it first with `cargo build{} -p bsx`",
+            "no {} at {} — build it first with `cargo build{} -p tormoni`",
             SIGNED_BIN,
             bin.display(),
             if release { " --release" } else { "" }
@@ -149,7 +149,7 @@ mod tests {
     #[cfg(target_os = "macos")]
     #[test]
     fn a_false_entitlement_is_not_read_as_a_grant() {
-        let dir = bsx_test_support::ScratchDir::created("sign-readback");
+        let dir = tormoni_test_support::ScratchDir::created("sign-readback");
         let subject = dir.path().join("subject");
         std::fs::copy(std::env::current_exe().expect("this test binary"), &subject)
             .expect("a binary to sign");
@@ -181,12 +181,12 @@ mod tests {
     #[test]
     fn the_profile_picks_which_binary_is_signed() {
         assert!(
-            binary_path(false).ends_with("debug/bsx"),
+            binary_path(false).ends_with("debug/tormoni"),
             "{:?}",
             binary_path(false)
         );
         assert!(
-            binary_path(true).ends_with("release/bsx"),
+            binary_path(true).ends_with("release/tormoni"),
             "{:?}",
             binary_path(true)
         );

@@ -1,6 +1,6 @@
 //! A pty session on the host terminal: keystrokes and the terminal's size up, the terminal's
-//! bytes down, until the command in the guest exits. `bsx shell` runs it on a fresh sandbox and
-//! `bsx exec --tty` on a live one.
+//! bytes down, until the command in the guest exits. `tormoni shell` runs it on a fresh sandbox and
+//! `tormoni exec --tty` on a live one.
 //!
 //! - **Raw mode for exactly the session.** Engaged before the request and restored on drop, so
 //!   a panic or an early `?` cannot leave the operator's terminal eating its own line feeds.
@@ -12,7 +12,7 @@ use std::os::unix::net::UnixStream;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use bsx_channel::{ClientConnection, Request, Response};
+use tormoni_channel::{ClientConnection, Request, Response};
 
 /// How often the host terminal's size is polled for a change to forward.
 const WINSIZE_POLL: Duration = Duration::from_millis(250);

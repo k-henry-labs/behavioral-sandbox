@@ -26,7 +26,7 @@ body:
       label: Proposed shape (optional)
       description: >-
         If you have a concrete API/CLI/wire shape in mind, sketch it. If it touches the pinned
-        public API (`Sandbox`, `Limits`, `RunResult`, `VmmError`, the `bsx-channel` wire protocol) or the
+        public API (`Sandbox`, `Limits`, `RunResult`, `VmmError`, the `tormoni-channel` wire protocol) or the
         audit-record format, say so, since those change deliberately.
     validations:
       required: false
@@ -37,7 +37,7 @@ body:
       label: Which surface does it touch?
       options:
         - the CLI
-        - the host↔guest wire (`bsx-channel`) or the in-guest agent
+        - the host↔guest wire (`tormoni-channel`) or the in-guest agent
         - the guest image build
         - docs / tooling
         - not sure

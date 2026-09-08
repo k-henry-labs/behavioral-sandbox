@@ -1,5 +1,5 @@
 [package]
-name = "bsx-record"
+name = "tormoni-record"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -12,7 +12,7 @@ description = "The run record: what the notebook keeps for one sandbox's lifetim
 [dependencies]
 
 [dev-dependencies]
-bsx-test-support = { path = "../test-support" }
+tormoni-test-support = { path = "../test-support" }
 
 [lints]
 workspace = true

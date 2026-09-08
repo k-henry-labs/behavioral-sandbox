@@ -1,13 +1,13 @@
-//! The `bsx` CLI, and the hidden helper subcommand that becomes a virtual machine.
+//! The `tormoni` CLI, and the hidden helper subcommand that becomes a virtual machine.
 //!
-//! `bsx run` boots a sandbox, runs one command, and exits with its status ([`run`]); `bsx shell`
+//! `tormoni run` boots a sandbox, runs one command, and exits with its status ([`run`]); `tormoni shell`
 //! opens an interactive session on a guest pty ([`shell`]). Beside them
 //! sits `__vmm`, which is not a verb anyone types: it is how a VM comes into existence, and
 //! [`vmm`] explains why that has to be a whole process. The rest of the verbs arrive with
 //! `scratch/ROADMAP.md` phase 3.
 //!
 //! stdout stays reserved for the guest's own output, so the pipe contract holds: what the command
-//! in the sandbox writes is what `bsx run` writes.
+//! in the sandbox writes is what `tormoni run` writes.
 #![forbid(unsafe_code)]
 
 mod agent;
@@ -29,22 +29,22 @@ use clap::{Parser, Subcommand};
 /// conventional "2", the same convention (and name) as the guest agent's.
 const EXIT_OPERATIONAL: u8 = 2;
 
-/// Refuses a `--name` the filesystem could not carry, quoting `bsx-supervisor`'s rule.
+/// Refuses a `--name` the filesystem could not carry, quoting `tormoni-supervisor`'s rule.
 ///
 /// Checked where the flag was typed, or a refusal further in names the socket or the run id.
 fn check_name(name: &str) -> Result<(), String> {
-    if bsx_supervisor::socket::valid_name(name) {
+    if tormoni_supervisor::socket::valid_name(name) {
         return Ok(());
     }
     Err(format!(
         "{name:?} is not a usable --name: {}, since the name becomes a filename",
-        bsx_supervisor::socket::name_rule()
+        tormoni_supervisor::socket::name_rule()
     ))
 }
 
 #[derive(Parser)]
 #[command(
-    name = "bsx",
+    name = "tormoni",
     version,
     about = "Run untrusted code in a hardware-isolated sandbox.",
     subcommand_required = true,

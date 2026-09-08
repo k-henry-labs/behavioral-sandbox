@@ -1,4 +1,4 @@
-//! `bsx ls`, `bsx exec` and `bsx stop`: the verbs for a VM this process did not start.
+//! `tormoni ls`, `tormoni exec` and `tormoni stop`: the verbs for a VM this process did not start.
 //!
 //! **There is no daemon.** A VM exists because its helper is listening on a control socket in the
 //! runtime directory, and it stops existing when that helper does, so these verbs are a directory
@@ -8,11 +8,11 @@
 //! - **`ls` is a point-in-time answer.** A VM can end between the scan and the print, which no
 //!   design without a supervising daemon avoids, and which a caller has to handle anyway because
 //!   it is equally true of a VM it started itself.
-//! - **`stop` is a power cut**, the same one [`Vm::stop`](bsx_supervisor::Vm::stop) is: libkrun's
+//! - **`stop` is a power cut**, the same one [`Vm::stop`](tormoni_supervisor::Vm::stop) is: libkrun's
 //!   only graceful surface is efi-only and returns `-ENOTSUP`, so there is nothing gentler to ask
 //!   for. The VM ends itself, rather than being signalled by pid, so there is no window in which
 //!   the number could name somebody else.
-//! - **`exec` needs an agent**, which means a VM started by `bsx up`. A VM booted straight into a
+//! - **`exec` needs an agent**, which means a VM started by `tormoni up`. A VM booted straight into a
 //!   workload has nothing listening to ask.
 //! - **The record is kept in step here.** `exec` appends what it printed to the sandbox's
 //!   record, `stop` writes the end, and `ls --all` marks a run whose socket is dead and whose
@@ -25,10 +25,10 @@ use std::time::{Duration, Instant};
 
 use clap::Args;
 
-use bsx_channel::Response;
-use bsx_record::{End, Store};
-use bsx_supervisor::control::{self, Channel, Info};
-use bsx_supervisor::{discover, socket};
+use tormoni_channel::Response;
+use tormoni_record::{End, Store};
+use tormoni_supervisor::control::{self, Channel, Info};
+use tormoni_supervisor::{discover, socket};
 
 use crate::EXIT_OPERATIONAL;
 
@@ -65,7 +65,7 @@ pub(crate) struct ExportArgs {
     /// The run's id, or a VM name (the newest run of that name).
     #[arg(value_name = "ID|NAME")]
     pub(crate) key: String,
-    /// Where to write: a directory (which gets `bsx-<ID>.tar` inside), or the file itself.
+    /// Where to write: a directory (which gets `tormoni-<ID>.tar` inside), or the file itself.
     /// Defaults to the current directory.
     #[arg(long, value_name = "PATH")]
     pub(crate) to: Option<PathBuf>,
@@ -82,7 +82,7 @@ pub(crate) struct RmArgs {
 /// Run a command in a sandbox that is already up.
 #[derive(Args, Debug)]
 pub(crate) struct ExecArgs {
-    /// The VM's name, as `bsx ls` lists it.
+    /// The VM's name, as `tormoni ls` lists it.
     #[arg(value_name = "NAME")]
     pub(crate) name: String,
     /// A `KEY=VALUE` entry for the command's environment. Repeatable.
@@ -91,7 +91,7 @@ pub(crate) struct ExecArgs {
     /// Send this process's stdin to the command, read to end of input before it starts.
     #[arg(long = "stdin", short = 'i')]
     pub(crate) stdin: bool,
-    /// Run the command on a pty in the guest with this terminal attached, as `bsx shell` does
+    /// Run the command on a pty in the guest with this terminal attached, as `tormoni shell` does
     /// on a fresh sandbox: keystrokes and the terminal's size go in until the command exits.
     #[arg(long = "tty", short = 't', conflicts_with = "stdin")]
     pub(crate) tty: bool,
@@ -103,7 +103,7 @@ pub(crate) struct ExecArgs {
 /// Stop a running sandbox.
 #[derive(Args, Debug)]
 pub(crate) struct StopArgs {
-    /// The VM's name, as `bsx ls` lists it.
+    /// The VM's name, as `tormoni ls` lists it.
     #[arg(value_name = "NAME")]
     pub(crate) name: String,
 }
@@ -112,7 +112,7 @@ pub(crate) fn ls(args: &LsArgs) -> ExitCode {
     match list(args, &mut std::io::stdout()) {
         Ok(()) => ExitCode::SUCCESS,
         Err(msg) => {
-            eprintln!("bsx ls: {msg}");
+            eprintln!("tormoni ls: {msg}");
             ExitCode::from(EXIT_OPERATIONAL)
         }
     }
@@ -122,7 +122,7 @@ pub(crate) fn exec(args: &ExecArgs) -> ExitCode {
     match run_in(args) {
         Ok(code) => ExitCode::from(code),
         Err(msg) => {
-            eprintln!("bsx exec: {msg}");
+            eprintln!("tormoni exec: {msg}");
             ExitCode::from(EXIT_OPERATIONAL)
         }
     }
@@ -132,7 +132,7 @@ pub(crate) fn show(args: &ShowArgs) -> ExitCode {
     match describe(&args.key, &mut std::io::stdout()) {
         Ok(()) => ExitCode::SUCCESS,
         Err(msg) => {
-            eprintln!("bsx show: {msg}");
+            eprintln!("tormoni show: {msg}");
             ExitCode::from(EXIT_OPERATIONAL)
         }
     }
@@ -145,7 +145,7 @@ pub(crate) fn export(args: &ExportArgs) -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(msg) => {
-            eprintln!("bsx export: {msg}");
+            eprintln!("tormoni export: {msg}");
             ExitCode::from(EXIT_OPERATIONAL)
         }
     }
@@ -158,7 +158,7 @@ pub(crate) fn rm(args: &RmArgs) -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(msg) => {
-            eprintln!("bsx rm: {msg}");
+            eprintln!("tormoni rm: {msg}");
             ExitCode::from(EXIT_OPERATIONAL)
         }
     }
@@ -171,7 +171,7 @@ pub(crate) fn stop(args: &StopArgs) -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(msg) => {
-            eprintln!("bsx stop: {msg}");
+            eprintln!("tormoni stop: {msg}");
             ExitCode::from(EXIT_OPERATIONAL)
         }
     }
@@ -179,7 +179,7 @@ pub(crate) fn stop(args: &StopArgs) -> ExitCode {
 
 /// The columns, in order, with the width each is padded to: one definition, so a header cannot
 /// name a different column than the rows below it. A long name pushes the row out rather than
-/// truncating, since a truncated name is not one `bsx exec` takes back.
+/// truncating, since a truncated name is not one `tormoni exec` takes back.
 const COLUMNS: [(&str, usize); CELLS + 1] = [
     ("NAME", 16),
     ("PID", 8),
@@ -201,7 +201,7 @@ fn list(args: &LsArgs, out: &mut impl Write) -> Result<(), String> {
     if args.reap {
         let removed = discover::reap_stale().map_err(|e| e.to_string())?;
         if removed > 0 {
-            eprintln!("bsx ls: removed {removed} socket(s) left by VMs that had ended");
+            eprintln!("tormoni ls: removed {removed} socket(s) left by VMs that had ended");
         }
     }
     let found = discover::live().map_err(|e| e.to_string())?;
@@ -214,7 +214,7 @@ fn list(args: &LsArgs, out: &mut impl Write) -> Result<(), String> {
         let cells = match control::info(&vm.socket) {
             Ok(info) => cells_of(&info),
             Err(e) => {
-                eprintln!("bsx ls: {}: {e}", vm.name);
+                eprintln!("tormoni ls: {}: {e}", vm.name);
                 [UNKNOWN; CELLS].map(str::to_string)
             }
         };
@@ -244,14 +244,14 @@ fn list_past(out: &mut impl Write) -> Result<(), String> {
     for record in ended {
         let took = record
             .ended_ms
-            .map(|e| bsx_record::format_duration(e.saturating_sub(record.started_ms)))
+            .map(|e| tormoni_record::format_duration(e.saturating_sub(record.started_ms)))
             .unwrap_or_default();
         writeln!(
             out,
             "{:<16}  {:<10}  {:<20}  {:<8}  {}",
             record.name,
             record.end.map(|e| e.to_string()).unwrap_or_default(),
-            bsx_record::format_time(record.started_ms),
+            tormoni_record::format_time(record.started_ms),
             took,
             record.id
         )
@@ -262,7 +262,7 @@ fn list_past(out: &mut impl Write) -> Result<(), String> {
 
 /// Marks every open record whose VM is not answering as gone, and returns the ended records,
 /// newest first.
-pub(crate) fn settle_gone(store: &Store) -> Result<Vec<bsx_record::Record>, String> {
+pub(crate) fn settle_gone(store: &Store) -> Result<Vec<tormoni_record::Record>, String> {
     let mut ended = Vec::new();
     for mut record in store.list().map_err(|e| e.to_string())? {
         if record.is_open() {
@@ -280,10 +280,9 @@ pub(crate) fn settle_gone(store: &Store) -> Result<Vec<bsx_record::Record>, Stri
 
 fn describe(key: &str, out: &mut impl Write) -> Result<(), String> {
     let store = Store::open().map_err(|e| e.to_string())?;
-    let record = store
-        .find(key)
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| format!("no run named or numbered {key:?} (`bsx ls --all` lists them)"))?;
+    let record = store.find(key).map_err(|e| e.to_string())?.ok_or_else(|| {
+        format!("no run named or numbered {key:?} (`tormoni ls --all` lists them)")
+    })?;
     let dir = store.dir_of(&record.id);
     write!(out, "{}", record.to_text()).map_err(|e| e.to_string())?;
     writeln!(out, "dir {}", dir.path().display()).map_err(|e| e.to_string())?;
@@ -310,10 +309,9 @@ fn describe(key: &str, out: &mut impl Write) -> Result<(), String> {
 
 fn export_run(key: &str, to: Option<&Path>) -> Result<PathBuf, String> {
     let store = Store::open().map_err(|e| e.to_string())?;
-    let record = store
-        .find(key)
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| format!("no run named or numbered {key:?} (`bsx ls --all` lists them)"))?;
+    let record = store.find(key).map_err(|e| e.to_string())?.ok_or_else(|| {
+        format!("no run named or numbered {key:?} (`tormoni ls --all` lists them)")
+    })?;
     store
         .export(&record.id, to.unwrap_or(Path::new(".")))
         .map_err(|e| e.to_string())
@@ -321,13 +319,12 @@ fn export_run(key: &str, to: Option<&Path>) -> Result<PathBuf, String> {
 
 fn forget(key: &str) -> Result<String, String> {
     let store = Store::open().map_err(|e| e.to_string())?;
-    let record = store
-        .find(key)
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| format!("no run named or numbered {key:?} (`bsx ls --all` lists them)"))?;
+    let record = store.find(key).map_err(|e| e.to_string())?.ok_or_else(|| {
+        format!("no run named or numbered {key:?} (`tormoni ls --all` lists them)")
+    })?;
     if record.is_open() && socket::path_for(&record.name).is_ok_and(|p| socket::is_live(&p)) {
         return Err(format!(
-            "the run {} is still running; `bsx stop {}` ends it first",
+            "the run {} is still running; `tormoni stop {}` ends it first",
             record.id, record.name
         ));
     }
@@ -363,7 +360,7 @@ fn live_socket(name: &str) -> Result<std::path::PathBuf, String> {
     let path = socket::path_for(name).map_err(|e| e.to_string())?;
     if !socket::is_live(&path) {
         return Err(format!(
-            "no VM named {name:?} is running (`bsx ls` lists the ones that are)"
+            "no VM named {name:?} is running (`tormoni ls` lists the ones that are)"
         ));
     }
     Ok(path)
@@ -375,7 +372,7 @@ fn run_in(args: &ExecArgs) -> Result<u8, String> {
     if info.channel != Channel::Present {
         return Err(format!(
             "the VM {:?} has no agent channel, so there is nothing in it to ask; \
-             `bsx up` starts one that has",
+             `tormoni up` starts one that has",
             args.name
         ));
     }
@@ -414,7 +411,12 @@ fn run_in(args: &ExecArgs) -> Result<u8, String> {
             dir.append(&dir.exec_log()).ok()
         });
     if let Some(log) = &mut log {
-        let _ = writeln!(log, "# {} {}", bsx_record::now_ms(), args.command.join(" "));
+        let _ = writeln!(
+            log,
+            "# {} {}",
+            tormoni_record::now_ms(),
+            args.command.join(" ")
+        );
     }
     if args.tty {
         let mut sink = std::io::sink();
@@ -470,7 +472,7 @@ fn run_in(args: &ExecArgs) -> Result<u8, String> {
 fn read_stdin() -> Result<Vec<u8>, String> {
     let mut reader = std::io::stdin()
         .lock()
-        .take(u64::try_from(bsx_channel::MAX_PAYLOAD).unwrap_or(u64::MAX));
+        .take(u64::try_from(tormoni_channel::MAX_PAYLOAD).unwrap_or(u64::MAX));
     let mut buf = Vec::new();
     let mut chunk = [0u8; 8192];
     loop {
@@ -543,7 +545,7 @@ mod tests {
 
     use std::num::{NonZeroU8, NonZeroU32};
 
-    use bsx_supervisor::{Net, RootFs};
+    use tormoni_supervisor::{Net, RootFs};
 
     use super::{CELLS, COLUMNS, Channel, Info, UNKNOWN, cells_of, row};
 

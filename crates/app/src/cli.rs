@@ -1,11 +1,11 @@
-//! The `bsx` binary as the app runs it: starting a run, stopping one, and a shell in the
+//! The `tormoni` binary as the app runs it: starting a run, stopping one, and a shell in the
 //! operator's terminal. The app has no verb of its own, so this is the whole bridge.
 //!
-//! - **Which `bsx`.** `$BSX_CLI` if set, else the `bsx` beside this binary, else the one on
+//! - **Which `tormoni`.** `$TORMONI_CLI` if set, else the `tormoni` beside this binary, else the one on
 //!   `PATH`, so a packaged pair and a `target/` pair both find each other.
-//! - **A started run is not this process's.** `bsx run` is spawned detached with its stdio on
+//! - **A started run is not this process's.** `tormoni run` is spawned detached with its stdio on
 //!   `/dev/null` (the record has the output), and a thread reaps it so nothing is left a zombie;
-//!   `bsx up` returns at once with the name.
+//!   `tormoni up` returns at once with the name.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -13,36 +13,36 @@ use std::process::{Command, Stdio};
 use crate::Form;
 
 /// Where the CLI is.
-pub(crate) fn bsx_path() -> PathBuf {
-    if let Some(path) = std::env::var_os("BSX_CLI") {
+pub(crate) fn tormoni_path() -> PathBuf {
+    if let Some(path) = std::env::var_os("TORMONI_CLI") {
         return PathBuf::from(path);
     }
     if let Ok(me) = std::env::current_exe()
         && let Some(dir) = me.parent()
     {
-        let beside = dir.join("bsx");
+        let beside = dir.join("tormoni");
         if beside.is_file() {
             return beside;
         }
     }
-    PathBuf::from("bsx")
+    PathBuf::from("tormoni")
 }
 
 /// The guest root the CLI would default to, for the form's first value.
 pub(crate) fn default_root() -> Option<PathBuf> {
-    if let Some(root) = std::env::var_os("BSX_GUEST_ROOT") {
+    if let Some(root) = std::env::var_os("TORMONI_GUEST_ROOT") {
         return Some(PathBuf::from(root));
     }
     let data = std::env::var_os("XDG_DATA_HOME")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")))?;
-    Some(data.join("bsx/rootfs"))
+    Some(data.join("tormoni/rootfs"))
 }
 
-/// What the menu's status line reports: where `bsx` and the guest root are, if anywhere.
+/// What the menu's status line reports: where `tormoni` and the guest root are, if anywhere.
 #[derive(Debug, Default)]
 pub(crate) struct Platform {
-    pub(crate) bsx: Option<PathBuf>,
+    pub(crate) tormoni: Option<PathBuf>,
     pub(crate) root: GuestRoot,
 }
 
@@ -64,15 +64,15 @@ pub(crate) fn probe() -> Platform {
         None => GuestRoot::Unset,
     };
     Platform {
-        bsx: find_bsx(),
+        tormoni: find_tormoni(),
         root,
     }
 }
 
-/// The `bsx` that [`bsx_path`] names, when it would actually spawn: the path itself when it is
+/// The `tormoni` that [`tormoni_path`] names, when it would actually spawn: the path itself when it is
 /// an executable file, or the first executable match on `PATH` for a bare name.
-fn find_bsx() -> Option<PathBuf> {
-    let named = bsx_path();
+fn find_tormoni() -> Option<PathBuf> {
+    let named = tormoni_path();
     if named
         .parent()
         .is_some_and(|dir| !dir.as_os_str().is_empty())
@@ -153,29 +153,29 @@ pub(crate) fn posture_args(form: &Form, name: &str) -> Result<Vec<String>, Strin
     Ok(args)
 }
 
-/// Starts the run the form describes and returns its name: `bsx run` for a command, detached,
-/// or `bsx up` for a sandbox with none.
-pub(crate) fn start(bsx: &Path, form: &Form) -> Result<crate::RunName, String> {
+/// Starts the run the form describes and returns its name: `tormoni run` for a command, detached,
+/// or `tormoni up` for a sandbox with none.
+pub(crate) fn start(tormoni: &Path, form: &Form) -> Result<crate::RunName, String> {
     let name = if form.name.trim().is_empty() {
-        format!("app-{}", bsx_record::now_ms())
+        format!("app-{}", tormoni_record::now_ms())
     } else {
         form.name.trim().to_string()
     };
     let args = posture_args(form, &name)?;
     let command: Vec<&str> = form.command.split_whitespace().collect();
     if command.is_empty() {
-        let out = Command::new(bsx)
+        let out = Command::new(tormoni)
             .arg("up")
             .args(&args)
             .stdin(Stdio::null())
             .output()
-            .map_err(|e| format!("run {}: {e}", bsx.display()))?;
+            .map_err(|e| format!("run {}: {e}", tormoni.display()))?;
         if !out.status.success() {
             return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
         }
         return Ok(crate::RunName::started(name));
     }
-    let child = Command::new(bsx)
+    let child = Command::new(tormoni)
         .arg("run")
         .args(&args)
         .arg("--")
@@ -184,7 +184,7 @@ pub(crate) fn start(bsx: &Path, form: &Form) -> Result<crate::RunName, String> {
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
-        .map_err(|e| format!("run {}: {e}", bsx.display()))?;
+        .map_err(|e| format!("run {}: {e}", tormoni.display()))?;
     reap(child);
     // The record is written before the VM boots, so a short wait is all the list needs.
     std::thread::sleep(std::time::Duration::from_millis(300));
@@ -192,12 +192,12 @@ pub(crate) fn start(bsx: &Path, form: &Form) -> Result<crate::RunName, String> {
 }
 
 /// Stops the run named `name`.
-pub(crate) fn stop(bsx: &Path, name: &str) -> Result<String, String> {
-    let out = Command::new(bsx)
+pub(crate) fn stop(tormoni: &Path, name: &str) -> Result<String, String> {
+    let out = Command::new(tormoni)
         .args(["stop", name])
         .stdin(Stdio::null())
         .output()
-        .map_err(|e| format!("run bsx: {e}"))?;
+        .map_err(|e| format!("run tormoni: {e}"))?;
     if out.status.success() {
         Ok(format!("stopped {name}"))
     } else {
@@ -205,11 +205,11 @@ pub(crate) fn stop(bsx: &Path, name: &str) -> Result<String, String> {
     }
 }
 
-/// Opens the operator's terminal on a shell in the run named `name`: `bsx exec --tty`.
-pub(crate) fn open_shell(bsx: &Path, name: &str) -> Result<String, String> {
+/// Opens the operator's terminal on a shell in the run named `name`: `tormoni exec --tty`.
+pub(crate) fn open_shell(tormoni: &Path, name: &str) -> Result<String, String> {
     let terminal = terminal().ok_or_else(no_terminal)?;
     let shown = terminal.shown();
-    let mut cmd = terminal.command(bsx, name)?;
+    let mut cmd = terminal.command(tormoni, name)?;
     let child = cmd
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -253,12 +253,13 @@ impl Terminal {
     }
 
     /// The command that opens a shell on `name`.
-    fn command(&self, bsx: &Path, name: &str) -> Result<Command, String> {
+    fn command(&self, tormoni: &Path, name: &str) -> Result<Command, String> {
         match self {
             Self::Direct { program, before } => {
                 let mut cmd = Command::new(program);
                 cmd.args(*before);
-                cmd.arg(bsx).args(["exec", "--tty", name, "--", "/bin/sh"]);
+                cmd.arg(tormoni)
+                    .args(["exec", "--tty", name, "--", "/bin/sh"]);
                 Ok(cmd)
             }
             // `open -a Terminal <file>` is the only route that needs no AppleScript, and
@@ -266,10 +267,10 @@ impl Terminal {
             // itself first thing, so a launch that never happens leaves the OS to clean one file
             // out of its own temporary directory rather than leaving one behind on every click.
             Self::TerminalApp => {
-                let script = std::env::temp_dir().join(format!("bsx-shell-{name}.command"));
+                let script = std::env::temp_dir().join(format!("tormoni-shell-{name}.command"));
                 let body = format!(
                     "#!/bin/sh\nrm -f -- \"$0\"\nexec {} exec --tty {} -- /bin/sh\n",
-                    shell_quote(&bsx.display().to_string()),
+                    shell_quote(&tormoni.display().to_string()),
                     shell_quote(name)
                 );
                 std::fs::write(&script, body).map_err(|e| format!("write {script:?}: {e}"))?;
@@ -375,7 +376,7 @@ fn bundle_name(binary: &str) -> &str {
     }
 }
 
-/// Waits for `child` on a thread of its own, so a detached `bsx` is reaped when it ends.
+/// Waits for `child` on a thread of its own, so a detached `tormoni` is reaped when it ends.
 fn reap(mut child: std::process::Child) {
     std::thread::spawn(move || {
         let _ = child.wait();
@@ -386,10 +387,10 @@ fn reap(mut child: std::process::Child) {
 mod tests {
     use super::*;
 
-    /// Only a regular file with an execute bit counts as a found `bsx`.
+    /// Only a regular file with an execute bit counts as a found `tormoni`.
     #[test]
     fn only_an_executable_file_counts_as_found() {
-        let dir = bsx_test_support::ScratchDir::created("app-probe");
+        let dir = tormoni_test_support::ScratchDir::created("app-probe");
         let plain = dir.path().join("plain");
         std::fs::write(&plain, b"#!/bin/sh\n").expect("written");
         std::fs::set_permissions(&plain, PermissionsExt::from_mode(0o644)).expect("chmod");
@@ -402,7 +403,7 @@ mod tests {
     use std::os::unix::fs::PermissionsExt;
 
     /// A direct terminal is handed the command as arguments, after whatever that terminal needs
-    /// first, and the shell is the last word: `wezterm start -- bsx exec --tty NAME -- /bin/sh`.
+    /// first, and the shell is the last word: `wezterm start -- tormoni exec --tty NAME -- /bin/sh`.
     #[test]
     fn a_direct_terminal_is_handed_the_command() {
         let term = Terminal::Direct {
@@ -410,7 +411,7 @@ mod tests {
             before: &["start", "--"],
         };
         let cmd = term
-            .command(Path::new("/usr/local/bin/bsx"), "vm1")
+            .command(Path::new("/usr/local/bin/tormoni"), "vm1")
             .expect("built");
         let args: Vec<String> = cmd
             .get_args()
@@ -421,7 +422,7 @@ mod tests {
             [
                 "start",
                 "--",
-                "/usr/local/bin/bsx",
+                "/usr/local/bin/tormoni",
                 "exec",
                 "--tty",
                 "vm1",
@@ -438,7 +439,7 @@ mod tests {
     #[test]
     fn terminal_app_is_opened_on_a_script_that_runs_the_shell() {
         let cmd = Terminal::TerminalApp
-            .command(Path::new("/usr/local/bin/bsx"), "vm-two")
+            .command(Path::new("/usr/local/bin/tormoni"), "vm-two")
             .expect("built");
         let args: Vec<String> = cmd
             .get_args()
@@ -464,8 +465,8 @@ mod tests {
     #[test]
     fn a_quoted_word_survives_a_space_and_a_quote() {
         assert_eq!(
-            shell_quote("/Volumes/My Disk/bsx"),
-            "'/Volumes/My Disk/bsx'"
+            shell_quote("/Volumes/My Disk/tormoni"),
+            "'/Volumes/My Disk/tormoni'"
         );
         assert_eq!(shell_quote("it's"), r"'it'\''s'");
     }
@@ -560,7 +561,7 @@ mod tests {
         assert!(posture_args(&form, "x").is_err());
     }
 
-    /// The bridge starts a run through the built `bsx` and the record appears under the runs
+    /// The bridge starts a run through the built `tormoni` and the record appears under the runs
     /// directory it was given, then stops it and the record ends `stopped`. Needs /dev/kvm and
     /// the guest tree, and skips with the reason otherwise.
     #[test]
@@ -570,35 +571,35 @@ mod tests {
             .nth(2)
             .expect("the workspace")
             .to_path_buf();
-        let bsx = root.join("target/debug/bsx");
+        let tormoni = root.join("target/debug/tormoni");
         let guest = root.join("artifacts/rootfs-guest");
-        if let Some(why) = bsx_test_support::hypervisor_unusable() {
+        if let Some(why) = tormoni_test_support::hypervisor_unusable() {
             println!("SKIPPED the_bridge_starts_and_stops_a_run_the_record_shows: {why}");
             return;
         }
-        if !bsx.is_file() || !guest.is_dir() {
+        if !tormoni.is_file() || !guest.is_dir() {
             println!(
                 "SKIPPED the_bridge_starts_and_stops_a_run_the_record_shows: no {} or {}",
-                bsx.display(),
+                tormoni.display(),
                 guest.display()
             );
             return;
         }
-        let dir = bsx_test_support::ScratchDir::created("app-bridge");
+        let dir = tormoni_test_support::ScratchDir::created("app-bridge");
         let runs = dir.path().join("runs");
         let rt = dir.path().join("rt");
         std::fs::create_dir(&rt).expect("a runtime dir");
         std::fs::set_permissions(&rt, std::fs::Permissions::from_mode(0o700)).expect("private");
         // The CLI reads the runs directory and the runtime directory from the environment, which
-        // a test must not set for its own process: a wrapper script sets them for `bsx` alone.
-        let wrapper = dir.path().join("bsx");
+        // a test must not set for its own process: a wrapper script sets them for `tormoni` alone.
+        let wrapper = dir.path().join("tormoni");
         std::fs::write(
             &wrapper,
             format!(
-                "#!/bin/sh\nexport BSX_RUNS_DIR={}\nexport XDG_RUNTIME_DIR={}\nunset DISPLAY WAYLAND_DISPLAY\nexec {} \"$@\"\n",
+                "#!/bin/sh\nexport TORMONI_RUNS_DIR={}\nexport XDG_RUNTIME_DIR={}\nunset DISPLAY WAYLAND_DISPLAY\nexec {} \"$@\"\n",
                 runs.display(),
                 rt.display(),
-                bsx.display()
+                tormoni.display()
             ),
         )
         .expect("the wrapper");
@@ -613,14 +614,14 @@ mod tests {
         };
         let name = start(&wrapper, &form).expect("started");
         assert_eq!(name.as_str(), "bridged");
-        let store = bsx_record::Store::at(runs.clone()).expect("the store");
+        let store = tormoni_record::Store::at(runs.clone()).expect("the store");
         let open = store
             .open_run("bridged")
             .expect("read")
             .expect("an open record");
-        assert_eq!(open.verb, bsx_record::Verb::Up);
+        assert_eq!(open.verb, tormoni_record::Verb::Up);
         stop(&wrapper, "bridged").expect("stopped");
         let ended = store.find("bridged").expect("read").expect("still there");
-        assert_eq!(ended.end, Some(bsx_record::End::Stopped));
+        assert_eq!(ended.end, Some(tormoni_record::End::Stopped));
     }
 }

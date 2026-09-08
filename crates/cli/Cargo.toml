@@ -1,5 +1,5 @@
 [package]
-name = "bsx"
+name = "tormoni"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -7,23 +7,23 @@ rust-version.workspace = true
 repository.workspace = true
 authors.workspace = true
 publish = false
-description = "The bsx CLI (`bsx`)."
+description = "The tormoni CLI (`tormoni`)."
 
-# One entrypoint: `bsx`, the canonical command, built from `src/main.rs`.
+# One entrypoint: `tormoni`, the canonical command, built from `src/main.rs`.
 [[bin]]
-name = "bsx"
+name = "tormoni"
 path = "src/main.rs"
 
 [dependencies]
 # The agent wire protocol, for the interactive shell's session over vsock.
-bsx-channel = { path = "../channel" }
-bsx-krun = { path = "../krun" }
+tormoni-channel = { path = "../channel" }
+tormoni-krun = { path = "../krun" }
 # The guest's keyboard and pointer: devices, reports, and the line grammar the replay and the
 # control socket feed.
-bsx-input = { path = "../input" }
+tormoni-input = { path = "../input" }
 # The run record every verb that boots writes: the notebook's unit.
-bsx-record = { path = "../record" }
-bsx-supervisor = { path = "../supervisor" }
+tormoni-record = { path = "../record" }
+tormoni-supervisor = { path = "../supervisor" }
 clap = { workspace = true }
 # Raw mode and window size for the interactive shell, the self-signal a VM stops itself with, and
 # the readiness wait on a non-blocking stdin. Safe wrappers only.
@@ -34,11 +34,11 @@ softbuffer = { workspace = true }
 
 [dev-dependencies]
 # The `/dev/kvm` probe, so the end-to-end tests skip with the same message everywhere.
-bsx-test-support = { path = "../test-support" }
+tormoni-test-support = { path = "../test-support" }
 
 [features]
 # Exposes library items for the fuzz harness in `fuzz/`; without it the library target is empty and
-# the package is just the `bsx` binary. Nothing is behind it today (see `src/lib.rs`).
+# the package is just the `tormoni` binary. Nothing is behind it today (see `src/lib.rs`).
 fuzzing = []
 
 [lints]

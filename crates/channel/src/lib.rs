@@ -1,4 +1,4 @@
-//! `bsx-channel`, the host↔guest wire protocol for the exec channel.
+//! `tormoni-channel`, the host↔guest wire protocol for the exec channel.
 //!
 //! Handles command execution framing over a single bidirectional byte stream (vsock or unix socket).
 //! Nearly dependency-free (`zeroize` only) and unit-testable without a VM.

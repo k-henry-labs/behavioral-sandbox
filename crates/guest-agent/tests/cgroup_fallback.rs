@@ -8,7 +8,7 @@
 // A test binary: panicking on setup failure is the idiomatic assertion here.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use bsx_test_support::LogSink;
+use tormoni_test_support::LogSink;
 
 mod common;
 
@@ -19,7 +19,7 @@ use common::{Agent, Exec};
 /// ordinary dev box does not, and the agent must be right on both.
 fn can_make_a_cgroup() -> bool {
     let probe = std::path::Path::new("/sys/fs/cgroup")
-        .join(format!("bsx-cgroup-probe-{}", std::process::id()));
+        .join(format!("tormoni-cgroup-probe-{}", std::process::id()));
     match std::fs::create_dir(&probe) {
         Ok(()) => {
             let _ = std::fs::remove_dir(&probe);
@@ -37,7 +37,7 @@ fn log_of_execs(n: usize) -> String {
         let agent_sink = sink.clone();
         let mut agent = Agent::spawn(move |guest| {
             tracing::subscriber::with_default(agent_sink.subscriber(), || {
-                bsx_guest_agent::serve(guest)
+                tormoni_guest_agent::serve(guest)
             })
         });
         agent.exec(Exec::new(&["true"]));

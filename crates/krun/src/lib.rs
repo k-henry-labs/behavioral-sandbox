@@ -1,7 +1,7 @@
 //! A safe wrapper over libkrun: a builder that puts the library's call-ordering rules in the type
 //! system, and turns its negative-errno returns into a typed [`Error`].
 //!
-//! **This crate may use `unsafe`**, because libkrun is a C library; `bsx-app`'s window chrome is
+//! **This crate may use `unsafe`**, because libkrun is a C library; `tormoni-app`'s window chrome is
 //! the only other, for AppKit. `every_crate_forbids_unsafe` in the gate asserts the exempt list
 //! *equals* those two, so neither a third nor the loss of this one passes quietly. The raw declarations live in a
 //! private `sys` module rather than a separate `-sys` package, which makes the API below the only
@@ -21,7 +21,7 @@
 //! # What it deliberately does not do
 //!
 //! No stop path. `krun_get_shutdown_eventfd` is efi-only and returns `-ENOTSUP` against a stock
-//! libkrun, and what stops a running VM is a signal to the helper process (`bsx-supervisor`'s
+//! libkrun, and what stops a running VM is a signal to the helper process (`tormoni-supervisor`'s
 //! `Vm::stop`), so there is nothing of libkrun's to wrap.
 //!
 //! Guest 3D is a posture, not a default. [`Machine::gpu_device`] takes a [`GpuMode`]: `Display`
@@ -135,7 +135,7 @@ impl fmt::Display for Error {
             Self::NotLinked { call } => write!(
                 f,
                 "{call} cannot be called: this build links no libkrun (install libkrun, or set \
-                 BSX_KRUN_LIB_DIR, and rebuild)"
+                 TORMONI_KRUN_LIB_DIR, and rebuild)"
             ),
             Self::OutOfRange { what, value, max } => {
                 write!(
@@ -777,10 +777,10 @@ impl HeapRegion {
 /// dynamic loader resolves against its own search paths and never the linker's. On macOS those
 /// paths do not include a Homebrew prefix, so the process that calls [`Machine::enter`] has to be
 /// given the directory through `DYLD_FALLBACK_LIBRARY_PATH`, and `DYLD_*` is read at `exec`, so it
-/// can only come from whatever spawned it. `bsx-supervisor` puts it on the helper it spawns.
+/// can only come from whatever spawned it. `tormoni-supervisor` puts it on the helper it spawns.
 ///
 /// `None` on Linux, whose loader finds `libkrunfw.so` beside libkrun without help.
-pub const KRUNFW_DIR: Option<&str> = option_env!("BSX_KRUNFW_DIR");
+pub const KRUNFW_DIR: Option<&str> = option_env!("TORMONI_KRUNFW_DIR");
 
 /// A memfd of one fixed size, sealed against growing or shrinking, mapped shared. The sealing is
 /// what lets a second process map it without either side being able to shrink it under the
@@ -2385,7 +2385,7 @@ mod tests {
             "got {err:?}"
         );
         let msg = err.to_string();
-        assert!(msg.contains("BSX_KRUN_LIB_DIR"), "names the fix: {msg}");
+        assert!(msg.contains("TORMONI_KRUN_LIB_DIR"), "names the fix: {msg}");
     }
 
     #[cfg(krun_linked)]
@@ -3145,7 +3145,7 @@ mod tests {
     #[test]
     fn an_input_device_answers_the_probe_queries_through_its_table() {
         let device = Arc::new(
-            InputDevice::new("bsx test device")
+            InputDevice::new("tormoni test device")
                 .serial("SERIAL-1")
                 .ids(6, 0x1234, 0x5678, 2)
                 .keys([1, 30, 0x110])
@@ -3157,7 +3157,7 @@ mod tests {
 
         let mut name = [0u8; 4];
         let got = unsafe { c_query_device_name(instance, name.as_mut_ptr(), name.len()) };
-        assert_eq!((got, &name[..]), (4, &b"bsx "[..]), "cut to the buffer");
+        assert_eq!((got, &name[..]), (4, &b"torm"[..]), "cut to the buffer");
         let mut serial = [0u8; 128];
         let got = unsafe { c_query_serial_name(instance, serial.as_mut_ptr(), serial.len()) };
         assert_eq!((got, &serial[..8]), (8, &b"SERIAL-1"[..]));

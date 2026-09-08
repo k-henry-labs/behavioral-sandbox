@@ -1,5 +1,5 @@
 [package]
-name = "bsx-supervisor"
+name = "tormoni-supervisor"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -14,10 +14,10 @@ description = "Spawn, track, stop and reap the helper processes that are VMs."
 rustix = { workspace = true, features = ["net", "process"] }
 # For `KRUNFW_DIR` alone: the helper this crate spawns *is* a libkrun VMM, and it has to be told
 # where libkrun's kernel payload is (see `helper_command`). No libkrun call is made from here.
-bsx-krun = { path = "../krun" }
+tormoni-krun = { path = "../krun" }
 
 [dev-dependencies]
-bsx-test-support = { path = "../test-support" }
+tormoni-test-support = { path = "../test-support" }
 
 [lints]
 workspace = true

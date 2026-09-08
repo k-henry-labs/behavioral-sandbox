@@ -1,5 +1,5 @@
 [package]
-name = "bsx-app"
+name = "tormoni-app"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -7,21 +7,21 @@ rust-version.workspace = true
 repository.workspace = true
 authors.workspace = true
 publish = false
-description = "The bsx GUI application (`bsx-app`): the iced spike."
+description = "The tormoni GUI application (`tormoni-app`): the iced spike."
 
 [[bin]]
-name = "bsx-app"
+name = "tormoni-app"
 path = "src/main.rs"
 
 [dependencies]
 # The mapping of a leased display's memfd (`SharedFrames`) and the pixel formats it names.
-bsx-krun = { path = "../krun" }
+tormoni-krun = { path = "../krun" }
 # The reports the window's keyboard and pointer become, and the lines they travel as.
-bsx-input = { path = "../input" }
+tormoni-input = { path = "../input" }
 # The notebook's records, read straight from the runs directory.
-bsx-record = { path = "../record" }
+tormoni-record = { path = "../record" }
 # The control socket a display is leased over.
-bsx-supervisor = { path = "../supervisor" }
+tormoni-supervisor = { path = "../supervisor" }
 clap = { workspace = true }
 iced = { workspace = true }
 # The monotonic clock the frame logs share with the helper's `--frame-log`.
@@ -35,7 +35,7 @@ objc2-app-kit = { version = "0.2", features = ["NSResponder", "NSToolbar", "NSVi
 objc2-foundation = "0.2"
 
 [dev-dependencies]
-bsx-test-support = { path = "../test-support" }
+tormoni-test-support = { path = "../test-support" }
 ttf-parser = "0.25.1"
 
 [lints]

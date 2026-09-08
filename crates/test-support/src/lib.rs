@@ -50,13 +50,13 @@ pub fn hypervisor_unusable() -> Option<String> {
             return Some("this machine reports no Hypervisor.framework support".to_string());
         }
         // The machine can, and a test still cannot. Hypervisor.framework refuses a process that
-        // does not carry `com.apple.security.hypervisor`, and cargo rewrites `target/debug/bsx`
+        // does not carry `com.apple.security.hypervisor`, and cargo rewrites `target/debug/tormoni`
         // (and so drops any signature) as part of the very run that would use it, so a suite has
         // no signed binary to spawn. Booting a VM from the test harness on macOS therefore needs
         // the signing question answered first; a *manual* run after `cargo xtask sign` works, which
         // is how the benches are run.
         Some(
-            "a VM booted from a test needs an entitled `bsx`, and cargo drops the signature \
+            "a VM booted from a test needs an entitled `tormoni`, and cargo drops the signature \
              during the same run that would spawn it (`cargo xtask sign` covers a manual run)"
                 .to_string(),
         )
@@ -183,7 +183,7 @@ impl ScratchDir {
         use std::sync::atomic::{AtomicU32, Ordering};
         static SEQ: AtomicU32 = AtomicU32::new(0);
         let dir = std::env::temp_dir().join(format!(
-            "bsx-{tag}-{}-{}",
+            "tormoni-{tag}-{}-{}",
             std::process::id(),
             SEQ.fetch_add(1, Ordering::Relaxed)
         ));

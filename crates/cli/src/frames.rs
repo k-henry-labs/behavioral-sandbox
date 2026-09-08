@@ -1,4 +1,4 @@
-//! `bsx __frames`: a second process reading a sandbox's display through the control socket.
+//! `tormoni __frames`: a second process reading a sandbox's display through the control socket.
 //!
 //! The 4.9 client, in the shape the application (4.10) will use: lease the display, map the memfd
 //! the answer carries, and consume one record per present, each naming the slot the frame is in.
@@ -19,7 +19,7 @@ use std::time::{Duration, Instant};
 
 use clap::Args;
 
-use bsx_supervisor::control::{self, Event};
+use tormoni_supervisor::control::{self, Event};
 
 /// How long to keep asking for a lease while the guest has no scanout yet.
 const CONFIGURE_WAIT: Duration = Duration::from_secs(30);
@@ -43,14 +43,14 @@ pub(crate) fn run(args: &FramesArgs) -> ExitCode {
     match read(args) {
         Ok(()) => ExitCode::SUCCESS,
         Err(msg) => {
-            eprintln!("bsx __frames: {msg}");
+            eprintln!("tormoni __frames: {msg}");
             ExitCode::from(crate::EXIT_OPERATIONAL)
         }
     }
 }
 
 fn read(args: &FramesArgs) -> Result<(), String> {
-    let socket = bsx_supervisor::socket::path_for(&args.name).map_err(|e| e.to_string())?;
+    let socket = tormoni_supervisor::socket::path_for(&args.name).map_err(|e| e.to_string())?;
     let mut log = args
         .log
         .clone()
@@ -61,7 +61,7 @@ fn read(args: &FramesArgs) -> Result<(), String> {
     loop {
         match read_one_lease(&socket, args, &mut log, &mut read)? {
             Some(()) => return Ok(()),
-            None => eprintln!("bsx __frames: the display was reconfigured; leasing again"),
+            None => eprintln!("tormoni __frames: the display was reconfigured; leasing again"),
         }
     }
 }
@@ -104,16 +104,16 @@ fn read_one_lease(
     let memfd = lease
         .take_memfd()
         .ok_or_else(|| "the lease carried no memfd".to_string())?;
-    let layout = bsx_krun::SharedLayout::new(
+    let layout = tormoni_krun::SharedLayout::new(
         scanout.width,
         scanout.height,
-        bsx_krun::PixelFormat::from_raw(scanout.format),
+        tormoni_krun::PixelFormat::from_raw(scanout.format),
         scanout.stride,
         scanout.slots,
         scanout.slot_bytes,
         scanout.generation,
     );
-    let mapped = bsx_krun::SharedFrames::map(memfd, layout).map_err(|e| e.to_string())?;
+    let mapped = tormoni_krun::SharedFrames::map(memfd, layout).map_err(|e| e.to_string())?;
     let mut last = None;
     let mut outcome = Some(());
     while args.count.is_none_or(|n| *read < n) {

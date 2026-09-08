@@ -11,7 +11,7 @@
 //!   and sees it the moment it does, so this thread adds no interval of its own to a frame's
 //!   path. The callback libkrun calls still knows nothing about windows.
 //! - **The window is the sandbox's lifetime, not the other way round.** Closing it ends the VM
-//!   the way `bsx stop` does; the VM ending takes the window with it, because the process exits.
+//!   the way `tormoni stop` does; the VM ending takes the window with it, because the process exits.
 //! - **The frame follows the window.** A window the user resizes shows the frame scaled to fit,
 //!   its aspect kept, and the pointer is measured against where the frame landed. The other
 //!   direction does not exist: libkrun 1.19.4 answers the guest's display-info query from a fixed
@@ -32,13 +32,13 @@ use std::num::NonZeroU32;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Condvar, Mutex};
 
-use bsx_krun::{Frame, MemoryFramebuffer, PixelFormat};
+use tormoni_krun::{Frame, MemoryFramebuffer, PixelFormat};
 use winit::application::ApplicationHandler;
 use winit::event::{MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::window::{Window, WindowId};
 
-use bsx_input::{Area, Held};
+use tormoni_input::{Area, Held};
 
 use crate::input::{self, Inputs};
 
@@ -55,10 +55,10 @@ pub(crate) fn spawn(
     frame_log: Option<PathBuf>,
     inputs: Inputs,
 ) -> io::Result<()> {
-    let title = format!("bsx: {title}");
+    let title = format!("tormoni: {title}");
     let log = frame_log.map(FrameLog::create).transpose()?;
     std::thread::Builder::new()
-        .name("bsx-display".to_string())
+        .name("tormoni-display".to_string())
         .spawn(move || {
             let mut sinks = Sinks {
                 screenshot,
@@ -69,7 +69,7 @@ pub(crate) fn spawn(
                 Ok(l) => l,
                 Err(why) => {
                     eprintln!(
-                        "bsx __vmm: warning: no window ({why}); the display runs without one"
+                        "tormoni __vmm: warning: no window ({why}); the display runs without one"
                     );
                     headless(&framebuffer, &mut sinks);
                     return;
@@ -376,23 +376,26 @@ impl ApplicationHandler for App {
             }
             WindowEvent::Focused(false) => self.release_all(),
             WindowEvent::KeyboardInput { event, .. } => {
-                let action = bsx_input::KeyAction::of(event.state.is_pressed(), event.repeat);
+                let action = tormoni_input::KeyAction::of(event.state.is_pressed(), event.repeat);
                 if let Some(code) = event.physical_key.to_scancode()
-                    && let Some(report) = bsx_input::key(code, action)
+                    && let Some(report) = tormoni_input::key(code, action)
                 {
                     self.held.key(report[0].code, action.is_down());
                     let _ = self.inputs.keyboard.send(&report);
                 }
             }
             WindowEvent::CursorMoved { position, .. } => {
-                let report = bsx_input::position(position.x, position.y, area(self.placement));
+                let report = tormoni_input::position(position.x, position.y, area(self.placement));
                 let _ = self.inputs.pointer.send(&report);
             }
             WindowEvent::MouseInput { state, button, .. } => {
                 if let Some(code) = input::button_code(button) {
                     let pressed = state.is_pressed();
                     self.held.button(code, pressed);
-                    let _ = self.inputs.pointer.send(&bsx_input::button(code, pressed));
+                    let _ = self
+                        .inputs
+                        .pointer
+                        .send(&tormoni_input::button(code, pressed));
                 }
             }
             WindowEvent::MouseWheel { delta, .. } => {
@@ -400,11 +403,11 @@ impl ApplicationHandler for App {
                     MouseScrollDelta::LineDelta(x, y) => (f64::from(x), f64::from(y)),
                     // The window's pixel count as a line; `wheel` rounds and clamps it.
                     MouseScrollDelta::PixelDelta(p) => (
-                        p.x / bsx_input::WHEEL_LINE_PIXELS,
-                        p.y / bsx_input::WHEEL_LINE_PIXELS,
+                        p.x / tormoni_input::WHEEL_LINE_PIXELS,
+                        p.y / tormoni_input::WHEEL_LINE_PIXELS,
                     ),
                 };
-                let report = bsx_input::wheel(dx, dy);
+                let report = tormoni_input::wheel(dx, dy);
                 if !report.is_empty() {
                     let _ = self.inputs.pointer.send(&report);
                 }
@@ -512,7 +515,7 @@ mod tests {
     /// A frame is only ever made by the backend, so a test gets one the way libkrun would:
     /// through a real `MemoryFramebuffer`.
     fn frame(format: PixelFormat, width: u32, height: u32, pixels: &[u8]) -> Frame {
-        use bsx_krun::DisplayBackend;
+        use tormoni_krun::DisplayBackend;
         let mut fb = MemoryFramebuffer::new();
         fb.configure_scanout(0, width, height, width, height, format)
             .expect("a shape this can size");
@@ -689,7 +692,7 @@ mod tests {
         let mut out = [7u32];
         composite(&f, whole(&f), 1, &mut out);
         assert_eq!(out, [7]);
-        let dir = bsx_test_support::ScratchDir::created("ppm-unknown");
+        let dir = tormoni_test_support::ScratchDir::created("ppm-unknown");
         assert!(write_ppm(&f, &dir.path().join("x.ppm")).is_err());
     }
 
@@ -703,7 +706,7 @@ mod tests {
             1,
             &[0x33, 0x22, 0x11, 0, 0x66, 0x55, 0x44, 0],
         );
-        let dir = bsx_test_support::ScratchDir::created("ppm");
+        let dir = tormoni_test_support::ScratchDir::created("ppm");
         let path = dir.path().join("frame.ppm");
         write_ppm(&f, &path).expect("written");
         assert_eq!(
@@ -720,7 +723,7 @@ mod tests {
     /// wake that found the frame already delivered.
     #[test]
     fn the_sinks_record_each_frame_once() {
-        let dir = bsx_test_support::ScratchDir::created("frame-log");
+        let dir = tormoni_test_support::ScratchDir::created("frame-log");
         let path = dir.path().join("frames.tsv");
         let fb = Mutex::new(MemoryFramebuffer::new());
         let mut sinks = Sinks {
@@ -729,7 +732,7 @@ mod tests {
             shown: None,
         };
         {
-            use bsx_krun::DisplayBackend;
+            use tormoni_krun::DisplayBackend;
             let mut guard = fb.lock().expect("unpoisoned");
             guard
                 .configure_scanout(0, 1, 1, 1, 1, PixelFormat::B8G8R8X8Unorm)

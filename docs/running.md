@@ -6,25 +6,25 @@ into on the command line, and the posture is printed (`--dry-run` shows it witho
 what is shared **is** the policy.
 
 ```console
-bsx run --root ~/.local/share/bsx/rootfs -- uname -a
+tormoni run --root ~/.local/share/tormoni/rootfs -- uname -a
 ```
 
-The guest root falls back to `$BSX_GUEST_ROOT`, then `~/.local/share/bsx/rootfs`, so after one
+The guest root falls back to `$TORMONI_GUEST_ROOT`, then `~/.local/share/tormoni/rootfs`, so after one
 `export` the `--root` flag can be dropped.
 
 ## The verbs
 
 | Verb | What it does |
 |---|---|
-| `bsx run -- CMD` | Runs one command in a fresh sandbox and exits with its status. |
-| `bsx shell` | Opens an interactive session (or any command) on a pty in a fresh sandbox. |
-| `bsx up --name NAME` | Starts a sandbox that outlives the command, reachable afterwards by name. |
-| `bsx ls` | Lists the sandboxes running on this machine; `--all` adds the ended runs. |
-| `bsx exec NAME -- CMD` | Runs a command in a sandbox that is already up; `--tty` attaches a terminal. |
-| `bsx stop NAME` | Stops a running sandbox. |
-| `bsx show ID\|NAME` | Prints one run's record: what it could touch, what it printed, what it wrote. |
-| `bsx rm ID\|NAME` | Removes one run's record and everything it captured. |
-| `bsx export ID\|NAME` | Writes one run as a ustar `.tar` (`--to` picks a directory or exact path). |
+| `tormoni run -- CMD` | Runs one command in a fresh sandbox and exits with its status. |
+| `tormoni shell` | Opens an interactive session (or any command) on a pty in a fresh sandbox. |
+| `tormoni up --name NAME` | Starts a sandbox that outlives the command, reachable afterwards by name. |
+| `tormoni ls` | Lists the sandboxes running on this machine; `--all` adds the ended runs. |
+| `tormoni exec NAME -- CMD` | Runs a command in a sandbox that is already up; `--tty` attaches a terminal. |
+| `tormoni stop NAME` | Stops a running sandbox. |
+| `tormoni show ID\|NAME` | Prints one run's record: what it could touch, what it printed, what it wrote. |
+| `tormoni rm ID\|NAME` | Removes one run's record and everything it captured. |
+| `tormoni export ID\|NAME` | Writes one run as a ustar `.tar` (`--to` picks a directory or exact path). |
 
 There is no daemon: a VM is a helper process listening on a control socket in the runtime directory,
 so a sandbox started by the CLI is visible to the app and the other way round.
@@ -43,33 +43,33 @@ so a sandbox started by the CLI is visible to the app and the other way round.
 | `--sound` | A virtio-snd card on the host's audio server: playback **and** capture. | off |
 | `--gpu` | A 3D virtio-gpu into the host renderer (virgl + Venus offered); the guest brings its own driver. | off |
 | `--env KEY=VALUE` | One guest environment entry. Repeatable. | nothing |
-| `--vcpus N`, `--mem MIB` | Sizing; also `$BSX_VCPUS` and `$BSX_MEM_MIB`. | 1 vCPU, 512 MiB |
+| `--vcpus N`, `--mem MIB` | Sizing; also `$TORMONI_VCPUS` and `$TORMONI_MEM_MIB`. | 1 vCPU, 512 MiB |
 | `--no-results` | Drops the default `/results` mount. | mounted |
 
 ## Configuration layering
 
 Configuration is resolved in precedence order: 1. Command line flags. 2. Environment variables
-(`$BSX_VCPUS`, `$BSX_MEM_MIB`, `$BSX_GUEST_ROOT`, `$BSX_RUNS_DIR`, `$BSX_RUNS_KEEP`,
-`$BSX_OUTPUT_CAP_KIB`, `$BSX_LOG`, `$BSX_CLI`, `$BSX_THEME`). 3. The nearest `.bsx.toml` in or above
-the current working directory. 4. User defaults in `~/.bsx.toml`. 5. Built-in defaults.
+(`$TORMONI_VCPUS`, `$TORMONI_MEM_MIB`, `$TORMONI_GUEST_ROOT`, `$TORMONI_RUNS_DIR`, `$TORMONI_RUNS_KEEP`,
+`$TORMONI_OUTPUT_CAP_KIB`, `$TORMONI_LOG`, `$TORMONI_CLI`, `$TORMONI_THEME`). 3. The nearest `.tormoni.toml` in or above
+the current working directory. 4. User defaults in `~/.tormoni.toml`. 5. Built-in defaults.
 
 ## What a run leaves
 
-Every run leaves one directory under `$BSX_RUNS_DIR`, else `$XDG_DATA_HOME/bsx/runs`, else
-`~/.local/share/bsx/runs`: the `record` file (the posture as settled, the timings, the end), the
-captured output (capped at `$BSX_OUTPUT_CAP_KIB`, 4 MiB by default, with a `.truncated` sidecar when
-cut), and `results/`, the directory the guest saw as `/results`. Ended runs beyond `$BSX_RUNS_KEEP`
+Every run leaves one directory under `$TORMONI_RUNS_DIR`, else `$XDG_DATA_HOME/tormoni/runs`, else
+`~/.local/share/tormoni/runs`: the `record` file (the posture as settled, the timings, the end), the
+captured output (capped at `$TORMONI_OUTPUT_CAP_KIB`, 4 MiB by default, with a `.truncated` sidecar when
+cut), and `results/`, the directory the guest saw as `/results`. Ended runs beyond `$TORMONI_RUNS_KEEP`
 (200 by default) are pruned oldest-first when a new run starts.
 
-`bsx export` packages that directory as one ustar file a stock `tar` extracts. A symlink a guest
+`tormoni export` packages that directory as one ustar file a stock `tar` extracts. A symlink a guest
 planted inside `results/` is archived as a link entry, never opened:
-`a_symlink_is_archived_as_itself_and_never_followed` in `bsx-record` holds it to that. A file that
+`a_symlink_is_archived_as_itself_and_never_followed` in `tormoni-record` holds it to that. A file that
 grows or shrinks mid-export keeps the size its header pinned, so exporting a live run stays
 readable.
 
 ## The notebook
 
-`bsx-app` opens on the notebook, with a sidebar reaching its three screens:
+`tormoni-app` opens on the notebook, with a sidebar reaching its three screens:
 
 - **The list**: every run, newest first, live ones with a thumbnail of their display. `Clear
   history` removes the ended runs behind an inline confirm; live runs stay.
@@ -79,20 +79,20 @@ readable.
   sentence ("This sandbox will: ..."), confirmed before anything boots.
 - **Settings** (the platform's command with `,`, from any screen): light, dark or the desktop's own
   mode, and the interface scale, both applied live, the screen a plain launch opens on, and what
-  this machine has to run a sandbox with (the `bsx` binary and guest root it found). The picks are
-  kept across launches in a file beside the runs directory. `--theme` and `$BSX_THEME` outrank the
+  this machine has to run a sandbox with (the `tormoni` binary and guest root it found). The picks are
+  kept across launches in a file beside the runs directory. `--theme` and `$TORMONI_THEME` outrank the
   saved palette, and `--open` the saved screen, for one launch.
 
-`bsx-app NAME` opens straight onto a run; `--open list|new|settings` opens a screen. Starting and
-stopping go through the `bsx` binary beside the app (`$BSX_CLI` overrides which one).
+`tormoni-app NAME` opens straight onto a run; `--open list|new|settings` opens a screen. Starting and
+stopping go through the `tormoni` binary beside the app (`$TORMONI_CLI` overrides which one).
 
 ## Platform notes
 
 On macOS ARM64 the same verbs work, but this platform's libkrun builds no `--sound` and no guest
-input backend, and a display is viewed in `bsx-app` rather than a window of the helper's own; sign
+input backend, and a display is viewed in `tormoni-app` rather than a window of the helper's own; sign
 the binary again after any build (`cargo xtask sign`). `cargo xtask bundle` assembles
-`artifacts/Behavioral Sandbox.app` from the built pair, which is what makes the window's menu bar
-say `Behavioral Sandbox` rather than the file name `bsx-app`; the `bsx` copied inside it is signed there. `--gpu` boots here and the
+`artifacts/Tormoni.app` from the built pair, which is what makes the window's menu bar
+say `Tormoni` rather than the file name `tormoni-app`; the `tormoni` copied inside it is signed there. `--gpu` boots here and the
 guest sees `card0` and `renderD128`; this host's virglrenderer carries no Venus, so the offer ends
 at the device. The [Architecture](./architecture.md) page carries the fuller status and the
 measurements.

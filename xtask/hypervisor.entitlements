@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
-  The one entitlement `bsx` needs on macOS, and deliberately the only one.
+  The one entitlement `tormoni` needs on macOS, and deliberately the only one.
 
   Hypervisor.framework refuses an unentitled process: `hv_vm_create` answers HV_DENIED without
   this key and HV_SUCCESS with it, measured on one binary both ways (roadmap 6.2). It is applied

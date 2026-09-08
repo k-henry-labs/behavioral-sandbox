@@ -20,8 +20,8 @@
 use std::collections::BTreeSet;
 use std::io::BufRead;
 
-use bsx_krun::{AbsInfo, InputDevice};
-pub use bsx_krun::{EV_ABS, EV_KEY, EV_REL, EV_SYN, InputEvent};
+use tormoni_krun::{AbsInfo, InputDevice};
+pub use tormoni_krun::{EV_ABS, EV_KEY, EV_REL, EV_SYN, InputEvent};
 
 /// `BTN_LEFT`, and the four beside it.
 pub const BTN_LEFT: u16 = 0x110;
@@ -55,8 +55,8 @@ pub const WHEEL_LINE_PIXELS: f64 = 20.0;
 /// The keyboard the guest sees.
 #[must_use]
 pub fn keyboard() -> InputDevice {
-    InputDevice::new("bsx keyboard")
-        .serial("bsx-kbd")
+    InputDevice::new("tormoni keyboard")
+        .serial("tormoni-kbd")
         .ids(BUS_VIRTUAL, VENDOR, 1, 1)
         .keys(1..=KEY_LAST)
 }
@@ -64,8 +64,8 @@ pub fn keyboard() -> InputDevice {
 /// The pointer the guest sees: absolute position, five buttons, two wheels.
 #[must_use]
 pub fn pointer() -> InputDevice {
-    InputDevice::new("bsx pointer")
-        .serial("bsx-ptr")
+    InputDevice::new("tormoni pointer")
+        .serial("tormoni-ptr")
         .ids(BUS_VIRTUAL, VENDOR, 2, 1)
         .keys([BTN_LEFT, BTN_RIGHT, BTN_MIDDLE, BTN_SIDE, BTN_EXTRA])
         .absolute_axis(ABS_X, AbsInfo::range(0, ABS_MAX))

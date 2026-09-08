@@ -1,5 +1,5 @@
-//! `bsx export`: a record store to a tar file, with no guest booted. The suite plants a record
-//! with `bsx-record` and runs the built binary against a scratch `$BSX_RUNS_DIR`.
+//! `tormoni export`: a record store to a tar file, with no guest booted. The suite plants a record
+//! with `tormoni-record` and runs the built binary against a scratch `$TORMONI_RUNS_DIR`.
 
 // A test binary: `expect` is the idiomatic assertion in helpers outside `#[test]`.
 #![allow(clippy::expect_used)]
@@ -7,22 +7,22 @@
 use std::path::Path;
 use std::process::Command;
 
-use bsx_test_support::ScratchDir;
+use tormoni_test_support::ScratchDir;
 
-fn bsx(runs: &Path) -> Command {
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_bsx"));
-    cmd.env("BSX_RUNS_DIR", runs);
+fn tormoni(runs: &Path) -> Command {
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_tormoni"));
+    cmd.env("TORMONI_RUNS_DIR", runs);
     cmd
 }
 
 /// A run to export: a record with one captured output file.
-fn planted(runs: &Path) -> bsx_record::Record {
-    let store = bsx_record::Store::at(runs.to_path_buf()).expect("a store");
-    let mut record = bsx_record::Record::begin(
+fn planted(runs: &Path) -> tormoni_record::Record {
+    let store = tormoni_record::Store::at(runs.to_path_buf()).expect("a store");
+    let mut record = tormoni_record::Record::begin(
         "exportee",
-        bsx_record::Verb::Run,
+        tormoni_record::Verb::Run,
         vec!["true".into()],
-        bsx_record::Posture::new("/img".into(), 1, 512),
+        tormoni_record::Posture::new("/img".into(), 1, 512),
     );
     record.id = "1756860007123-exportee".to_string();
     let run = store.create(&record).expect("created");
@@ -40,17 +40,17 @@ fn export_writes_a_tar_where_asked_and_prints_only_the_path() {
     let dest = scratch.path().join("dest");
     std::fs::create_dir(&dest).expect("a dest dir");
 
-    let out = bsx(&runs)
+    let out = tormoni(&runs)
         .args(["export", &record.id, "--to"])
         .arg(&dest)
         .output()
-        .expect("bsx ran");
+        .expect("tormoni ran");
     assert!(
         out.status.success(),
         "{}",
         String::from_utf8_lossy(&out.stderr)
     );
-    let expected = dest.join(format!("bsx-{}.tar", record.id));
+    let expected = dest.join(format!("tormoni-{}.tar", record.id));
     assert_eq!(
         String::from_utf8_lossy(&out.stdout),
         format!("{}\n", expected.display()),
@@ -74,22 +74,25 @@ fn export_writes_a_tar_where_asked_and_prints_only_the_path() {
 
     let cwd = scratch.path().join("cwd");
     std::fs::create_dir(&cwd).expect("a cwd");
-    let out = bsx(&runs)
+    let out = tormoni(&runs)
         .args(["export", "exportee"])
         .current_dir(&cwd)
         .output()
-        .expect("bsx ran");
+        .expect("tormoni ran");
     assert!(
         out.status.success(),
         "{}",
         String::from_utf8_lossy(&out.stderr)
     );
     assert!(
-        cwd.join(format!("bsx-{}.tar", record.id)).is_file(),
+        cwd.join(format!("tormoni-{}.tar", record.id)).is_file(),
         "by name, into the current directory"
     );
 
-    let out = bsx(&runs).args(["export", "nobody"]).output().expect("ran");
+    let out = tormoni(&runs)
+        .args(["export", "nobody"])
+        .output()
+        .expect("ran");
     assert_eq!(out.status.code(), Some(2), "an operational refusal");
     assert!(out.stdout.is_empty(), "stdout stays pipe-clean");
     assert!(

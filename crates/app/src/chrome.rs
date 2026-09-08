@@ -11,7 +11,7 @@
 //!   own over the top of the content, so the toolbar is hidden while the window is full screen
 //!   and shown again when it leaves; the head's line is the app's own either way.
 //! - **AppKit is Objective-C**, which is why this module is the app's one `unsafe`, as libkrun's C
-//!   is `bsx-krun`'s. Everything read back out is the platform's own.
+//!   is `tormoni-krun`'s. Everything read back out is the platform's own.
 
 /// Puts the window's own buttons on the line a head is drawn to, on the platform that moves them.
 pub(crate) fn unify_titlebar<T: Send + 'static>(id: iced::window::Id) -> iced::Task<T> {
