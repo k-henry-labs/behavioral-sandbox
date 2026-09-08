@@ -11,7 +11,11 @@ The project uses stable Rust in one workspace. `rust-toolchain.toml` pins the ve
 Linux on `x86_64` and macOS on ARM64, because those are where libkrun has a hypervisor. The host
 path is `#![forbid(unsafe_code)]`, with two exceptions, each a library in another language: the raw
 libkrun bindings, because libkrun is C, and the GUI's window chrome, because AppKit is
-Objective-C. Both are `deny` with a named `allow` on the one item, never `forbid` lifted.
+Objective-C. They differ in shape. `tormoni-app` is `deny` with a named `allow` on each AppKit call
+in `chrome`, because there `unsafe` is an exception. `tormoni-krun` carries no `deny`, because there
+`unsafe` is the crate's work: every builder call and callback crosses the C boundary, so a per-item
+`allow` would mark all of them and distinguish none. `every_crate_forbids_unsafe` in the gate
+asserts the exempt set equals those two.
 
 **Voice: claim nothing the project cannot back.** The project is pre-release and unaudited. It has
 one maintainer and no external review. Describe mechanisms that a diff can disprove. State each
