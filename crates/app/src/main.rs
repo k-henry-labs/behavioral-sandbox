@@ -668,12 +668,7 @@ impl App {
             })
             .unwrap_or_default();
         let mut runs = self.store.list().unwrap_or_default();
-        for record in &mut runs {
-            if record.is_open() && !self.live.contains(&RunName::started(record.name.clone())) {
-                record.finish(tormoni_record::End::Gone);
-                let _ = self.store.save(record);
-            }
-        }
+        settle_gone(&self.store, &mut runs, &self.live);
         self.runs = runs;
         if let Screen::Run(id) = &self.screen {
             let id = id.clone();
@@ -1142,6 +1137,25 @@ fn hotkey(key: &iced::keyboard::Key, modifiers: iced::keyboard::Modifiers) -> Op
     }
 }
 
+/// Marks as gone, in `runs` and in the store, every open record that no VM in `live` belongs to.
+///
+/// **A name is reusable**, and `live` says only that *some* VM answers under one, so the newest
+/// open run of a name is the one that VM is: the rule `tormoni ls --all` settles a name by, and the
+/// one [`tormoni_record::Store::open_run`] reads a name by. `runs` is newest first, as
+/// [`tormoni_record::Store::list`] returns it, which is what makes the first claim on a name the
+/// newest rather than an arbitrary one.
+fn settle_gone(store: &Store, runs: &mut [Record], live: &BTreeSet<RunName>) {
+    let mut claimed = BTreeSet::new();
+    for record in runs.iter_mut().filter(|r| r.is_open()) {
+        let name = RunName::of(record);
+        if claimed.insert(name.clone()) && live.contains(&name) {
+            continue;
+        }
+        record.finish(tormoni_record::End::Gone);
+        let _ = store.save(record);
+    }
+}
+
 /// `n` ended runs, spelled with its plural: the confirm and the status line share it.
 pub(crate) fn ended_runs(n: usize) -> String {
     format!("{n} ended run{}", if n == 1 { "" } else { "s" })
@@ -1258,6 +1272,56 @@ mod tests {
         // The scratch dir is dropped at the end of the test; nothing here touches it again.
         std::mem::forget(dir);
         app
+    }
+
+    /// Only the newest open run of a name is the one a VM answering under it belongs to. An
+    /// older one is an abandoned run whose name a later sandbox took: shown as running, and
+    /// leased for a display it does not have, until it is written back as gone.
+    #[test]
+    fn an_open_run_whose_name_was_taken_again_is_not_shown_as_live() {
+        let dir = tormoni_test_support::ScratchDir::created("app-settle-gone");
+        let store = Store::at(dir.path().join("runs")).expect("a store");
+        let mut abandoned = displayed("web", true);
+        abandoned.started_ms -= 10;
+        abandoned.id = format!("{}-web", abandoned.started_ms);
+        let current = displayed("web", true);
+        let orphan = displayed("solo", true);
+        let mut runs = vec![current.clone(), abandoned.clone(), orphan.clone()];
+        for record in &runs {
+            store.create(record).expect("created");
+        }
+
+        let live: BTreeSet<RunName> = [RunName::started("web".to_string())].into_iter().collect();
+        settle_gone(&store, &mut runs, &live);
+
+        assert!(runs[0].is_open(), "the newest `web` is the VM answering");
+        assert_eq!(
+            (runs[1].end, runs[2].end),
+            (
+                Some(tormoni_record::End::Gone),
+                Some(tormoni_record::End::Gone)
+            ),
+            "the older `web` and the unanswered `solo` are gone"
+        );
+        assert_eq!(
+            store.read(&abandoned.id).expect("read").end,
+            Some(tormoni_record::End::Gone),
+            "and written back, so the notebook says so next time too"
+        );
+
+        // The point of the bookkeeping: the list neither shows nor leases the abandoned run.
+        let mut app = app_with(runs, &["web"]);
+        app.screen = Screen::List;
+        assert_eq!(
+            app.runs.iter().filter(|r| app.is_live(r)).count(),
+            1,
+            "one sandbox is running, not two"
+        );
+        assert_eq!(
+            app.watches().len(),
+            1,
+            "and one display is leased, not two under one name"
+        );
     }
 
     /// The list leases every live display, each at the thumbnail rate; opening one run leases

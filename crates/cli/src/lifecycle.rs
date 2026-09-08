@@ -260,14 +260,31 @@ fn list_past(out: &mut impl Write) -> Result<(), String> {
     Ok(())
 }
 
-/// Marks every open record whose VM is not answering as gone, and returns the ended records,
+/// Marks as gone every open record that no live VM belongs to, and returns the ended records,
 /// newest first.
+///
+/// **A name is reusable**, and its socket says only that *some* VM answers under it, so the
+/// newest open run of a name is the one that VM is: the rule
+/// [`Store::open_run`](tormoni_record::Store::open_run) already reads a name by.
 pub(crate) fn settle_gone(store: &Store) -> Result<Vec<tormoni_record::Record>, String> {
+    settle_gone_with(store, |name| {
+        socket::path_for(name).is_ok_and(|p| socket::is_live(&p))
+    })
+}
+
+/// [`settle_gone`] with the liveness probe lifted out, so a test can drive the newest-open rule
+/// without binding a socket for each name.
+fn settle_gone_with(
+    store: &Store,
+    answers: impl Fn(&str) -> bool,
+) -> Result<Vec<tormoni_record::Record>, String> {
     let mut ended = Vec::new();
+    // `Store::list` is newest first, which is what makes `claimed` the *newest* open run of each
+    // name rather than an arbitrary one.
+    let mut claimed = std::collections::BTreeSet::new();
     for mut record in store.list().map_err(|e| e.to_string())? {
         if record.is_open() {
-            let live = socket::path_for(&record.name).is_ok_and(|p| socket::is_live(&p));
-            if live {
+            if claimed.insert(record.name.clone()) && answers(&record.name) {
                 continue;
             }
             record.finish(End::Gone);
@@ -547,7 +564,46 @@ mod tests {
 
     use tormoni_supervisor::{Net, RootFs};
 
-    use super::{CELLS, COLUMNS, Channel, Info, UNKNOWN, cells_of, row};
+    use super::{CELLS, COLUMNS, Channel, Info, UNKNOWN, cells_of, row, settle_gone_with};
+
+    /// An abandoned run whose name a later sandbox took is marked gone, not kept open by its
+    /// successor's socket. A name is reusable, and a run that never ends is one `ls --all` never
+    /// lists and `prune` never removes, because pruning is of ended runs.
+    #[test]
+    fn an_open_run_whose_name_was_taken_again_is_marked_gone() {
+        use tormoni_record::{Posture, Record, Store, Verb};
+        let dir = tormoni_test_support::ScratchDir::created("settle-gone");
+        let store = Store::at(dir.path().join("runs")).expect("a store");
+        let posture = Posture::new(std::path::PathBuf::from("/img"), 1, 512);
+        let mut abandoned = Record::begin("web", Verb::Up, vec![], posture.clone());
+        abandoned.started_ms -= 10;
+        abandoned.id = format!("{}-web", abandoned.started_ms);
+        let current = Record::begin("web", Verb::Up, vec![], posture.clone());
+        let orphan = Record::begin("solo", Verb::Up, vec![], posture);
+        for record in [&abandoned, &current, &orphan] {
+            store.create(record).expect("created");
+        }
+
+        // Only `web` answers, and only one VM is behind that name.
+        let ended = settle_gone_with(&store, |name| name == "web").expect("settled");
+        let gone: Vec<&str> = ended.iter().map(|r| r.id.as_str()).collect();
+        assert_eq!(
+            gone,
+            [orphan.id.as_str(), abandoned.id.as_str()],
+            "the newest `web` stays open; the older one and the unanswered `solo` do not"
+        );
+        assert!(
+            store.read(&current.id).expect("read").is_open(),
+            "the run the live VM belongs to is untouched"
+        );
+        for id in [&abandoned.id, &orphan.id] {
+            assert_eq!(
+                store.read(id).expect("read").end,
+                Some(tormoni_record::End::Gone),
+                "{id} is written back as gone"
+            );
+        }
+    }
 
     /// A VM's row lines up with the header it is printed under, and a VM that did not answer
     /// still occupies every column: a short row would silently shift the reader's eye onto the
