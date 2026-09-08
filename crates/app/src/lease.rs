@@ -206,11 +206,61 @@ fn run_one_lease(
             )));
         }
     }
-    // What the window has already been told about, so a rate-limited watch can forward the
-    // newest present rather than the oldest of the batch it skipped.
+    forward_presents(&mut lease, watch, log, sender, stop)
+}
+
+/// The record source a forwarding loop reads. [`control::DisplayLease`] is the one in life; the
+/// trait is what lets `a_held_present_is_forwarded_once_the_gap_expires` drive a scripted one.
+trait Records {
+    fn wait_readable(&self, timeout: Duration) -> std::io::Result<bool>;
+    fn next_event(&mut self) -> Result<Event, control::Error>;
+}
+
+impl Records for control::DisplayLease {
+    fn wait_readable(&self, timeout: Duration) -> std::io::Result<bool> {
+        control::DisplayLease::wait_readable(self, timeout)
+    }
+    fn next_event(&mut self) -> Result<Event, control::Error> {
+        control::DisplayLease::next_event(self)
+    }
+}
+
+/// Forwards each present, no more often than `watch.every`, until the lease ends: `Some` with why
+/// it ended for good, `None` for a reconfigure to lease after.
+fn forward_presents(
+    lease: &mut impl Records,
+    watch: &Watch,
+    log: &mut Option<std::fs::File>,
+    sender: &mpsc::UnboundedSender<Message>,
+    stop: &Stop,
+) -> Result<Option<String>, String> {
+    // What the window has yet to be told about, so a rate-limited watch forwards the newest
+    // present rather than the oldest of the batch it skipped.
     let mut last_sent: Option<Instant> = None;
     let mut pending: Option<crate::frame::Present> = None;
     loop {
+        // The gap is waited out, not skipped: a guest that presents nothing more would otherwise
+        // leave a held frame held for good, and the thumbnail on the one before it.
+        if pending.is_some() {
+            let rest = last_sent.map_or(Duration::ZERO, |at| {
+                watch.every.saturating_sub(at.elapsed())
+            });
+            // A present arriving inside the gap folds into the held one instead.
+            let folds_in = !rest.is_zero() && lease.wait_readable(rest).unwrap_or(true);
+            if !folds_in && let Some(present) = pending.take() {
+                last_sent = Some(Instant::now());
+                let sent = sender.unbounded_send(Message::Presented {
+                    name: watch.name.clone(),
+                    frame_id: present.frame_id,
+                    slot: present.slot,
+                    damage: present.damage,
+                });
+                if sent.is_err() {
+                    return Ok(Some("the window closed".to_string()));
+                }
+                continue;
+            }
+        }
         match lease.next_event() {
             Ok(Event::Presented {
                 frame_id,
@@ -231,23 +281,6 @@ fn run_one_lease(
                         None => damage,
                     },
                 });
-                let due = last_sent.is_none_or(|at| at.elapsed() >= watch.every);
-                if !due {
-                    continue;
-                }
-                let Some(present) = pending.take() else {
-                    continue;
-                };
-                last_sent = Some(Instant::now());
-                let sent = sender.unbounded_send(Message::Presented {
-                    name: watch.name.clone(),
-                    frame_id: present.frame_id,
-                    slot: present.slot,
-                    damage: present.damage,
-                });
-                if sent.is_err() {
-                    return Ok(Some("the window closed".to_string()));
-                }
             }
             Ok(Event::Reconfigured) => return Ok(None),
             Ok(_) => {}
@@ -338,6 +371,107 @@ mod tests {
         assert!(
             threads().is_some_and(|now| now <= before),
             "the lease thread is gone"
+        );
+    }
+
+    /// A scripted record source: hands out `events` in order, then reports nothing readable and
+    /// blocks, which is a guest that has presented all it is going to and gone idle.
+    struct Scripted {
+        events: std::collections::VecDeque<Event>,
+        waits: std::cell::Cell<usize>,
+    }
+
+    impl Records for Scripted {
+        fn wait_readable(&self, _timeout: Duration) -> std::io::Result<bool> {
+            self.waits.set(self.waits.get() + 1);
+            Ok(!self.events.is_empty())
+        }
+        fn next_event(&mut self) -> Result<Event, control::Error> {
+            match self.events.pop_front() {
+                Some(event) => Ok(event),
+                // The idle guest: no more records, and the lease's read would block here for as
+                // long as that lasts. Ending it is what lets the test finish.
+                None => Err(control::Error::Io(std::io::Error::from(
+                    std::io::ErrorKind::UnexpectedEof,
+                ))),
+            }
+        }
+    }
+
+    fn present(frame_id: u32, slot: u32) -> Event {
+        Event::Presented {
+            frame_id,
+            slot,
+            damage: control::Damage::new(0, 0, 8, 8),
+        }
+    }
+
+    /// A rate-limited watch must still forward the last present of a burst. Two presents inside
+    /// one gap fold into one message, and that message goes when the gap expires rather than
+    /// waiting for a present that never comes: a thumbnail of an idle guest is otherwise the
+    /// frame before the one it settled on, for as long as it stays idle.
+    #[test]
+    fn a_held_present_is_forwarded_once_the_gap_expires() {
+        let (sender, receiver) = mpsc::unbounded();
+        let watch = Watch {
+            name: crate::RunName::started("paced".to_string()),
+            log: None,
+            every: Duration::from_millis(30),
+        };
+        let mut lease = Scripted {
+            events: [present(1, 0), present(2, 1)].into_iter().collect(),
+            waits: std::cell::Cell::new(0),
+        };
+        let ended = forward_presents(&mut lease, &watch, &mut None, &sender, &Stop::default());
+        assert!(
+            matches!(&ended, Ok(Some(why)) if why == "the lease ended"),
+            "{ended:?}"
+        );
+        assert!(lease.waits.get() > 0, "the gap was waited out, not skipped");
+
+        drop(sender);
+        let sent: Vec<Message> =
+            iced::futures::executor::block_on(async { receiver.collect().await });
+        let frames: Vec<u32> = sent
+            .iter()
+            .filter_map(|m| match m {
+                Message::Presented { frame_id, .. } => Some(*frame_id),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            frames,
+            [1, 2],
+            "the first goes at once and the held one follows: {sent:?}"
+        );
+    }
+
+    /// A watch with no gap forwards every present as it reads it, which is what the open run's
+    /// own display is leased with.
+    #[test]
+    fn an_unpaced_watch_forwards_every_present() {
+        let (sender, receiver) = mpsc::unbounded();
+        let watch = Watch {
+            name: crate::RunName::started("unpaced".to_string()),
+            log: None,
+            every: Duration::ZERO,
+        };
+        let mut lease = Scripted {
+            events: [present(1, 0), present(2, 1), present(3, 2)]
+                .into_iter()
+                .collect(),
+            waits: std::cell::Cell::new(0),
+        };
+        let _ = forward_presents(&mut lease, &watch, &mut None, &sender, &Stop::default());
+        drop(sender);
+        let sent: Vec<Message> =
+            iced::futures::executor::block_on(async { receiver.collect().await });
+        assert_eq!(sent.len(), 3, "{sent:?}");
+        assert_eq!(
+            lease.waits.get(),
+            0,
+            "a zero gap has nothing to wait on: {}",
+            lease.waits.get()
         );
     }
 

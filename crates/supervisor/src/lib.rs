@@ -1373,6 +1373,26 @@ pub mod control {
             })
         }
 
+        /// Waits up to `timeout` for a record to be there to read; `false` when it expired.
+        ///
+        /// What a caller pacing its own forwards waits on, rather than putting a deadline on
+        /// [`next_event`](Self::next_event): that one's `read_exact` drops the bytes of a record
+        /// a deadline cut short, and the stream would never line up again.
+        pub fn wait_readable(&self, timeout: Duration) -> io::Result<bool> {
+            if self.pending.len() >= RECORD_LEN {
+                return Ok(true);
+            }
+            let mut fds = [rustix::event::PollFd::new(
+                &self.stream,
+                rustix::event::PollFlags::IN,
+            )];
+            let spec = rustix::event::Timespec {
+                tv_sec: timeout.as_secs().try_into().unwrap_or(i64::MAX),
+                tv_nsec: timeout.subsec_nanos().into(),
+            };
+            Ok(rustix::event::poll(&mut fds, Some(&spec))? > 0)
+        }
+
         /// Waits for the next record. `Io` with `UnexpectedEof` is the VM closing the lease,
         /// which is what a VM ending does.
         pub fn next_event(&mut self) -> Result<Event, Error> {
@@ -2415,6 +2435,75 @@ mod control_tests {
         assert_eq!(
             lease.next_event().expect("the end"),
             control::Event::Reconfigured
+        );
+    }
+
+    /// A lease says whether a record is there to read without reading it: true for one already
+    /// in hand, true once the VM sends one, and false when the gap ran out with nothing sent.
+    /// A caller pacing its forwards needs the false, or a frame it is holding is never let go.
+    #[test]
+    fn waiting_on_a_lease_says_whether_a_record_is_there() {
+        let (server, client) = std::os::unix::net::UnixStream::pair().expect("a socket pair");
+        let dir = tormoni_test_support::ScratchDir::created("display-wait");
+        let file = std::fs::File::create(dir.path().join("frames")).expect("a file to hand over");
+        let scanout = control::Scanout::new(320, 240, 2, 1280, 4, 307_200, 3);
+        let whole = control::Damage::new(0, 0, 320, 240);
+        // Answered before the ask, which a socket pair buffers: the record then arrives in the
+        // same read the handshake makes and lands in the lease's own buffer, not the socket's,
+        // which is the case the first assertion below is about.
+        control::write_display_answer(&server, file.as_fd(), &scanout).expect("answered");
+        control::write_present(&mut &server, 41, 2, whole).expect("a record");
+        let mut lease = control::lease_on(client).expect("leased");
+        let mut request = String::new();
+        std::io::BufReader::new(&server)
+            .read_line(&mut request)
+            .expect("the request");
+        assert_eq!(request.trim_end(), "display");
+
+        assert!(
+            lease
+                .wait_readable(std::time::Duration::ZERO)
+                .expect("polled"),
+            "a record already in hand needs no wait at all"
+        );
+        assert_eq!(
+            lease.next_event().expect("the buffered record"),
+            control::Event::Presented {
+                frame_id: 41,
+                slot: 2,
+                damage: whole,
+            }
+        );
+
+        // Nothing sent, so the gap expires: this is the answer that lets a pacing caller stop
+        // holding the frame it has and forward it.
+        let waited = std::time::Instant::now();
+        assert!(
+            !lease
+                .wait_readable(std::time::Duration::from_millis(60))
+                .expect("polled"),
+            "no record arrived inside the gap"
+        );
+        assert!(
+            waited.elapsed() >= std::time::Duration::from_millis(50),
+            "the wait was the gap, not an immediate no: {:?}",
+            waited.elapsed()
+        );
+
+        control::write_present(&mut &server, 42, 3, whole).expect("a record");
+        assert!(
+            lease
+                .wait_readable(std::time::Duration::from_secs(5))
+                .expect("polled"),
+            "a record on the wire is readable"
+        );
+        assert_eq!(
+            lease.next_event().expect("the second record"),
+            control::Event::Presented {
+                frame_id: 42,
+                slot: 3,
+                damage: whole,
+            }
         );
     }
 
