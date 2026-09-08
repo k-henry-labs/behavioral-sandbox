@@ -658,9 +658,23 @@ pub mod socket {
 
     /// Refuses a runtime directory anyone else can write or own: under `/tmp` another user could
     /// create `tormoni/` first. Checked on every resolution, since the directory outlives its maker.
-    fn require_private(dir: &Path) -> io::Result<()> {
+    ///
+    /// `pub(crate)` so `a_runtime_directory_that_is_a_symlink_is_refused` can drive it directly.
+    pub(crate) fn require_private(dir: &Path) -> io::Result<()> {
         use std::os::unix::fs::MetadataExt;
-        let meta = std::fs::metadata(dir)?;
+        // `symlink_metadata`: the `create` above succeeds on an existing symlink to a directory,
+        // and `metadata` would then read the *target's* owner and mode rather than the link's.
+        let meta = std::fs::symlink_metadata(dir)?;
+        if meta.file_type().is_symlink() {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!(
+                    "{} is a symbolic link; a control-socket directory must be a directory, not a \
+                     link to one somebody else picked",
+                    dir.display()
+                ),
+            ));
+        }
         if meta.uid() != real_uid() {
             return Err(io::Error::new(
                 io::ErrorKind::PermissionDenied,
@@ -2165,6 +2179,41 @@ mod socket_tests {
         let msg = err.to_string();
         assert!(msg.contains("../escape"), "names the input: {msg}");
         assert!(msg.contains("filename"), "says why it matters: {msg}");
+    }
+
+    /// The runtime directory is checked as itself, not through a link. `DirBuilder::create` with
+    /// `recursive` **succeeds** on an existing symlink to a directory, so under a shared `/tmp`
+    /// another user plants one aimed at a 0700 directory of this user's and every owner and mode
+    /// check downstream reads the target's, not the link's.
+    #[test]
+    fn a_runtime_directory_that_is_a_symlink_is_refused() {
+        use std::os::unix::fs::DirBuilderExt;
+        let dir = tormoni_test_support::ScratchDir::created("runtime-symlink");
+        let real = dir.path().join("real");
+        let mut builder = std::fs::DirBuilder::new();
+        builder.mode(0o700);
+        builder.create(&real).expect("a private directory");
+        socket::require_private(&real).expect("a directory of this user's, 0700, is fine");
+
+        let link = dir.path().join("link");
+        std::os::unix::fs::symlink(&real, &link).expect("a link aimed at it");
+        // The premise: the link resolves to the very directory just accepted, so what refuses it
+        // below can only be the link itself.
+        assert_eq!(
+            std::os::unix::fs::PermissionsExt::mode(
+                &std::fs::metadata(&link)
+                    .expect("through the link")
+                    .permissions()
+            ) & 0o7777,
+            0o700,
+            "the target is the private directory"
+        );
+        let refused = socket::require_private(&link).expect_err("a link is not a directory");
+        assert_eq!(refused.kind(), std::io::ErrorKind::PermissionDenied);
+        assert!(
+            refused.to_string().contains("symbolic link"),
+            "the refusal says what it refused: {refused}"
+        );
     }
 
     /// The whole point of the module: a socket file is **not** evidence of a live VM. Every clean
