@@ -14,8 +14,9 @@ libkrun bindings, because libkrun is C, and the GUI's window chrome, because App
 Objective-C. They differ in shape. `tormoni-app` is `deny` with a named `allow` on each AppKit call
 in `chrome`, because there `unsafe` is an exception. `tormoni-krun` carries no `deny`, because there
 `unsafe` is the crate's work: every builder call and callback crosses the C boundary, so a per-item
-`allow` would mark all of them and distinguish none. `every_crate_forbids_unsafe` in the gate
-asserts the exempt set equals those two.
+`allow` would mark all of them and distinguish none. What each block owes instead is a `SAFETY:`
+comment stating its obligation, which `clippy::undocumented_unsafe_blocks` requires at that crate's
+root. `every_crate_forbids_unsafe` in the gate asserts the exempt set equals those two.
 
 **Voice: claim nothing the project cannot back.** The project is pre-release and unaudited. It has
 one maintainer and no external review. Describe mechanisms that a diff can disprove. State each

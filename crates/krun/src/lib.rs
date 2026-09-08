@@ -3,9 +3,11 @@
 //!
 //! **This crate may use `unsafe`**, because libkrun is a C library; `tormoni-app`'s window chrome is
 //! the only other, for AppKit. `every_crate_forbids_unsafe` in the gate asserts the exempt list
-//! *equals* those two, so neither a third nor the loss of this one passes quietly. The raw declarations live in a
-//! private `sys` module rather than a separate `-sys` package, which makes the API below the only
-//! way to reach libkrun instead of merely the recommended one.
+//! *equals* those two, so neither a third nor the loss of this one passes quietly. Every `unsafe`
+//! block here states its obligation in a `SAFETY:` comment; the crate root denies
+//! `clippy::undocumented_unsafe_blocks`, so one without fails the gate. The raw declarations live
+//! in a private `sys` module rather than a separate `-sys` package, which makes the API below the
+//! only way to reach libkrun instead of merely the recommended one.
 //!
 //! # What the types enforce
 //!
@@ -60,6 +62,8 @@
 //! hold (panics caught, instances shared by count), and the provider is a queue behind an eventfd
 //! that is readable exactly while an event waits, because libkrun polls the fd level-triggered
 //! and never reads it: a fd left armed on an empty queue is a worker thread spinning.
+
+#![deny(clippy::undocumented_unsafe_blocks)]
 
 mod platform;
 mod sys;
@@ -482,8 +486,8 @@ fn with_backend<B: DisplayBackend>(instance: *mut c_void, f: impl FnOnce(&mut B)
         return sys::KRUN_DISPLAY_ERR_INVALID_PARAM;
     }
     let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        // Borrowed, never owned: the count this pointer carries belongs to `c_create`, and a
-        // `from_raw` that was allowed to drop would return it on every call.
+        // SAFETY: `instance` is the `Arc::into_raw` of `display_backend`, non-null by the check
+        // above; borrowed, never owned, since the count it carries belongs to `c_create`.
         let shared = std::mem::ManuallyDrop::new(unsafe {
             Arc::from_raw(instance.cast_const().cast::<Backend<B>>())
         });
@@ -505,6 +509,8 @@ unsafe extern "C" fn c_create<B: DisplayBackend>(
     if instance.is_null() || userdata.is_null() {
         return sys::KRUN_DISPLAY_ERR_INVALID_PARAM;
     }
+    // SAFETY: `userdata` is the `Arc::into_raw` of `display_backend`, alive while the handle is
+    // retained; `instance` is libkrun's out-pointer. Both are checked non-null above.
     unsafe {
         Arc::increment_strong_count(userdata.cast::<Backend<B>>());
         *instance = userdata.cast_mut();
@@ -519,6 +525,7 @@ unsafe extern "C" fn c_destroy<B: DisplayBackend>(instance: *mut c_void) -> i32 
         return 0;
     }
     let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        // SAFETY: `instance` is the pointer `c_create` stored, carrying the one count it took.
         drop(unsafe { Arc::from_raw(instance.cast_const().cast::<Backend<B>>()) });
     }));
     match outcome {
@@ -573,6 +580,7 @@ unsafe extern "C" fn c_alloc_frame<B: DisplayBackend>(
             let Ok(id) = i32::try_from(frame.frame_id) else {
                 return sys::KRUN_DISPLAY_ERR_INTERNAL;
             };
+            // SAFETY: both are libkrun's out-pointers, checked non-null above, written once here.
             unsafe {
                 *buffer = frame.buffer.as_mut_ptr();
                 *buffer_size = frame.buffer.len();
@@ -592,6 +600,7 @@ unsafe extern "C" fn c_present_frame<B: DisplayBackend>(
     let damage = if damage_area.is_null() {
         None
     } else {
+        // SAFETY: libkrun's rect, non-null by the branch above and valid for the callback.
         let r = unsafe { &*damage_area };
         Some(Rect::new(r.x, r.y, r.width, r.height))
     };
@@ -1359,11 +1368,13 @@ struct DisplayHandle {
 
 /// [`DisplayHandle::release`] for a backend of type `B`.
 unsafe fn release_backend<B: DisplayBackend>(userdata: *const c_void) {
+    // SAFETY: `userdata` is the `Arc::into_raw` of `display_backend`; this returns its one count.
     drop(unsafe { Arc::from_raw(userdata.cast::<Backend<B>>()) });
 }
 
 impl Drop for DisplayHandle {
     fn drop(&mut self) {
+        // SAFETY: `release` is `release_backend::<B>` for the `B` that `userdata` was made from.
         unsafe { (self.release)(self.userdata) }
     }
 }
@@ -1602,7 +1613,8 @@ fn with_input<T>(instance: *mut c_void, f: impl FnOnce(&T) -> i32) -> i32 {
         return sys::KRUN_INPUT_ERR_INVALID_PARAM;
     }
     let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        // Borrowed, never owned: the count belongs to `c_input_create`.
+        // SAFETY: `instance` is one of `input_device`'s `Arc::into_raw` pointers to a `T`, non-null
+        // by the check above; borrowed, never owned, since the count belongs to `c_input_create`.
         let shared = std::mem::ManuallyDrop::new(unsafe {
             Arc::from_raw(instance.cast_const().cast::<T>())
         });
@@ -1621,6 +1633,8 @@ unsafe extern "C" fn c_input_create<T>(
     if instance.is_null() || userdata.is_null() {
         return sys::KRUN_INPUT_ERR_INVALID_PARAM;
     }
+    // SAFETY: `userdata` is one of `input_device`'s `Arc::into_raw` pointers to a `T`, alive while
+    // the handle is retained; `instance` is libkrun's out-pointer. Both are checked non-null above.
     unsafe {
         Arc::increment_strong_count(userdata.cast::<T>());
         *instance = userdata.cast_mut();
@@ -1634,6 +1648,7 @@ unsafe extern "C" fn c_input_destroy<T>(instance: *mut c_void) -> i32 {
         return 0;
     }
     let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        // SAFETY: `instance` is the pointer `c_input_create` stored, carrying the count it took.
         drop(unsafe { Arc::from_raw(instance.cast_const().cast::<T>()) });
     }));
     match outcome {
@@ -1647,10 +1662,13 @@ unsafe fn query_buffer<'a>(buf: *mut u8, len: usize) -> Option<&'a mut [u8]> {
     if buf.is_null() {
         return None;
     }
+    // SAFETY: `buf`/`len` are libkrun's query buffer, non-null by the check above and valid for
+    // the length of the callback.
     Some(unsafe { std::slice::from_raw_parts_mut(buf, len) })
 }
 
 unsafe extern "C" fn c_query_device_name(instance: *mut c_void, buf: *mut u8, len: usize) -> i32 {
+    // SAFETY: libkrun's `buf`/`len` pair, passed through unchanged.
     let Some(dst) = (unsafe { query_buffer(buf, len) }) else {
         return sys::KRUN_INPUT_ERR_INVALID_PARAM;
     };
@@ -1658,6 +1676,7 @@ unsafe extern "C" fn c_query_device_name(instance: *mut c_void, buf: *mut u8, le
 }
 
 unsafe extern "C" fn c_query_serial_name(instance: *mut c_void, buf: *mut u8, len: usize) -> i32 {
+    // SAFETY: libkrun's `buf`/`len` pair, passed through unchanged.
     let Some(dst) = (unsafe { query_buffer(buf, len) }) else {
         return sys::KRUN_INPUT_ERR_INVALID_PARAM;
     };
@@ -1672,6 +1691,7 @@ unsafe extern "C" fn c_query_device_ids(
         return sys::KRUN_INPUT_ERR_INVALID_PARAM;
     }
     with_input::<InputDevice>(instance, |d| {
+        // SAFETY: `ids` is libkrun's out-pointer, checked non-null above, written once here.
         unsafe { *ids = d.ids };
         0
     })
@@ -1683,6 +1703,7 @@ unsafe extern "C" fn c_query_event_capabilities(
     buf: *mut u8,
     len: usize,
 ) -> i32 {
+    // SAFETY: libkrun's `buf`/`len` pair, passed through unchanged.
     let Some(dst) = (unsafe { query_buffer(buf, len) }) else {
         return sys::KRUN_INPUT_ERR_INVALID_PARAM;
     };
@@ -1708,6 +1729,7 @@ unsafe extern "C" fn c_query_abs_info(
             .get(&u16::from(axis))
             .copied()
             .unwrap_or_default();
+        // SAFETY: `info` is libkrun's out-pointer, checked non-null above, written once here.
         unsafe {
             *info = sys::krun_input_absinfo {
                 min: a.min,
@@ -1722,6 +1744,7 @@ unsafe extern "C" fn c_query_abs_info(
 }
 
 unsafe extern "C" fn c_query_properties(instance: *mut c_void, buf: *mut u8, len: usize) -> i32 {
+    // SAFETY: libkrun's `buf`/`len` pair, passed through unchanged.
     let Some(dst) = (unsafe { query_buffer(buf, len) }) else {
         return sys::KRUN_INPUT_ERR_INVALID_PARAM;
     };
@@ -1822,6 +1845,7 @@ unsafe extern "C" fn c_next_event(instance: *mut c_void, out: *mut sys::krun_inp
             .pop();
         match next {
             Some(e) => {
+                // SAFETY: `out` is libkrun's out-pointer, checked non-null above, written once.
                 unsafe {
                     *out = sys::krun_input_event {
                         type_: e.type_,
@@ -1848,6 +1872,8 @@ struct InputHandle {
 
 impl Drop for InputHandle {
     fn drop(&mut self) {
+        // SAFETY: both pointers are `input_device`'s `Arc::into_raw`, one count each, returned
+        // exactly once here.
         unsafe {
             drop(Arc::from_raw(self.device.cast::<InputDevice>()));
             drop(Arc::from_raw(self.queue.cast::<Mutex<InputQueue>>()));
@@ -1873,7 +1899,8 @@ struct Ctx {
 
 impl Drop for Ctx {
     fn drop(&mut self) {
-        // A panic in `drop` would replace a legible error with an abort.
+        // SAFETY: the id `krun_create_ctx` returned, freed once because `Ctx` is its only owner.
+        // The result is dropped: a panic in `drop` would replace a legible error with an abort.
         let _ = unsafe { sys::krun_free_ctx(self.id) };
     }
 }
@@ -1891,6 +1918,7 @@ pub struct Context {
 impl Context {
     /// Creates a configuration context.
     pub fn new() -> Result<Self, Error> {
+        // SAFETY: no arguments; libkrun allocates in its own context table.
         let id = check("krun_create_ctx", unsafe { sys::krun_create_ctx() })?;
         Ok(Self {
             // A successful `krun_create_ctx` returns the id as a non-negative `i32`, so this cast
@@ -1907,6 +1935,7 @@ impl Context {
     ///
     /// Only available before the root is set, which is the header's requirement made structural.
     pub fn disable_implicit_init(self) -> Result<Self, Error> {
+        // SAFETY: a live context id; libkrun dereferences nothing.
         check("krun_disable_implicit_init", unsafe {
             sys::krun_disable_implicit_init(self.ctx.id)
         })?;
@@ -1919,6 +1948,7 @@ impl Context {
     pub fn root(mut self, path: &Path, access: FsAccess) -> Result<Machine, Error> {
         let c_tag = c_bytes("the root tag", OsStr::new(sys::KRUN_FS_ROOT_TAG))?;
         let c_dir = c_path("the root path", path)?;
+        // SAFETY: a live context id; both `CString`s outlive the call, then move into `retained`.
         check("krun_add_virtiofs3", unsafe {
             sys::krun_add_virtiofs3(
                 self.ctx.id,
@@ -1952,6 +1982,7 @@ impl Machine {
     /// Sets the vCPU count and RAM. Non-zero by type: libkrun rejects a zero either way, and a
     /// caller that has to handle that error has learned nothing the type could not have told it.
     pub fn vm_config(self, vcpus: NonZeroU8, ram_mib: NonZeroU32) -> Result<Self, Error> {
+        // SAFETY: a live context id and plain integers; libkrun dereferences nothing.
         check("krun_set_vm_config", unsafe {
             sys::krun_set_vm_config(self.ctx.id, vcpus.get(), ram_mib.get())
         })?;
@@ -1962,6 +1993,7 @@ impl Machine {
     pub fn share(mut self, tag: &str, path: &Path) -> Result<Self, Error> {
         let c_tag = c_bytes("a virtiofs tag", OsStr::new(tag))?;
         let c_dir = c_path("a shared directory", path)?;
+        // SAFETY: a live context id; both `CString`s outlive the call, then move into `retained`.
         check("krun_add_virtiofs", unsafe {
             sys::krun_add_virtiofs(self.ctx.id, c_tag.as_ptr(), c_dir.as_ptr())
         })?;
@@ -1974,9 +2006,11 @@ impl Machine {
     /// `tsi_features`; `0` is the no-network posture, the implicit device enabling TSI by
     /// heuristic. Must come before [`vsock_port`](Self::vsock_port), which attaches to it.
     pub fn vsock(self, tsi_features: u32) -> Result<Self, Error> {
+        // SAFETY: a live context id; libkrun dereferences nothing.
         check("krun_disable_implicit_vsock", unsafe {
             sys::krun_disable_implicit_vsock(self.ctx.id)
         })?;
+        // SAFETY: a live context id and plain integers; libkrun dereferences nothing.
         check("krun_add_vsock", unsafe {
             sys::krun_add_vsock(self.ctx.id, tsi_features)
         })?;
@@ -1991,6 +2025,7 @@ impl Machine {
         initiator: VsockInitiator,
     ) -> Result<Self, Error> {
         let c = c_path("a vsock socket path", socket)?;
+        // SAFETY: a live context id; `c` outlives the call, then moves into `retained`.
         check("krun_add_vsock_port2", unsafe {
             sys::krun_add_vsock_port2(self.ctx.id, port, c.as_ptr(), initiator.listens())
         })?;
@@ -2001,6 +2036,7 @@ impl Machine {
     /// Sets the guest working directory.
     pub fn workdir(mut self, path: &Path) -> Result<Self, Error> {
         let c = c_path("the working directory", path)?;
+        // SAFETY: a live context id; `c` outlives the call, then moves into `retained`.
         check("krun_set_workdir", unsafe {
             sys::krun_set_workdir(self.ctx.id, c.as_ptr())
         })?;
@@ -2026,6 +2062,8 @@ impl Machine {
         // something libkrun infers from a length.
         let argv_ptrs = null_terminated(&argv_c);
         let env_ptrs = null_terminated(&env_c);
+        // SAFETY: a live context id; the `CString`s outlive the call, then move into `retained`,
+        // and both pointer arrays borrow them on this frame.
         check("krun_set_exec", unsafe {
             sys::krun_set_exec(
                 self.ctx.id,
@@ -2044,6 +2082,7 @@ impl Machine {
     ///
     /// Returns the updated `Machine` and the `display_id` (0..`KRUN_MAX_DISPLAYS - 1`) assigned by libkrun.
     pub fn add_display(self, width: u32, height: u32) -> Result<(Self, u32), Error> {
+        // SAFETY: a live context id and plain integers; libkrun dereferences nothing.
         let display_id = check("krun_add_display", unsafe {
             sys::krun_add_display(self.ctx.id, width, height)
         })?;
@@ -2052,6 +2091,7 @@ impl Machine {
 
     /// Configures a custom EDID blob for `display_id`.
     pub fn display_set_edid(self, display_id: u32, edid: &[u8]) -> Result<Self, Error> {
+        // SAFETY: a live context id; `edid` is a live slice for the length of the call.
         check("krun_display_set_edid", unsafe {
             sys::krun_display_set_edid(self.ctx.id, display_id, edid.as_ptr(), edid.len())
         })?;
@@ -2060,6 +2100,7 @@ impl Machine {
 
     /// Configures DPI reported to the guest for `display_id`.
     pub fn display_set_dpi(self, display_id: u32, dpi: u32) -> Result<Self, Error> {
+        // SAFETY: a live context id and plain integers; libkrun dereferences nothing.
         check("krun_display_set_dpi", unsafe {
             sys::krun_display_set_dpi(self.ctx.id, display_id, dpi)
         })?;
@@ -2073,6 +2114,7 @@ impl Machine {
         width_mm: u16,
         height_mm: u16,
     ) -> Result<Self, Error> {
+        // SAFETY: a live context id and plain integers; libkrun dereferences nothing.
         check("krun_display_set_physical_size", unsafe {
             sys::krun_display_set_physical_size(self.ctx.id, display_id, width_mm, height_mm)
         })?;
@@ -2085,6 +2127,7 @@ impl Machine {
         display_id: u32,
         refresh_rate: u32,
     ) -> Result<Self, Error> {
+        // SAFETY: a live context id and plain integers; libkrun dereferences nothing.
         check("krun_display_set_refresh_rate", unsafe {
             sys::krun_display_set_refresh_rate(self.ctx.id, display_id, refresh_rate)
         })?;
@@ -2097,9 +2140,11 @@ impl Machine {
     /// `Accelerated` goes through `krun_set_gpu_options2` for the SHM window Venus requires.
     pub fn gpu_device(self, mode: GpuMode) -> Result<Self, Error> {
         match mode {
+            // SAFETY: a live context id and plain integers; libkrun dereferences nothing.
             GpuMode::Display => check("krun_set_gpu_options", unsafe {
                 sys::krun_set_gpu_options(self.ctx.id, gpu_flags(mode))
             })?,
+            // SAFETY: a live context id and plain integers; libkrun dereferences nothing.
             GpuMode::Accelerated => check("krun_set_gpu_options2", unsafe {
                 sys::krun_set_gpu_options2(self.ctx.id, gpu_flags(mode), GPU_SHM_WINDOW_BYTES)
             })?,
@@ -2111,6 +2156,7 @@ impl Machine {
     /// **playback and capture**, libkrun's API not splitting the two. Gate on
     /// [`has_feature`]`(`[`KRUN_FEATURE_SND`]`)`: a build without snd adds no device.
     pub fn sound_device(self) -> Result<Self, Error> {
+        // SAFETY: a live context id and a bool; libkrun dereferences nothing.
         check("krun_set_snd_device", unsafe {
             sys::krun_set_snd_device(self.ctx.id, true)
         })?;
@@ -2146,6 +2192,8 @@ impl Machine {
                 },
             }),
         };
+        // SAFETY: a live context id; the table is boxed in `handle`, alive for the call, and the
+        // size is `size_of` the struct it points at.
         check("krun_set_display_backend", unsafe {
             sys::krun_set_display_backend(
                 self.ctx.id,
@@ -2197,6 +2245,8 @@ impl Machine {
                 },
             }),
         };
+        // SAFETY: a live context id; both tables are boxed in `handle`, alive for the call, and
+        // each size is `size_of` the struct beside it.
         check("krun_add_input_device", unsafe {
             sys::krun_add_input_device(
                 self.ctx.id,
@@ -2215,6 +2265,8 @@ impl Machine {
     /// libkrun exits the process with the guest's status, so the only return is a failure, hence
     /// [`Error`] and not a `Result`. No "after" is what makes a VM a process, not a thread.
     pub fn enter(self) -> Error {
+        // SAFETY: a live context id, and every pointer the setters handed libkrun is in `retained`,
+        // alive on this `self` for the whole call.
         match check("krun_start_enter", unsafe {
             sys::krun_start_enter(self.ctx.id)
         }) {
@@ -2245,6 +2297,7 @@ fn null_terminated(items: &[CString]) -> Vec<*const c_char> {
 /// A probe, never a version compare. An unknown constant is `-EINVAL`, surfaced as an error, so
 /// "too old to be asked" stays distinguishable from "no".
 pub fn has_feature(feature: u64) -> Result<bool, Error> {
+    // SAFETY: no context and no pointer; a feature constant in, an answer out.
     Ok(check("krun_has_feature", unsafe {
         sys::krun_has_feature(feature)
     })? == 1)
@@ -2252,12 +2305,13 @@ pub fn has_feature(feature: u64) -> Result<bool, Error> {
 
 /// The hypervisor's vCPU ceiling on this host.
 pub fn max_vcpus() -> Result<u32, Error> {
-    // Non-negative by `check`, so the cast cannot wrap.
+    // SAFETY: no context and no pointer. Non-negative by `check`, so the cast cannot wrap.
     check("krun_get_max_vcpus", unsafe { sys::krun_get_max_vcpus() }).map(|n| n as u32)
 }
 
 /// Whether this host can nest virtualization. `1` is yes and `0` is no, per the header.
 pub fn nested_virt_supported() -> Result<bool, Error> {
+    // SAFETY: no context and no pointer.
     Ok(check("krun_check_nested_virt", unsafe {
         sys::krun_check_nested_virt()
     })? == 1)
@@ -2265,6 +2319,9 @@ pub fn nested_virt_supported() -> Result<bool, Error> {
 
 #[cfg(test)]
 mod tests {
+    // The tests play libkrun: they call the trampolines with instances `c_create` handed back, so
+    // the obligation is the fixture's, not a contract to restate at each call.
+    #![allow(clippy::undocumented_unsafe_blocks)]
     use super::*;
 
     /// The byte-range checks under every slot read: an exact fit against the end is the last

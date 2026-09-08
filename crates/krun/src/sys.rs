@@ -1061,8 +1061,8 @@ mod tests {
     #[cfg(krun_linked)]
     #[test]
     fn the_linked_library_answers_a_probe() {
-        // `krun_get_max_vcpus` touches no context and mutates nothing, which makes it the one call
-        // safe to make from a unit test: it asks the hypervisor a question and returns.
+        // SAFETY: `krun_get_max_vcpus` touches no context and mutates nothing, which makes it the
+        // one call safe to make from a unit test: it asks the hypervisor a question and returns.
         let max = unsafe { super::krun_get_max_vcpus() };
         assert!(
             max > 0,
