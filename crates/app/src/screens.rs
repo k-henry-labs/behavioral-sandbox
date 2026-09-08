@@ -778,16 +778,12 @@ fn framed<'a>(
     .into()
 }
 
-/// What a head's name drops by, so that its letters rather than the font's room above them
-/// centre on the head's line: twice the ascent's overshoot of the cap, at [`HEAD`].
-const CAP_DROP: f32 = 4.0;
-
-/// A pane's own name on a head's line, one line of type on its own body and dropped onto the
-/// line by [`CAP_DROP`].
+/// A pane's own name on a head's line, centred by its own line box.
+///
+/// No cap-height correction: the toggle beside it is a glyph in a font, so centring both by the
+/// line box is one rule for both, where a constant would be a guess at one font's cap metrics.
 fn head_title(name: &str) -> Element<'_, Message> {
-    container(text(name).size(HEAD).font(HEADING).line_height(1.0))
-        .padding(iced::Padding::ZERO.top(CAP_DROP))
-        .into()
+    container(text(name).size(HEAD).font(HEADING).line_height(1.0)).into()
 }
 
 /// A control that has to fit a line rather than a page: a head's, whose room the traffic lights
