@@ -196,7 +196,7 @@ fn account_row(app: &App) -> Element<'_, Message> {
     button(line.align_y(iced::alignment::Vertical::Center))
         .style(ghost)
         .width(Fill)
-        .padding([9, 12])
+        .padding(TAB_PAD)
         .on_press_maybe(press)
         .into()
 }
@@ -241,9 +241,6 @@ fn round(theme: &iced::Theme, status: button::Status) -> button::Style {
     style
 }
 
-/// The room the traffic lights take at the window's top-left corner, before the first control.
-const LIGHTS: f32 = 91.0;
-
 /// A head's height, as a toolbar window has one: 19.5 of room over its content, which is what a
 /// window whose titlebar carries a toolbar leaves over the traffic lights in it.
 const HEAD_BAR: f32 = 52.0;
@@ -257,16 +254,26 @@ const RAIL_PAD: f32 = 10.0;
 /// Where the sidebar's first tab starts: under the toggle and the gap after it.
 const NAV_TOP: f32 = TOGGLE_TOP + TOGGLE + 18.0;
 
-/// Where the toggle stands: over the room the lights leave when the sidebar is folded away, at
-/// the sidebar's own inner edge when it is out, and along that line while it moves.
+/// The room inside a sidebar row, around its icon and label.
+const TAB_PAD: [f32; 2] = [9.0, 12.0];
+
+/// Where the toggle stands on a line with no lights: over the column the tabs' icons stand in.
+const TOGGLE_LEAD: f32 = RAIL_PAD + TAB_PAD[1] + ICON / 2.0 - TOGGLE / 2.0;
+
+/// Where the toggle stands. With lights: over the room they leave when the sidebar is folded
+/// away, at the sidebar's own inner edge when it is out, and along that line while it moves.
+/// Without: in one place, the tabs' icon column, since nothing is there for it to make way for.
 fn toggle_at(out: f32) -> f32 {
-    LIGHTS + (SIDEBAR - RAIL_PAD - TOGGLE - LIGHTS) * out
+    if crate::chrome::LIGHTS <= 0.0 {
+        return TOGGLE_LEAD;
+    }
+    crate::chrome::LIGHTS + (SIDEBAR - RAIL_PAD - TOGGLE - crate::chrome::LIGHTS) * out
 }
 
-/// Where a pane's head starts, at this much of the sidebar: at the gutter, out past the lights
-/// and the toggle by as much as the sidebar is folded away.
+/// Where a pane's head starts, at this much of the sidebar: at the gutter, out past where the
+/// toggle stands when folded, by as much as the sidebar is folded away.
 fn head_inset_at(out: f32) -> f32 {
-    GUTTER + (LIGHTS + TOGGLE) * (1.0 - out)
+    GUTTER + (toggle_at(0.0) + TOGGLE) * (1.0 - out)
 }
 
 /// Where the head of the pane this window is showing starts.
@@ -298,7 +305,7 @@ fn tab<'a>(
     button(line.align_y(iced::alignment::Vertical::Center))
         .style(move |t, s| if open { selected_tab(t) } else { ghost(t, s) })
         .width(Fill)
-        .padding([9, 12])
+        .padding(TAB_PAD)
         .on_press(message)
         .into()
 }
@@ -1462,6 +1469,22 @@ mod tests {
             assert!(
                 head_starts - toggle_ends >= GUTTER,
                 "at {out} out, the head starts at {head_starts} and the toggle ends at {toggle_ends}"
+            );
+        }
+    }
+
+    /// With no lights on the line, the toggle has nothing to make way for: it stands over the
+    /// tabs' icon column at every step of the fold, so folding moves the head and not the button.
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn without_lights_the_toggle_stands_over_the_icon_column_and_stays_put() {
+        let icon_centre = RAIL_PAD + TAB_PAD[1] + ICON / 2.0;
+        for step in 0u8..=100 {
+            let out = f32::from(step) / 100.0;
+            let toggle_centre = toggle_at(out) + TOGGLE / 2.0;
+            assert!(
+                (toggle_centre - icon_centre).abs() < 0.01,
+                "at {out} out, the toggle is centred at {toggle_centre}, the icons at {icon_centre}"
             );
         }
     }

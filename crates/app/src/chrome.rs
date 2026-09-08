@@ -10,8 +10,14 @@
 //! - **Full screen has no buttons to place**, and macOS draws a toolbar there as a band of its
 //!   own over the top of the content, so the toolbar is hidden while the window is full screen
 //!   and shown again when it leaves; the head's line is the app's own either way.
+//! - **Where the buttons are not, no room is kept for them.** [`LIGHTS`] is what they take on
+//!   the head's line, and zero on a platform whose compositor draws them outside the content, or
+//!   not at all.
 //! - **AppKit is Objective-C**, which is why this module is the app's one `unsafe`, as libkrun's C
 //!   is `tormoni-krun`'s. Everything read back out is the platform's own.
+
+/// The room the window's own buttons take at the top-left corner, before the first control.
+pub(crate) const LIGHTS: f32 = if cfg!(target_os = "macos") { 91.0 } else { 0.0 };
 
 /// Puts the window's own buttons on the line a head is drawn to, on the platform that moves them.
 pub(crate) fn unify_titlebar<T: Send + 'static>(id: iced::window::Id) -> iced::Task<T> {
