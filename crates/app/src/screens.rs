@@ -152,7 +152,10 @@ fn sidebar(app: &App, width: f32) -> Element<'_, Message> {
         ),
     ]
     .spacing(3);
-    container(nav.height(Fill))
+    // The account sits at the foot, apart from the tabs: nothing above it needs one, so it must
+    // not read as a fourth place to go.
+    let body = column![nav, space().height(Fill), account_row(app)];
+    container(body)
         .style(rail)
         .width(Length::Fixed(width))
         .height(Fill)
@@ -163,6 +166,38 @@ fn sidebar(app: &App, width: f32) -> Element<'_, Message> {
             bottom: 12.0,
             left: RAIL_PAD,
         })
+        .into()
+}
+
+/// The account row at the foot of the rail: who this window is signed in as, and the press that
+/// signs in or out. Laid out as a tab is, so the rail reads as one column of rows.
+fn account_row(app: &App) -> Element<'_, Message> {
+    let account = &app.account;
+    let mut line = row![
+        icons::glyph(icons::CIRCLE_USER, ICON),
+        text(account.label())
+            .size(TAB)
+            .wrapping(text::Wrapping::None),
+    ]
+    .spacing(12);
+    line = line.push(space().width(Fill));
+    if let Some(hint) = account.hint() {
+        line = line.push(text(hint).size(SMALL).style(|t| text::Style {
+            color: Some(muted(t)),
+        }));
+    }
+    // A sign-in already in flight has nothing a second press would add, and iced draws a button
+    // with no message as the disabled one it is.
+    let press = match account {
+        crate::account::Account::SignedOut => Some(Message::SignIn),
+        crate::account::Account::SigningIn => None,
+        crate::account::Account::SignedIn { .. } => Some(Message::SignOut),
+    };
+    button(line.align_y(iced::alignment::Vertical::Center))
+        .style(ghost)
+        .width(Fill)
+        .padding([9, 12])
+        .on_press_maybe(press)
         .into()
 }
 

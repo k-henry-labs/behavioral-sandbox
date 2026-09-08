@@ -49,6 +49,7 @@ icons! {
     ROCKET = '\u{e286}', 896;
     TERMINAL = '\u{e181}', 757;
     FOLDER = '\u{e0d7}', 918;
+    CIRCLE_USER = '\u{e461}', 922;
 }
 
 /// One icon at `size`, in the icon grey, drawn to the same optical size as every other and in a

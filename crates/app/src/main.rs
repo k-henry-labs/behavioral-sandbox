@@ -14,6 +14,7 @@
 //!   display path on the host's monotonic clock, as `cargo xtask bench-frames --app` reads them.
 #![deny(unsafe_code)]
 
+mod account;
 mod chrome;
 mod cli;
 mod frame;
@@ -522,6 +523,12 @@ pub(crate) enum Message {
         RunName,
         iced::futures::channel::mpsc::UnboundedSender<String>,
     ),
+    /// Start signing in, which the account row does when nobody is signed in.
+    SignIn,
+    /// A sign-in answered: the account's address, or why there is none.
+    SignedIn(Result<String, String>),
+    /// Give up the account this window holds.
+    SignOut,
     /// Something the operator should see in the window rather than on a stderr they may not have.
     Note(String),
     /// A run's lease ended, with why; the sandbox stopping is the ordinary case.
@@ -540,6 +547,8 @@ pub(crate) struct App {
     form: Form,
     /// The last thing worth telling the operator: an error, or what just happened.
     status: Option<String>,
+    /// Who this window is signed in as. Nothing on any screen needs one.
+    account: account::Account,
     output: Output,
     /// The shown run's result files, as of the last tick. Held here rather than read in `view`,
     /// which iced rebuilds once per message: with a guest presenting frames that is a directory
@@ -596,6 +605,7 @@ impl App {
             platform: cli::Platform::default(),
             form: Form::blank(),
             status: None,
+            account: account::Account::default(),
             output: Output::default(),
             results: Vec::new(),
             log,
@@ -928,6 +938,25 @@ impl App {
                     }
                     None => self.set_screen(Screen::List),
                 }
+                Task::none()
+            }
+            Message::SignIn => {
+                self.account = account::Account::SigningIn;
+                Task::perform(async { account::begin() }, Message::SignedIn)
+            }
+            Message::SignedIn(Ok(email)) => {
+                self.status = Some(format!("signed in as {email}"));
+                self.account = account::Account::SignedIn { email };
+                Task::none()
+            }
+            Message::SignedIn(Err(why)) => {
+                self.status = Some(why);
+                self.account = account::Account::SignedOut;
+                Task::none()
+            }
+            Message::SignOut => {
+                self.status = Some("signed out".to_string());
+                self.account = account::Account::SignedOut;
                 Task::none()
             }
             Message::Started(Err(why)) | Message::Acted(Err(why)) => {
@@ -1272,6 +1301,47 @@ mod tests {
         // The scratch dir is dropped at the end of the test; nothing here touches it again.
         std::mem::forget(dir);
         app
+    }
+
+    /// The account row's press runs the whole loop: a sign-in goes in flight, the answer that
+    /// there is no service to reach lands as the operator's line, and the window is signed out
+    /// again rather than left claiming an account nobody authenticated.
+    #[test]
+    fn a_sign_in_that_cannot_reach_a_service_leaves_the_window_signed_out() {
+        let mut app = app_with(vec![], &[]);
+        assert_eq!(app.account, account::Account::SignedOut, "a fresh launch");
+
+        let _ = app.update(Message::SignIn);
+        assert_eq!(app.account, account::Account::SigningIn, "in flight");
+
+        let _ = app.update(Message::SignedIn(account::begin()));
+        assert_eq!(app.account, account::Account::SignedOut);
+        assert!(
+            app.status
+                .as_deref()
+                .is_some_and(|s| s.contains("account service")),
+            "the operator is told why: {:?}",
+            app.status
+        );
+    }
+
+    /// The signed-in state the loop would land in, and the way back out of it. Driven through
+    /// the messages a working sign-in answers with, since nothing here can produce one yet.
+    #[test]
+    fn a_signed_in_window_shows_the_account_and_can_sign_out() {
+        let mut app = app_with(vec![], &[]);
+        let _ = app.update(Message::SignedIn(Ok("someone@example.com".to_string())));
+        assert_eq!(
+            app.account,
+            account::Account::SignedIn {
+                email: "someone@example.com".to_string()
+            }
+        );
+        assert_eq!(app.account.label(), "someone@example.com");
+
+        let _ = app.update(Message::SignOut);
+        assert_eq!(app.account, account::Account::SignedOut);
+        assert_eq!(app.status.as_deref(), Some("signed out"));
     }
 
     /// Only the newest open run of a name is the one a VM answering under it belongs to. An
