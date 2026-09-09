@@ -295,11 +295,20 @@ fn settle_gone_with(
     Ok(ended)
 }
 
-fn describe(key: &str, out: &mut impl Write) -> Result<(), String> {
+/// The store and the one run `key` names, by id or as the newest of that name.
+///
+/// The three verbs that take an `ID|NAME` share it, so a run that `show` finds is one `export`
+/// and `rm` find, and the refusal is one sentence rather than three that can drift apart.
+fn find_run(key: &str) -> Result<(Store, tormoni_record::Record), String> {
     let store = Store::open().map_err(|e| e.to_string())?;
     let record = store.find(key).map_err(|e| e.to_string())?.ok_or_else(|| {
         format!("no run named or numbered {key:?} (`tormoni ls --all` lists them)")
     })?;
+    Ok((store, record))
+}
+
+fn describe(key: &str, out: &mut impl Write) -> Result<(), String> {
+    let (store, record) = find_run(key)?;
     let dir = store.dir_of(&record.id);
     write!(out, "{}", record.to_text()).map_err(|e| e.to_string())?;
     writeln!(out, "dir {}", dir.path().display()).map_err(|e| e.to_string())?;
@@ -325,20 +334,14 @@ fn describe(key: &str, out: &mut impl Write) -> Result<(), String> {
 }
 
 fn export_run(key: &str, to: Option<&Path>) -> Result<PathBuf, String> {
-    let store = Store::open().map_err(|e| e.to_string())?;
-    let record = store.find(key).map_err(|e| e.to_string())?.ok_or_else(|| {
-        format!("no run named or numbered {key:?} (`tormoni ls --all` lists them)")
-    })?;
+    let (store, record) = find_run(key)?;
     store
         .export(&record.id, to.unwrap_or(Path::new(".")))
         .map_err(|e| e.to_string())
 }
 
 fn forget(key: &str) -> Result<String, String> {
-    let store = Store::open().map_err(|e| e.to_string())?;
-    let record = store.find(key).map_err(|e| e.to_string())?.ok_or_else(|| {
-        format!("no run named or numbered {key:?} (`tormoni ls --all` lists them)")
-    })?;
+    let (store, record) = find_run(key)?;
     if record.is_open() && socket::path_for(&record.name).is_ok_and(|p| socket::is_live(&p)) {
         return Err(format!(
             "the run {} is still running; `tormoni stop {}` ends it first",
