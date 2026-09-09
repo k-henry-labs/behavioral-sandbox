@@ -441,25 +441,19 @@ fn account_block(app: &App) -> Element<'_, Message> {
         .width(Fill)
     };
     match account {
-        crate::account::Account::Entering(token) => {
-            // A token is a credential, and Settings is a screen shown over a shoulder.
-            let field = text_input("tor_…", token.as_str())
-                .secure(true)
-                .style(entry)
-                .font(MONO)
-                .on_input(|pasted| Message::Token(crate::account::Token::from(pasted)))
-                .on_submit_maybe((!token.is_empty()).then_some(Message::Connect))
-                .width(Fill);
+        crate::account::Account::Pairing(pairing) => {
+            // The fingerprint is the whole check: a person compares it with the page before
+            // pressing Connect, which is what a /connect link somebody else sent would fail.
             column![
                 named(),
+                text("Compare this fingerprint with the page, then press Connect there:")
+                    .size(BODY),
+                text(&pairing.fingerprint).size(BODY).font(MONO),
                 row![
-                    field,
-                    page_button("Connect", primary)
-                        .on_press_maybe((!token.is_empty()).then_some(Message::Connect)),
+                    page_button("Open the page again", push).on_press(Message::PairingPage),
                     page_button("Cancel", push).on_press(Message::SignInCancelled),
                 ]
-                .spacing(6)
-                .align_y(iced::alignment::Vertical::Center),
+                .spacing(6),
             ]
             .spacing(12)
             .into()
@@ -470,6 +464,7 @@ fn account_block(app: &App) -> Element<'_, Message> {
                     .on_press(Message::Console(crate::account::Page::Plans)),
                 page_button("Manage", push)
                     .on_press(Message::Console(crate::account::Page::Account)),
+                page_button("Devices", push).on_press(Message::Console(crate::account::Page::Keys)),
                 page_button("Sign out", push).on_press(Message::SignOut),
             ]
             .spacing(6);

@@ -133,12 +133,23 @@ readable.
   `--theme` and `$TORMONI_THEME` outrank the saved palette, and `--open` the saved screen, for one
   launch.
 
-Signing in is pasting a token. Sign in opens the console's Keys page in the browser, where a `tor_`
-token is minted, and the block takes it: Connect asks the console's `/v1/account` whose it is,
-through `curl` with the token on its stdin, and the block then shows the person over the handle,
-with Upgrade and Manage opening the console's plans and account pages and Sign out forgetting the
-account. The token is wiped once the console has answered, and nothing is written to disk. The
-console is `--console URL`, else `$TORMONI_CONSOLE`, else `https://tormoni.ai`; a stack on
+**Signing in pairs this device, and needs the console.** Sign in makes an ed25519 key and opens the
+console's connect page on its public half. The block then shows the key's fingerprint, in the
+`SHA256:` form `ssh-keygen -lf` prints, and the page shows the same one: comparing them is what a
+`/connect` link somebody else sent would fail. Press Connect there and the app collects a `tor_`
+token by signing for the key it holds, spends it on the console's `/v1/account`, and shows the
+person over the address the account is named by. Upgrade, Manage and Devices open the console's
+plans, account and keys pages; Devices is where this device is revoked. Sign out destroys the token
+and the key together.
+
+There is no token to type and no offline path: with the console unreachable the block says that and
+nothing else. A key collects a token once, so each Sign in makes a new one, and a device nobody
+approves within five minutes is given up on. The key and the token are files under
+`$XDG_DATA_HOME/tormoni/device`, else `~/.local/share/tormoni/device`, at mode `0600` in a `0700`
+directory. That is a file, not a keychain: this build has no credential store to put one in, and
+`device.pub` beside them is the public half, which `ssh-keygen -lf` reads.
+
+The console is `--console URL`, else `$TORMONI_CONSOLE`, else `https://tormoni.ai`; a stack on
 `http://localhost:3000` is one `--console http://localhost:3000` away.
 
 `Tormoni NAME` opens straight onto a run; `--open list|new|settings` opens a screen. Starting and

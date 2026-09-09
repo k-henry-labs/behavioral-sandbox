@@ -17,6 +17,7 @@
 mod account;
 mod chrome;
 mod cli;
+mod device;
 mod fonts;
 mod frame;
 mod icons;
@@ -616,13 +617,13 @@ pub(crate) enum Message {
         RunName,
         iced::futures::channel::mpsc::UnboundedSender<String>,
     ),
-    /// Start signing in: the console's Keys page opens for a token, and the block takes one.
+    /// Start signing in: a device key is made and the console's connect page opens for it.
     SignIn,
-    /// As much of the token as has been pasted.
-    Token(account::Token),
-    /// Ask the console whose the pasted token is.
-    Connect,
-    /// Stop signing in, keeping nothing of what was pasted.
+    /// One ask of the console whether this device has been approved yet.
+    Claimed(account::Claim),
+    /// Open the pairing page again, for a browser that was closed before Connect was pressed.
+    PairingPage,
+    /// Stop signing in, keeping neither the key nor a token.
     SignInCancelled,
     /// A sign-in answered: the account's identity, or why there is none.
     SignedIn(Result<account::Identity, String>),
@@ -652,6 +653,9 @@ pub(crate) struct App {
     account: account::Account,
     /// The console the account is signed in to, and whose pages Manage and Upgrade open.
     console: String,
+    /// Where this device's key and token live. A field, not a call, so a test never reaches the
+    /// directory the person running it is signed in with.
+    device_dir: PathBuf,
     output: Output,
     /// The shown run's result files, as of the last tick. Held here rather than read in `view`,
     /// which iced rebuilds once per message: with a guest presenting frames that is a directory
@@ -714,6 +718,7 @@ impl App {
             status: None,
             account: account::Account::default(),
             console: account::DEFAULT.to_string(),
+            device_dir: account::dir().unwrap_or_default(),
             output: Output::default(),
             results: Vec::new(),
             log,
@@ -919,6 +924,52 @@ impl App {
         self.displays.retain(|name, _| wanted.contains(name));
     }
 
+    /// Makes a device key, opens the console's page on it, and asks once whether it was
+    /// approved. The key is new each time: the console hands a key its token once.
+    fn start_pairing(&mut self) -> Result<Task<Message>, String> {
+        let dir = self.device_dir.clone();
+        if dir.as_os_str().is_empty() {
+            return Err(
+                "no HOME and no XDG_DATA_HOME, so there is nowhere to keep a device key"
+                    .to_string(),
+            );
+        }
+        let key = device::create(&dir)?;
+        let device_name = account::device_name();
+        let pairing = account::Pairing {
+            device: device_name.clone(),
+            line: key.public().line().to_string(),
+            fingerprint: key.public().fingerprint().to_string(),
+            issued_at: 0,
+            started_ms: tormoni_record::now_ms(),
+        };
+        let url = account::connect_url(&self.console, &device_name, &pairing.line);
+        self.account = account::Account::Pairing(pairing);
+        account::open_url(&url)?;
+        Ok(self.ask_again(0))
+    }
+
+    /// Asks the console again in `after` seconds, from the second the last claim signed at.
+    ///
+    /// The wait is inside the task, so each one holds a pool thread for a couple of seconds
+    /// rather than one holding it for the whole five minutes.
+    fn ask_again(&self, after: u64) -> Task<Message> {
+        let account::Account::Pairing(pairing) = &self.account else {
+            return Task::none();
+        };
+        let (console, issued_at) = (self.console.clone(), pairing.issued_at);
+        let dir = self.device_dir.clone();
+        Task::perform(
+            async move {
+                if after > 0 {
+                    std::thread::sleep(std::time::Duration::from_secs(after));
+                }
+                account::claim(&console, &dir, issued_at)
+            },
+            Message::Claimed,
+        )
+    }
+
     /// Opens `page` of the console in the browser; what came of it lands as the operator's line.
     fn visit(&self, page: account::Page) -> Task<Message> {
         let console = self.console.clone();
@@ -1085,31 +1136,59 @@ impl App {
                 Task::none()
             }
             Message::SignIn => {
-                self.account = account::Account::Entering(account::Token::default());
                 self.status = None;
-                self.visit(account::Page::Keys)
+                match self.start_pairing() {
+                    Ok(task) => task,
+                    Err(why) => {
+                        self.status = Some(why);
+                        Task::none()
+                    }
+                }
             }
-            Message::Token(pasted) => {
-                if let account::Account::Entering(token) = &mut self.account {
-                    *token = pasted;
+            // A claim that lands after Cancel, or after a second Sign in, belongs to a key this
+            // window no longer waits on: the state says which, so a stale one is dropped.
+            Message::Claimed(claim) => {
+                let account::Account::Pairing(pairing) = &mut self.account else {
+                    return Task::none();
+                };
+                pairing.issued_at = claim.issued_at;
+                match claim.outcome {
+                    account::Claimed::Pending(_) if pairing.gave_up() => {
+                        self.account = account::Account::SignedOut;
+                        self.status = Some(
+                            "nobody approved this device, so the sign-in was dropped".to_string(),
+                        );
+                        Task::none()
+                    }
+                    account::Claimed::Pending(after) => self.ask_again(after),
+                    account::Claimed::Token(token) => {
+                        let (console, dir) = (self.console.clone(), self.device_dir.clone());
+                        Task::perform(
+                            async move { account::finish(&console, &dir, token) },
+                            Message::SignedIn,
+                        )
+                    }
+                    account::Claimed::Refused(why) => {
+                        self.account = account::Account::SignedOut;
+                        self.status = Some(why);
+                        Task::none()
+                    }
                 }
-                Task::none()
             }
-            Message::Connect => match std::mem::take(&mut self.account) {
-                account::Account::Entering(token) => {
-                    self.account = account::Account::SigningIn;
-                    let console = self.console.clone();
-                    Task::perform(
-                        async move { account::begin(&console, &token) },
-                        Message::SignedIn,
-                    )
-                }
-                other => {
-                    self.account = other;
-                    Task::none()
-                }
-            },
+            Message::PairingPage => {
+                let account::Account::Pairing(pairing) = &self.account else {
+                    return Task::none();
+                };
+                let url = account::connect_url(&self.console, &pairing.device, &pairing.line);
+                Task::perform(
+                    async move { account::open_url(&url) },
+                    |answer| match answer {
+                        Ok(line) | Err(line) => Message::Note(line),
+                    },
+                )
+            }
             Message::SignInCancelled => {
+                let _ = device::forget(&self.device_dir);
                 self.account = account::Account::SignedOut;
                 Task::none()
             }
@@ -1118,14 +1197,16 @@ impl App {
                 self.account = account::Account::SignedIn(identity);
                 Task::none()
             }
-            // Another paste is the likely next thing, so the field stays, emptied.
             Message::SignedIn(Err(why)) => {
                 self.status = Some(why);
-                self.account = account::Account::Entering(account::Token::default());
+                self.account = account::Account::SignedOut;
                 Task::none()
             }
             Message::SignOut => {
-                self.status = Some("signed out".to_string());
+                self.status = match device::forget(&self.device_dir) {
+                    Ok(()) => Some("signed out, and this device's key is gone".to_string()),
+                    Err(why) => Some(why),
+                };
                 self.account = account::Account::SignedOut;
                 Task::none()
             }
@@ -1519,46 +1600,90 @@ mod tests {
         app
     }
 
-    /// The block's whole loop up to the console's answer: Sign in asks for a token, what is
-    /// pasted is held only while it is being entered, Connect puts the sign-in in flight, and a
-    /// refusal lands as the operator's line with the field emptied for another paste rather
-    /// than the window signed out. A paste with no field to take it changes nothing.
+    /// The pairing loop as the window drives it: a claim nobody has approved keeps the block
+    /// waiting, one that is refused stops and says why, and a claim that lands after Cancel is
+    /// dropped rather than signing a window in that gave up.
+    ///
+    /// Driven through the messages the console's answers arrive as, so no console is needed.
     #[test]
-    fn a_refused_token_leaves_the_block_asking_for_another() {
+    fn a_pairing_waits_then_stops_when_the_console_refuses() {
         let mut app = app_with(vec![], &[]);
         assert_eq!(app.account, account::Account::SignedOut, "a fresh launch");
-        let _ = app.update(Message::Token(account::Token::from(
-            "tor_stray".to_string(),
-        )));
+
+        // A claim with nothing waiting for it changes nothing: the state is what says whether
+        // this window still cares about that key.
+        let stray = account::Claim {
+            issued_at: 7,
+            outcome: account::Claimed::Pending(2),
+        };
+        let _ = app.update(Message::Claimed(stray));
         assert_eq!(
             app.account,
             account::Account::SignedOut,
-            "nothing to paste into"
+            "no pairing to answer"
         );
 
-        let _ = app.update(Message::SignIn);
+        app.account = account::Account::Pairing(pairing());
+        let _ = app.update(Message::Claimed(account::Claim {
+            issued_at: 11,
+            outcome: account::Claimed::Pending(2),
+        }));
         assert_eq!(
-            app.account,
-            account::Account::Entering(account::Token::default())
+            waiting_second(&app.account),
+            Some(11),
+            "a pending claim keeps the block waiting, carrying the second it signed at"
         );
-        let _ = app.update(Message::Token(account::Token::from("tor_abc".to_string())));
-        assert_eq!(
-            app.account,
-            account::Account::Entering(account::Token::from("tor_abc".to_string()))
-        );
-        let _ = app.update(Message::Connect);
-        assert_eq!(app.account, account::Account::SigningIn, "in flight");
 
-        let _ = app.update(Message::SignedIn(Err(
-            "the console refused the token".to_string()
-        )));
-        assert_eq!(
-            app.account,
-            account::Account::Entering(account::Token::default())
-        );
-        assert_eq!(app.status.as_deref(), Some("the console refused the token"));
-        let _ = app.update(Message::SignInCancelled);
+        let _ = app.update(Message::Claimed(account::Claim {
+            issued_at: 13,
+            outcome: account::Claimed::Refused("this device key already collected".to_string()),
+        }));
         assert_eq!(app.account, account::Account::SignedOut);
+        assert_eq!(
+            app.status.as_deref(),
+            Some("this device key already collected")
+        );
+    }
+
+    /// A device nobody approved inside the window is given up on rather than asked about for
+    /// ever, and the operator is told which happened.
+    #[test]
+    fn a_pairing_nobody_approves_is_dropped() {
+        let mut app = app_with(vec![], &[]);
+        let mut stale = pairing();
+        stale.started_ms = tormoni_record::now_ms() - 10 * 60 * 1000;
+        app.account = account::Account::Pairing(stale);
+        let _ = app.update(Message::Claimed(account::Claim {
+            issued_at: 17,
+            outcome: account::Claimed::Pending(2),
+        }));
+        assert_eq!(app.account, account::Account::SignedOut);
+        assert!(
+            app.status
+                .as_deref()
+                .is_some_and(|s| s.contains("nobody approved")),
+            "{:?}",
+            app.status
+        );
+    }
+
+    /// The second the block's pairing last signed at, or `None` where it is not pairing.
+    fn waiting_second(account: &account::Account) -> Option<i64> {
+        match account {
+            account::Account::Pairing(pairing) => Some(pairing.issued_at),
+            _ => None,
+        }
+    }
+
+    /// A pairing this window is waiting on, for the tests above.
+    fn pairing() -> account::Pairing {
+        account::Pairing {
+            device: "a laptop".to_string(),
+            line: "ssh-ed25519 AAAA".to_string(),
+            fingerprint: "SHA256:abc".to_string(),
+            issued_at: 0,
+            started_ms: tormoni_record::now_ms(),
+        }
     }
 
     /// The signed-in state the loop lands in, and the way back out of it. Driven through the
@@ -1568,17 +1693,21 @@ mod tests {
         let mut app = app_with(vec![], &[]);
         let identity = account::Identity {
             handle: "someone".to_string(),
+            email: "someone@example.com".to_string(),
             display_name: Some("Someone Else".to_string()),
         };
         let _ = app.update(Message::SignedIn(Ok(identity.clone())));
         assert_eq!(app.account, account::Account::SignedIn(identity));
         assert_eq!(app.account.title(), "Someone Else");
-        assert_eq!(app.account.line(&app.console), "@someone");
+        assert_eq!(app.account.line(&app.console), "someone@example.com");
         assert_eq!(app.status.as_deref(), Some("signed in as @someone"));
 
         let _ = app.update(Message::SignOut);
         assert_eq!(app.account, account::Account::SignedOut);
-        assert_eq!(app.status.as_deref(), Some("signed out"));
+        assert_eq!(
+            app.status.as_deref(),
+            Some("signed out, and this device's key is gone")
+        );
     }
 
     /// Only the newest open run of a name is the one a VM answering under it belongs to. An
