@@ -313,7 +313,7 @@ fn tormoni_line(app: &App) -> String {
     match &app.platform.tormoni {
         Some(path) => tilde(home.as_deref(), path),
         None => {
-            "Not found: set $TORMONI_CLI, or put tormoni beside tormoni-app or on PATH.".to_string()
+            "Not found: set $TORMONI_CLI, or put tormoni beside Tormoni, in the bundle\'s Resources, or on PATH.".to_string()
         }
     }
 }

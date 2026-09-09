@@ -26,6 +26,8 @@ use tormoni_input::{Area, Button, Held, InputEvent, Target, format_line};
 use tormoni_krun::{PixelFormat, SharedFrames, SharedLayout};
 use tormoni_supervisor::control::Damage;
 
+use crate::NAME;
+
 /// One present as the lease reported it.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Present {
@@ -474,7 +476,7 @@ impl Pipeline {
             let Some(format) = texture_format(layout.format, self.target.is_srgb()) else {
                 if self.refused != Some(layout.format) {
                     eprintln!(
-                        "tormoni-app: {:?} is not a format this build uploads",
+                        "{NAME}: {:?} is not a format this build uploads",
                         layout.format
                     );
                     self.refused = Some(layout.format);
@@ -569,7 +571,7 @@ fn fs_main(in: Out) -> @location(0) vec4<f32> {
 
 impl shader::Pipeline for Pipeline {
     fn new(device: &wgpu::Device, _queue: &wgpu::Queue, format: wgpu::TextureFormat) -> Self {
-        eprintln!("tormoni-app: target format {format:?}");
+        eprintln!("{NAME}: target format {format:?}");
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("tormoni frame"),
             source: wgpu::ShaderSource::Wgsl(SHADER.into()),
@@ -654,11 +656,11 @@ pub(crate) fn report_adapter() {
         Ok(adapter) => {
             let info = adapter.get_info();
             eprintln!(
-                "tormoni-app: wgpu adapter {:?}, backend {:?}, driver {:?} {:?}",
+                "{NAME}: wgpu adapter {:?}, backend {:?}, driver {:?} {:?}",
                 info.name, info.backend, info.driver, info.driver_info
             );
         }
-        Err(e) => eprintln!("tormoni-app: wgpu found no adapter: {e}"),
+        Err(e) => eprintln!("{NAME}: wgpu found no adapter: {e}"),
     }
 }
 

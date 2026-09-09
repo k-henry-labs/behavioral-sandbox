@@ -8,7 +8,7 @@
 //!   a step *after* a build rather than a setup done once, and re-running it is the normal case.
 //! - **Ad-hoc is enough**: `codesign -s -` needs no Apple Developer identity.
 //! - **`tormoni` alone.** It carries the `__vmm` helper that calls `krun_start_enter`, the only call in
-//!   the tree that asks a hypervisor for anything. `tormoni-app` maps shared frames and spawns `tormoni`.
+//!   the tree that asks a hypervisor for anything. `Tormoni` maps shared frames and spawns `tormoni`.
 //! - **Signing is verified, not assumed**: `codesign` can report success having applied nothing, so
 //!   the entitlement is read back off the binary and its absence is an error.
 
@@ -25,7 +25,7 @@ const ENTITLEMENTS: &str = "xtask/hypervisor.entitlements";
 /// The key the signed binary must carry, and what a verification reads back.
 const HYPERVISOR_KEY: &str = "com.apple.security.hypervisor";
 
-/// The binary that becomes a VM. `tormoni-app` is not here: it never calls into a hypervisor.
+/// The binary that becomes a VM. `Tormoni` is not here: it never calls into a hypervisor.
 const SIGNED_BIN: &str = "tormoni";
 
 /// Signs the built `tormoni` so it can reach the hypervisor, or explains why there is nothing to do.
@@ -66,6 +66,45 @@ pub(crate) fn sign_binary_for_hypervisor(bin: &Path) -> Result<()> {
         );
     }
     println!("sign: {} grants {HYPERVISOR_KEY}", bin.display());
+    Ok(())
+}
+
+/// Signs `app` ad hoc as a whole, which seals every file under `Contents/Resources` by hash,
+/// and verifies the seal. The CLI inside is entitled **before** this: the seal covers it as it
+/// is, and a later re-sign of it would break the seal.
+///
+/// Not `--deep`, which is deprecated for signing since macOS 13; verification keeps it, where
+/// it walks the nested code.
+pub(crate) fn seal_bundle(app: &Path) -> Result<()> {
+    let out = Command::new("codesign")
+        .args(["--force", "--sign", "-"])
+        .arg(app)
+        .output()
+        .context("running codesign (Xcode command line tools)")?;
+    if !out.status.success() {
+        bail!(
+            "codesign failed for {}: {}",
+            app.display(),
+            String::from_utf8_lossy(&out.stderr).trim()
+        );
+    }
+    verify_seal(app)
+}
+
+/// Whether the bundle's seal still matches what is inside it.
+fn verify_seal(app: &Path) -> Result<()> {
+    let out = Command::new("codesign")
+        .args(["--verify", "--deep", "--strict"])
+        .arg(app)
+        .output()
+        .context("running codesign --verify")?;
+    if !out.status.success() {
+        bail!(
+            "{} does not verify: {}",
+            app.display(),
+            String::from_utf8_lossy(&out.stderr).trim()
+        );
+    }
     Ok(())
 }
 
@@ -120,6 +159,37 @@ fn binary_path(release: bool) -> std::path::PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The seal covers `Contents/Resources`: a bundle verifies as sealed, and the same bundle
+    /// with one resource changed under the seal does not. This is what makes the order in
+    /// `bundle::assemble` (entitle the CLI, then seal) a mechanism rather than a habit.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn the_seal_covers_the_resources() {
+        let scratch = tormoni_test_support::ScratchDir::created("seal");
+        let app = scratch.path().join("X.app");
+        let macos = app.join("Contents/MacOS");
+        let resources = app.join("Contents/Resources");
+        std::fs::create_dir_all(&macos).unwrap();
+        std::fs::create_dir_all(&resources).unwrap();
+        std::fs::copy(std::env::current_exe().unwrap(), macos.join("X")).unwrap();
+        std::fs::write(
+            app.join("Contents/Info.plist"),
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<plist version=\"1.0\"><dict>\
+             <key>CFBundleExecutable</key><string>X</string>\
+             <key>CFBundleIdentifier</key><string>test.seal</string>\
+             <key>CFBundlePackageType</key><string>APPL</string></dict></plist>\n",
+        )
+        .unwrap();
+        std::fs::write(resources.join("note"), "as sealed").unwrap();
+
+        seal_bundle(&app).expect("sealed");
+        verify_seal(&app).expect("verifies as sealed");
+
+        std::fs::write(resources.join("note"), "changed under the seal").unwrap();
+        let why = verify_seal(&app).expect_err("a changed resource breaks the seal");
+        assert!(why.to_string().contains("does not verify"), "{why}");
+    }
 
     /// The committed entitlement grants exactly one key. A second one would widen what an ad-hoc
     /// signature hands a binary that runs untrusted guests, so it is asserted rather than reviewed.

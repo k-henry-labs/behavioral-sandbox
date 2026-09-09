@@ -27,6 +27,8 @@ use tormoni_supervisor::control::{self, Event, LeaseStop};
 
 use crate::Message;
 
+use crate::NAME;
+
 /// How long to keep asking for a lease while the guest has no scanout yet.
 const CONFIGURE_WAIT: Duration = Duration::from_secs(30);
 
@@ -121,7 +123,7 @@ fn run(
             Some(why) => return Ok(why),
             None => {
                 leased_before = true;
-                eprintln!("tormoni-app: the display was reconfigured; leasing again");
+                eprintln!("{NAME}: the display was reconfigured; leasing again");
             }
         }
     }

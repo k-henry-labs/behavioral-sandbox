@@ -160,19 +160,65 @@ fn curl_download(url: &str, dest: &Path) -> Result<()> {
     )
 }
 
-/// The sha256 of a file, via the `sha256sum` CLI (no hashing crate on the dev-tooling path).
+/// The hashers a host may have, tried in order: `sha256sum` (coreutils), then `shasum -a 256`
+/// (Perl's, on every macOS). No hashing crate on the dev-tooling path.
+const HASHERS: [(&str, &[&str]); 2] = [("sha256sum", &[]), ("shasum", &["-a", "256"])];
+
+/// The sha256 of a file, from the first hasher this host has.
 pub(crate) fn sha256_of(path: &Path) -> Result<String> {
-    let out = Command::new("sha256sum")
-        .arg(path)
-        .output()
-        .context("running sha256sum (is it installed?)")?;
-    if !out.status.success() {
-        bail!("sha256sum failed for {}", path.display());
+    sha256_with(&HASHERS, path)
+}
+
+/// [`sha256_of`] over `hashers`: a hasher that is not installed is skipped for the next, and any
+/// other failure is the answer.
+fn sha256_with(hashers: &[(&str, &[&str])], path: &Path) -> Result<String> {
+    for (program, args) in hashers {
+        let out = match Command::new(program).args(*args).arg(path).output() {
+            Ok(out) => out,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(e) => return Err(e).with_context(|| format!("running {program}")),
+        };
+        if !out.status.success() {
+            bail!("{program} failed for {}", path.display());
+        }
+        let text = String::from_utf8(out.stdout).context("hasher output not UTF-8")?;
+        let hash = text
+            .split_whitespace()
+            .next()
+            .with_context(|| format!("empty {program} output"))?;
+        return Ok(hash.to_string());
     }
-    let text = String::from_utf8(out.stdout).context("sha256sum output not UTF-8")?;
-    let hash = text
-        .split_whitespace()
-        .next()
-        .context("empty sha256sum output")?;
-    Ok(hash.to_string())
+    bail!(
+        "no sha256 tool here: none of {} is installed",
+        hashers
+            .iter()
+            .map(|(p, _)| *p)
+            .collect::<Vec<_>>()
+            .join(", ")
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A hasher that is not installed is passed over for the next; the digest of an empty file
+    /// is the one every sha256 tool answers.
+    #[test]
+    fn a_missing_hasher_is_skipped_for_the_next() {
+        let scratch = tormoni_test_support::ScratchDir::created("sha256");
+        let empty = scratch.path().join("empty");
+        std::fs::write(&empty, b"").unwrap();
+        let digest = sha256_with(
+            &[("no-such-hasher-here", &[]), ("shasum", &["-a", "256"])],
+            &empty,
+        )
+        .expect("the second hasher answers");
+        assert_eq!(
+            digest,
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
+        let why = sha256_with(&[("no-such-hasher-here", &[])], &empty).unwrap_err();
+        assert!(why.to_string().contains("no sha256 tool"), "{why}");
+    }
 }

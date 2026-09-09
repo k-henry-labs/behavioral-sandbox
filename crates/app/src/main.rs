@@ -1,4 +1,4 @@
-//! `tormoni-app`: the notebook. Runs on this machine, live and past, one row each; a run opens to
+//! `Tormoni`: the notebook. Runs on this machine, live and past, one row each; a run opens to
 //! its record, and a live one to its display with the keyboard and pointer going in.
 //!
 //! - **Everything here the CLI can do.** The records are `tormoni-record`'s, read straight from the
@@ -73,9 +73,18 @@ const MAX_THUMBNAILS: usize = 12;
 /// thrashes. The compiler holds the two constants in step, so neither can be raised alone.
 const _: () = assert!(MAX_THUMBNAILS < frame::MAX_TEXTURES);
 
+/// The executable's name, which is what the platform names this application by.
+pub(crate) const NAME: &str = env!("CARGO_BIN_NAME");
+
+/// The identifier the application registers under. The Linux window carries it, which is what
+/// pairs the window with its desktop entry; xtask's bundle carries the same word as
+/// `CFBundleIdentifier` and holds the two equal by reading this line.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+pub(crate) const APP_ID: &str = "ai.tormoni.app";
+
 #[derive(Parser)]
 #[command(
-    name = "tormoni-app",
+    name = NAME,
     version,
     about = "The notebook: sandboxes on this machine, live and past, and their displays."
 )]
@@ -201,7 +210,12 @@ fn window_settings() -> iced::window::Settings {
         titlebar_transparent: true,
         fullsize_content_view: true,
     };
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    let platform_specific = iced::window::settings::PlatformSpecific {
+        application_id: APP_ID.to_string(),
+        ..iced::window::settings::PlatformSpecific::default()
+    };
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     let platform_specific = iced::window::settings::PlatformSpecific::default();
     iced::window::Settings {
         size: Size::new(1360.0, 860.0),
@@ -225,14 +239,14 @@ fn main() -> ExitCode {
     let (mode, theme_note) = match theme::startup(asked.as_deref(), saved.theme.as_deref()) {
         Ok(pair) => pair,
         Err(why) => {
-            eprintln!("tormoni-app: {why}");
+            eprintln!("{NAME}: {why}");
             return ExitCode::from(EXIT_OPERATIONAL);
         }
     };
     let console = match account::console(cli.console.as_deref(), std::env::var(account::ENV).ok()) {
         Ok(origin) => origin,
         Err(why) => {
-            eprintln!("tormoni-app: {why}");
+            eprintln!("{NAME}: {why}");
             return ExitCode::from(EXIT_OPERATIONAL);
         }
     };
@@ -240,14 +254,14 @@ fn main() -> ExitCode {
     let sinks = match frame::Sinks::open(cli.drawn_log.as_deref(), cli.input_log.as_deref()) {
         Ok(sinks) => Arc::new(sinks),
         Err(e) => {
-            eprintln!("tormoni-app: opening a log: {e}");
+            eprintln!("{NAME}: opening a log: {e}");
             return ExitCode::from(EXIT_OPERATIONAL);
         }
     };
     let store = match Store::open() {
         Ok(store) => store,
         Err(e) => {
-            eprintln!("tormoni-app: the runs directory: {e}");
+            eprintln!("{NAME}: the runs directory: {e}");
             return ExitCode::from(EXIT_OPERATIONAL);
         }
     };
@@ -310,7 +324,7 @@ fn main() -> ExitCode {
     match ran {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
-            eprintln!("tormoni-app: {e}");
+            eprintln!("{NAME}: {e}");
             ExitCode::from(EXIT_OPERATIONAL)
         }
     }
@@ -731,11 +745,11 @@ impl App {
 
     fn title(&self) -> String {
         match &self.screen {
-            Screen::Settings => "Tormoni › settings".to_string(),
-            Screen::List => "Tormoni › sandboxes".to_string(),
-            Screen::New => "Tormoni › new run".to_string(),
+            Screen::Settings => format!("{NAME} › settings"),
+            Screen::List => format!("{NAME} › sandboxes"),
+            Screen::New => format!("{NAME} › new run"),
             Screen::Run(id) => format!(
-                "Tormoni › {}",
+                "{NAME} › {}",
                 self.record(id).map_or(id.as_str(), |r| r.name.as_str())
             ),
         }
@@ -1227,7 +1241,7 @@ impl App {
             Message::Mapped(name, frames) => {
                 let layout = frames.layout();
                 eprintln!(
-                    "tormoni-app: mapped {name} {}x{} {:?}, stride {}, {} slots",
+                    "{NAME}: mapped {name} {}x{} {:?}, stride {}, {} slots",
                     layout.width, layout.height, layout.format, layout.stride, layout.slots
                 );
                 // A new scanout, so the history starts again; a reconfigure leaves input open.
@@ -1270,7 +1284,7 @@ impl App {
             Message::Input(name, lines) => {
                 if let Some(display) = self.displays.get_mut(&name) {
                     display.input = Some(lines);
-                    eprintln!("tormoni-app: the keyboard and pointer reach {name}");
+                    eprintln!("{NAME}: the keyboard and pointer reach {name}");
                 }
                 Task::none()
             }
@@ -1281,7 +1295,7 @@ impl App {
             Message::Ended(name, why) => {
                 let read = self.displays.get(&name).map_or(0, |d| d.read);
                 eprintln!(
-                    "tormoni-app: {name}: {why}; read {read} presents, uploaded {} frames",
+                    "{NAME}: {name}: {why}; read {read} presents, uploaded {} frames",
                     self.sinks.uploaded()
                 );
                 self.displays.remove(&name);

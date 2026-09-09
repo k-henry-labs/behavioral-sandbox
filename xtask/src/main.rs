@@ -5,9 +5,11 @@
 //! plumbing (paths, `cargo` and tool runners) live here.
 #![forbid(unsafe_code)]
 
+mod app_icon;
 mod artifacts;
 mod bench;
 mod bundle;
+mod dist;
 mod drift;
 mod fonts;
 mod guest_bins;
@@ -62,14 +64,34 @@ enum Cmd {
     /// four static faces `crates/app/src/fonts.rs` compiles in. The same families the web app
     /// serves, so a window and a page read as one product. A dev step, like `Icons`.
     Fonts,
-    /// Assemble `artifacts/Tormoni.app` from the built binaries, so the window runs as
-    /// `Tormoni` rather than as the file name `tormoni-app` (macOS). `tormoni` is copied in
-    /// beside it and signed there. Elsewhere it says there is nothing to bundle and exits.
+    /// Assemble `artifacts/Tormoni.app` from the built binaries (macOS): the identifier and the
+    /// icon a bare `Tormoni` cannot carry, with `tormoni` copied in and signed there. Elsewhere
+    /// it says there is nothing to bundle and exits.
     Bundle {
         /// Bundle the release build rather than the debug one.
         #[arg(long)]
         release: bool,
     },
+    /// Build, bundle and start the notebook so the platform names it `Tormoni`. The Dock's label
+    /// and the menu bar name a bare executable by its file name, and only a bundle carries a name
+    /// of its own, so this starts the copy inside one; its output still reaches this terminal.
+    /// Elsewhere it starts the built binary. Anything after `--` reaches the app.
+    App {
+        /// Start the release build rather than the debug one.
+        #[arg(long)]
+        release: bool,
+        /// Passed through to `Tormoni`.
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+    /// Cut the application's icon from `crates/app/icon/tormoni.svg` into the `.icns` the bundle
+    /// names and the PNG the desktop entry names (macOS tooling). A dev step: the outputs are
+    /// committed, like the fonts. Elsewhere it says there is nothing to cut and exits.
+    AppIcon,
+    /// Package this host's release under `dist/`: the release build of both binaries, the guest
+    /// tree `init` writes, and `SHA256SUMS`, as `install.sh` downloads them. macOS ARM64 writes
+    /// `Tormoni-macos-aarch64.zip`; Linux x86_64 writes `tormoni-linux-x86_64.tgz`.
+    Dist,
     /// Snapshot every sha-pinned upstream input (the Alpine base, the static `apk`, the `.apk`
     /// closure) into a local mirror, so a fresh host builds offline without the Alpine CDN.
     /// Writes a sha manifest; re-verify it offline with `--verify`.
@@ -166,7 +188,7 @@ enum Cmd {
         /// Frames per run. Default 300.
         #[arg(long, default_value_t = 300)]
         frames: usize,
-        /// Also run the frames through `tormoni-app`, which opens a window on this desktop.
+        /// Also run the frames through `Tormoni`, which opens a window on this desktop.
         #[arg(long)]
         app: bool,
     },
@@ -200,6 +222,9 @@ fn main() -> Result<()> {
         Cmd::Fonts => fonts::cut_text_fonts(),
         Cmd::Init { root, arch, force } => init::init(root, arch, force),
         Cmd::Bundle { release } => bundle::bundle_app(release),
+        Cmd::AppIcon => app_icon::cut_app_icon(),
+        Cmd::Dist => dist::dist(),
+        Cmd::App { release, args } => bundle::run_app(release, &args),
         Cmd::Vendor { dir, verify } => {
             if verify {
                 vendor::verify(&dir.unwrap_or_else(vendor::default_vendor_dir))
@@ -866,6 +891,11 @@ fn target_dir() -> PathBuf {
 /// `artifacts/` under the workspace root.
 fn artifacts_dir() -> PathBuf {
     workspace_root().join("artifacts")
+}
+
+/// Where a release lands, which `.gitignore` already names.
+fn dist_dir() -> PathBuf {
+    workspace_root().join("dist")
 }
 
 /// The local vendor mirror, if the operator set `TORMONI_VENDOR_DIR`: the offline source for every

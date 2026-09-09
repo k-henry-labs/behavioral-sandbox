@@ -353,11 +353,11 @@ fn bench_boundary(ctx: &BenchContext, display: &str, frames: usize, stage: &Path
     Ok(())
 }
 
-/// The application (4.10): `tormoni-app` leases the display into a window, logging each present read
+/// The application (4.10): `Tormoni` leases the display into a window, logging each present read
 /// and each frame uploaded. The panel bounds what reaches the screen, so uploaded against
 /// presented is the number.
 fn bench_app(ctx: &BenchContext, display: &str, frames: usize, stage: &Path) -> Result<()> {
-    let app = ctx.tormoni.with_file_name("tormoni-app");
+    let app = ctx.tormoni.with_file_name(crate::bundle::APP);
     if !app.is_file() {
         bail!(
             "no release app at {} — run `cargo build --release -p tormoni-app`",
@@ -369,9 +369,7 @@ fn bench_app(ctx: &BenchContext, display: &str, frames: usize, stage: &Path) -> 
         std::env::var_os("DISPLAY"),
     );
     if wayland.is_none() && x11.is_none() {
-        println!(
-            "path flip, through tormoni-app: SKIPPED (no WAYLAND_DISPLAY or DISPLAY: no window)"
-        );
+        println!("path flip, through Tormoni: SKIPPED (no WAYLAND_DISPLAY or DISPLAY: no window)");
         return Ok(());
     }
     let helper_log = stage.join("app-helper.tsv");
@@ -404,14 +402,15 @@ fn bench_app(ctx: &BenchContext, display: &str, frames: usize, stage: &Path) -> 
     )?;
     let stderr = String::from_utf8_lossy(&ran.stderr);
     if !ran.status.success() {
-        bail!("tormoni-app failed: {stderr}");
+        bail!("Tormoni failed: {stderr}");
     }
     let helper = read_frame_log(&helper_log)?;
     let read = read_frame_log(&read_log)?;
     let drawn = read_frame_log(&drawn_log)?;
-    println!("path flip, through tormoni-app (iced, wgpu):");
-    for line in stderr.lines().filter(|l| l.starts_with("tormoni-app:")) {
-        println!("  {}", line.trim_start_matches("tormoni-app:").trim());
+    println!("path flip, through Tormoni (iced, wgpu):");
+    let prefix = format!("{}:", crate::bundle::APP);
+    for line in stderr.lines().filter(|l| l.starts_with(&prefix)) {
+        println!("  {}", line.trim_start_matches(&prefix).trim());
     }
     println!(
         "  helper saw {} frames, the app read {} and uploaded {}",

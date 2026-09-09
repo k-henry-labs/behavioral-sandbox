@@ -7,10 +7,10 @@ rust-version.workspace = true
 repository.workspace = true
 authors.workspace = true
 publish = false
-description = "The tormoni GUI application (`tormoni-app`): the iced spike."
+description = "The tormoni GUI application (`Tormoni`): the notebook."
 
 [[bin]]
-name = "tormoni-app"
+name = "Tormoni"
 path = "src/main.rs"
 
 [dependencies]

@@ -1,8 +1,9 @@
 //! The `tormoni` binary as the app runs it: starting a run, stopping one, and a shell in the
 //! operator's terminal. The app has no verb of its own, so this is the whole bridge.
 //!
-//! - **Which `tormoni`.** `$TORMONI_CLI` if set, else the `tormoni` beside this binary, else the one on
-//!   `PATH`, so a packaged pair and a `target/` pair both find each other.
+//! - **Which `tormoni`.** `$TORMONI_CLI` if set, else the `tormoni` beside this binary (a
+//!   `target/` pair), else the one under the bundle's `Contents/Resources` (where Ollama keeps
+//!   its own), else the one on `PATH`, which a Finder-launched app cannot count on.
 //! - **A started run is not this process's.** `tormoni run` is spawned detached with its stdio on
 //!   `/dev/null` (the record has the output), and a thread reaps it so nothing is left a zombie;
 //!   `tormoni up` returns at once with the name.
@@ -17,15 +18,23 @@ pub(crate) fn tormoni_path() -> PathBuf {
     if let Some(path) = std::env::var_os("TORMONI_CLI") {
         return PathBuf::from(path);
     }
-    if let Ok(me) = std::env::current_exe()
-        && let Some(dir) = me.parent()
-    {
-        let beside = dir.join("tormoni");
-        if beside.is_file() {
-            return beside;
-        }
+    std::env::current_exe()
+        .ok()
+        .and_then(|me| near(&me).into_iter().find(|p| p.is_file()))
+        .unwrap_or_else(|| PathBuf::from("tormoni"))
+}
+
+/// The two places a packaged `tormoni` sits relative to the executable `exe`: beside it, and
+/// under the bundle's `Contents/Resources` two levels up.
+fn near(exe: &Path) -> Vec<PathBuf> {
+    let mut found = Vec::new();
+    if let Some(dir) = exe.parent() {
+        found.push(dir.join("tormoni"));
     }
-    PathBuf::from("tormoni")
+    if let Some(contents) = exe.parent().and_then(Path::parent) {
+        found.push(contents.join("Resources").join("tormoni"));
+    }
+    found
 }
 
 /// The guest root the CLI would default to, for the form's first value.
@@ -386,6 +395,23 @@ pub(crate) fn reap(mut child: std::process::Child) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A bundled app finds the CLI under `Contents/Resources`, and a `target/` pair finds it
+    /// beside the executable; the beside place is looked at first either way.
+    #[test]
+    fn a_bundled_app_finds_the_cli_in_resources() {
+        assert_eq!(
+            near(Path::new("/A/Tormoni.app/Contents/MacOS/Tormoni")),
+            [
+                PathBuf::from("/A/Tormoni.app/Contents/MacOS/tormoni"),
+                PathBuf::from("/A/Tormoni.app/Contents/Resources/tormoni"),
+            ]
+        );
+        assert_eq!(
+            near(Path::new("/t/debug/Tormoni"))[0],
+            PathBuf::from("/t/debug/tormoni")
+        );
+    }
 
     /// Only a regular file with an execute bit counts as a found `tormoni`.
     #[test]

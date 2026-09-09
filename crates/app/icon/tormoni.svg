@@ -1,0 +1,6 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- The product's mark, drawn to the 824 px extent macOS draws an icon to on a 1024 canvas. -->
+  <rect x="100" y="100" width="824" height="824" rx="181" fill="#0A0A0A"/>
+  <rect x="306" y="306" width="412" height="412" rx="77" stroke="#FAFAFA" stroke-width="51.5"/>
+  <rect x="434.75" y="434.75" width="154.5" height="154.5" rx="38.6" fill="#FAFAFA"/>
+</svg>

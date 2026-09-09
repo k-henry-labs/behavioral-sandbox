@@ -37,10 +37,17 @@ pub(crate) fn init(root: Option<PathBuf>, arch: Option<String>, force: bool) -> 
         .map_or_else(GuestArch::host, GuestArch::parse)?;
     let root = resolve_root(root)?;
     clear_destination(&root, force)?;
+    write_tree(&root, arch)?;
+    report(&root, arch);
+    Ok(())
+}
 
+/// Writes the guest tree at `root` for `arch`: the base, the agent, the results mount point and
+/// the resolver. `dist` archives one of these; `init` puts one where `tormoni` looks.
+pub(crate) fn write_tree(root: &Path, arch: GuestArch) -> Result<()> {
     let base = alpine_artifact(arch);
     fetch_one(&base)?;
-    std::fs::create_dir_all(&root).with_context(|| format!("create {}", root.display()))?;
+    std::fs::create_dir_all(root).with_context(|| format!("create {}", root.display()))?;
     run_tool(
         "tar",
         &[
@@ -56,10 +63,7 @@ pub(crate) fn init(root: Option<PathBuf>, arch: Option<String>, force: bool) -> 
     // The root is read-only unless asked otherwise, so a mount point has to be in the tree
     // already: the guest cannot make one for the results directory every run gets.
     std::fs::create_dir_all(root.join("results")).context("create the /results mount point")?;
-    std::fs::write(root.join("etc/resolv.conf"), RESOLV_CONF).context("write /etc/resolv.conf")?;
-
-    report(&root, arch);
-    Ok(())
+    std::fs::write(root.join("etc/resolv.conf"), RESOLV_CONF).context("write /etc/resolv.conf")
 }
 
 /// The tree's destination: the flag, else `$TORMONI_GUEST_ROOT`, else the per-user data directory, the
