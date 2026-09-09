@@ -71,8 +71,9 @@ readable.
 
 `tormoni-app` opens on the notebook, with a sidebar reaching its three screens:
 
-- **The list**: every run, newest first, live ones with a thumbnail of their display. `Clear
-  history` removes the ended runs behind an inline confirm; live runs stay.
+- **The list**: every run, newest first, live ones with a thumbnail of their display. `Choose`
+  turns each ended row into a tick box, `All` takes every one of them, and `Remove` takes what was
+  chosen behind an inline confirm. A live run has no box: it is refused a delete until it stops.
 - **One run**: its posture, output and results beside its live display (keyboard and pointer go
   to the guest), with Stop and Shell while it runs, Re-run and Delete after, and Export always.
 - **The start form**: every posture flag as a field, summarised in the record's own posture

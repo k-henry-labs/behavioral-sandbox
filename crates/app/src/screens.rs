@@ -702,23 +702,37 @@ pub(crate) fn list(app: &App) -> Element<'_, Message> {
     let live: Vec<&Record> = app.runs.iter().filter(|r| app.is_live(r)).collect();
     let past: Vec<&Record> = app.runs.iter().filter(|r| !app.is_live(r)).collect();
     let start = row![head_title("Sandboxes"), space().width(Fill)];
-    let header = if app.confirm_clear {
-        start.push(
+    let header = match &app.list {
+        // The last point a choice can be kept, and it says how many rather than "these": the
+        // count is the thing a reader checks before pressing a destructive button.
+        crate::ListMode::Confirming(ids) => row![
+            head_title(format!("Remove {}?", crate::runs(ids.len()))),
+            space().width(Fill),
+            small_button("Remove", destructive).on_press(Message::RemoveConfirmed),
+            small_button("Keep", push).on_press(Message::ChooseCancelled),
+        ],
+        crate::ListMode::Choosing(ids) => {
+            let every = past.len();
+            let all = ids.len() == every && every > 0;
             row![
-                text(format!("remove {}?", crate::ended_runs(past.len()))).size(BODY),
-                small_button("Remove", destructive).on_press(Message::ClearConfirmed),
-                small_button("Keep", push).on_press(Message::ClearCancelled),
+                head_title(format!("{} of {every} chosen", ids.len())),
+                space().width(Fill),
+                small_button(if all { "None" } else { "All" }, push)
+                    .on_press(Message::ChooseAll(!all)),
+                // Nothing chosen is nothing to remove, and iced draws a button with no message as
+                // the disabled one it is.
+                small_button("Remove", destructive)
+                    .on_press_maybe((!ids.is_empty()).then_some(Message::RemoveChosen)),
+                small_button("Done", push).on_press(Message::ChooseCancelled),
             ]
-            .spacing(12)
-            .align_y(iced::alignment::Vertical::Center),
-        )
-    } else {
-        let mut ordinary = start;
-        if !past.is_empty() {
-            ordinary =
-                ordinary.push(small_button("Clear history", push).on_press(Message::ClearHistory));
         }
-        ordinary.push(small_button("New run", push).on_press(Message::NewRun))
+        crate::ListMode::Browsing => {
+            let mut ordinary = start;
+            if !past.is_empty() {
+                ordinary = ordinary.push(small_button("Choose", push).on_press(Message::Choose));
+            }
+            ordinary.push(small_button("New run", push).on_press(Message::NewRun))
+        }
     }
     .spacing(12)
     .align_y(iced::alignment::Vertical::Center);
@@ -797,7 +811,7 @@ fn framed<'a>(
 ///
 /// No cap-height correction: the toggle beside it is a glyph in a font, so centring both by the
 /// line box is one rule for both, where a constant would be a guess at one font's cap metrics.
-fn head_title(name: &str) -> Element<'_, Message> {
+fn head_title<'a>(name: impl text::IntoFragment<'a>) -> Element<'a, Message> {
     container(text(name).size(HEAD).font(HEADING).line_height(1.0)).into()
 }
 
@@ -807,7 +821,7 @@ fn small_button<'a>(
     label: &'a str,
     style: fn(&iced::Theme, button::Status) -> button::Style,
 ) -> iced::widget::Button<'a, Message> {
-    button(text(label).size(BODY))
+    button(text(label).size(BODY).wrapping(text::Wrapping::None))
         .style(style)
         .padding(SMALL_PAD)
 }
@@ -975,27 +989,52 @@ fn run_row<'a>(app: &'a App, record: &'a Record) -> Element<'a, Message> {
         .into(),
         _ => text_side.width(Fill).into(),
     };
-    // What this row can be told to do, at its own end: a sandbox is stopped where it is listed
-    // rather than only on its own screen. There is no pause, because libkrun has no suspend.
-    let body = row![
-        told,
-        text(state)
-            .size(SMALL)
-            .wrapping(text::Wrapping::None)
-            .style(move |t| text::Style {
-                color: Some(muted(t))
-            }),
-        row_actions(record, live),
-    ]
-    .spacing(12)
-    .align_y(iced::alignment::Vertical::Center);
+    let state_text = text(state)
+        .size(SMALL)
+        .wrapping(text::Wrapping::None)
+        .style(move |t| text::Style {
+            color: Some(muted(t)),
+        });
+    // While a choice is being made every row reads the same way: a box says whether it is in, and
+    // the row's own actions step aside so the only destructive press is the header's.
+    let choosing = app.list.is_choosing();
+    let chosen = app.list.chosen().contains(record.id.as_str());
+    let mut body = row![];
+    if choosing {
+        // A live run is refused a delete, so it is shown as something that cannot be chosen
+        // rather than offered a box that would not answer.
+        let box_icon = if live {
+            icons::glyph(icons::SQUARE, ICON).style(|t| text::Style {
+                color: Some(muted(t).scale_alpha(0.4)),
+            })
+        } else if chosen {
+            icons::glyph(icons::SQUARE_CHECK, ICON)
+        } else {
+            icons::glyph(icons::SQUARE, ICON)
+        };
+        body = body.push(box_icon);
+    }
+    body = body.push(told).push(state_text);
+    if !choosing {
+        // What this row can be told to do, at its own end: a sandbox is stopped where it is
+        // listed rather than only on its own screen. There is no pause, because libkrun has no
+        // suspend.
+        body = body.push(row_actions(record, live));
+    }
+    let body = body.spacing(12).align_y(iced::alignment::Vertical::Center);
     // A button rather than a container under a `mouse_area`: the row is a thing you click, so it
-    // answers the pointer with the step of grey a source list gives a row under one.
+    // answers the pointer with the step of grey a source list gives a row under one. A nested
+    // checkbox would never see the press, which is why the whole row is the target.
+    let press = match (choosing, live) {
+        (true, true) => None,
+        (true, false) => Some(Message::ChooseToggle(crate::RunId::of(record))),
+        (false, _) => Some(Message::Open(crate::RunId::of(record))),
+    };
     button(body)
         .width(Fill)
         .padding(12)
         .style(row_card)
-        .on_press(Message::Open(crate::RunId::of(record)))
+        .on_press_maybe(press)
         .into()
 }
 

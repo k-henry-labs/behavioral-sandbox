@@ -141,6 +141,40 @@ impl std::fmt::Display for OpenScreen {
     }
 }
 
+/// What the notebook's list is doing.
+///
+/// The chosen ids live in the mode rather than beside it, so there is no selection to leave
+/// behind when the list goes back to being read, and no third state where a stale set and a
+/// cleared flag disagree. Only ended runs are ever in it: a live one is refused a delete anyway.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ListMode {
+    /// Reading the list; pressing a row opens its run.
+    Browsing,
+    /// Choosing records to remove; pressing a row adds or removes it instead of opening it.
+    Choosing(BTreeSet<String>),
+    /// Asking before removing the records it carries, which is the last point one can be kept.
+    Confirming(BTreeSet<String>),
+}
+
+impl ListMode {
+    /// The ids chosen so far, empty while browsing.
+    pub(crate) fn chosen(&self) -> &BTreeSet<String> {
+        match self {
+            Self::Browsing => {
+                static NONE: std::sync::LazyLock<BTreeSet<String>> =
+                    std::sync::LazyLock::new(BTreeSet::new);
+                &NONE
+            }
+            Self::Choosing(ids) | Self::Confirming(ids) => ids,
+        }
+    }
+
+    /// Whether a row should answer a press by being chosen rather than opened.
+    pub(crate) fn is_choosing(&self) -> bool {
+        matches!(self, Self::Choosing(_))
+    }
+}
+
 /// An interface scale Settings offers, in percent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Scale(pub(crate) u16);
@@ -522,9 +556,18 @@ pub(crate) enum Message {
     Shell(RunName),
     Rerun(RunId),
     Delete(RunId),
-    ClearHistory,
-    ClearConfirmed,
-    ClearCancelled,
+    /// Start choosing records to remove.
+    Choose,
+    /// Add or remove one record from the choice.
+    ChooseToggle(RunId),
+    /// Choose every ended run, or none of them.
+    ChooseAll(bool),
+    /// Stop choosing and keep everything.
+    ChooseCancelled,
+    /// Ask before removing what was chosen.
+    RemoveChosen,
+    /// Remove what was chosen.
+    RemoveConfirmed,
     /// Write the run's directory as a tar file where a person can pick it up.
     Export(RunId),
     Show(Stream),
@@ -590,7 +633,7 @@ pub(crate) struct App {
     /// The screen a plain launch opens on: the saved pick Settings shows and writes.
     opens_on: OpenScreen,
     /// Whether the list is asking "really clear the history?". Leaving the list disarms it.
-    confirm_clear: bool,
+    list: ListMode,
     /// Whether the sidebar is out, and where it stands while that is changing.
     sidebar: Animation<bool>,
     /// The instant the last frame was drawn at, which every animation is read at.
@@ -640,7 +683,7 @@ impl App {
             theme_overridden: false,
             scale: 100,
             opens_on: OpenScreen::List,
-            confirm_clear: false,
+            list: ListMode::Browsing,
             sidebar: Animation::new(true).quick().easing(Easing::EaseInOut),
             now: std::time::Instant::now(),
             window: None,
@@ -680,6 +723,15 @@ impl App {
     /// drew them on that line.
     pub(crate) fn lights(&self) -> f32 {
         if self.fullscreen { 0.0 } else { chrome::LIGHTS }
+    }
+
+    /// The ids a choice may hold: every run that has ended. A live run is refused a delete, so
+    /// offering it would be offering something the press cannot do.
+    pub(crate) fn removable(&self) -> impl Iterator<Item = String> + '_ {
+        self.runs
+            .iter()
+            .filter(|r| !self.is_live(r))
+            .map(|r| r.id.clone())
     }
 
     /// How far the sidebar is out: 0 folded away, 1 all the way, and between while it moves.
@@ -804,7 +856,7 @@ impl App {
 
     /// Moves to `screen` and settles what is leased for it.
     fn set_screen(&mut self, screen: Screen) {
-        self.confirm_clear = false;
+        self.list = ListMode::Browsing;
         self.screen = screen;
         self.forget_unwatched();
     }
@@ -1037,20 +1089,55 @@ impl App {
                 self.refresh();
                 Task::none()
             }
-            Message::ClearHistory => {
-                self.confirm_clear = true;
+            Message::Choose => {
+                self.list = ListMode::Choosing(BTreeSet::new());
                 Task::none()
             }
-            Message::ClearCancelled => {
-                self.confirm_clear = false;
+            Message::ChooseToggle(id) => {
+                if let ListMode::Choosing(ids) = &mut self.list
+                    && !ids.remove(id.as_str())
+                {
+                    ids.insert(id.as_str().to_string());
+                }
                 Task::none()
             }
-            Message::ClearConfirmed => {
-                self.confirm_clear = false;
-                self.status = match self.store.prune(0) {
-                    Ok(n) => Some(format!("removed {}", ended_runs(n))),
-                    Err(e) => Some(format!("clearing the history: {e}")),
-                };
+            Message::ChooseAll(all) => {
+                let every: BTreeSet<String> = self.removable().collect();
+                if let ListMode::Choosing(ids) = &mut self.list {
+                    *ids = if all { every } else { BTreeSet::new() };
+                }
+                Task::none()
+            }
+            Message::ChooseCancelled => {
+                self.list = ListMode::Browsing;
+                Task::none()
+            }
+            Message::RemoveChosen => {
+                if let ListMode::Choosing(ids) = &self.list
+                    && !ids.is_empty()
+                {
+                    self.list = ListMode::Confirming(ids.clone());
+                }
+                Task::none()
+            }
+            Message::RemoveConfirmed => {
+                let chosen = std::mem::replace(&mut self.list, ListMode::Browsing);
+                let mut removed = 0usize;
+                let mut failed: Option<String> = None;
+                for id in chosen.chosen() {
+                    match self.store.remove(id) {
+                        Ok(()) => removed += 1,
+                        // The first failure is the one reported, and the rest of the choice is
+                        // still attempted: one unreadable record does not strand the others.
+                        Err(e) => {
+                            failed.get_or_insert_with(|| format!("removing {id}: {e}"));
+                        }
+                    }
+                }
+                self.status = Some(match failed {
+                    Some(why) => format!("removed {}, then {why}", ended_runs(removed)),
+                    None => format!("removed {}", ended_runs(removed)),
+                });
                 self.refresh();
                 Task::none()
             }
@@ -1224,7 +1311,13 @@ fn settle_gone(store: &Store, runs: &mut [Record], live: &BTreeSet<RunName>) {
     }
 }
 
-/// `n` ended runs, spelled with its plural: the confirm and the status line share it.
+/// `n` runs, spelled with its plural. What a header asks about, where "ended" is already
+/// implied: only an ended run can be chosen.
+pub(crate) fn runs(n: usize) -> String {
+    format!("{n} run{}", if n == 1 { "" } else { "s" })
+}
+
+/// `n` ended runs, spelled with its plural: the status line says which kind went.
 pub(crate) fn ended_runs(n: usize) -> String {
     format!("{n} ended run{}", if n == 1 { "" } else { "s" })
 }
@@ -1581,10 +1674,10 @@ mod tests {
         assert!(app.watches().is_empty(), "settings asks for no leases");
     }
 
-    /// Clearing removes every ended run, only behind the confirm, and leaves the live one;
-    /// leaving the list disarms an armed confirm.
+    /// A choice removes exactly what was chosen, only behind the confirm, and never a live run;
+    /// a second press unchooses, and leaving the list drops the choice.
     #[test]
-    fn clearing_removes_every_ended_run_and_only_behind_the_confirm() {
+    fn a_choice_removes_what_was_chosen_and_only_behind_the_confirm() {
         let dir = tormoni_test_support::ScratchDir::created("app-clear");
         let store = Store::at(dir.path().join("runs")).expect("a store");
         let name = format!("clear-live-{}", std::process::id());
@@ -1603,36 +1696,60 @@ mod tests {
 
         let sinks = Arc::new(frame::Sinks::open(None, None).expect("sinks"));
         let mut app = App::new(store.clone(), None, None, sinks, false);
-        let _ = app.update(Message::ClearHistory);
-        assert!(app.confirm_clear);
+        // A choice offers only what a delete would accept: the live run is not in it.
+        let _ = app.update(Message::Choose);
+        let _ = app.update(Message::ChooseAll(true));
+        assert_eq!(app.list.chosen().len(), 2, "the live run is not choosable");
         assert_eq!(
             store.list().expect("listed").len(),
             3,
-            "arming removes nothing"
+            "choosing removes nothing"
         );
-        let _ = app.update(Message::ClearCancelled);
-        assert!(!app.confirm_clear);
+        let _ = app.update(Message::ChooseCancelled);
+        assert_eq!(app.list, ListMode::Browsing);
         assert_eq!(
             store.list().expect("listed").len(),
             3,
             "neither does cancelling"
         );
 
-        let _ = app.update(Message::ClearHistory);
-        let _ = app.update(Message::ClearConfirmed);
-        assert!(!app.confirm_clear);
+        // One of the two, which is the whole point: not all, and not one at a time.
+        let one = gone.id.clone();
+        let _ = app.update(Message::Choose);
+        let _ = app.update(Message::ChooseToggle(RunId(one.clone())));
+        assert_eq!(app.list.chosen().len(), 1);
+        let _ = app.update(Message::RemoveChosen);
+        assert!(
+            matches!(app.list, ListMode::Confirming(_)),
+            "asking before removing"
+        );
+        assert_eq!(
+            store.list().expect("listed").len(),
+            3,
+            "asking removes nothing"
+        );
+        let _ = app.update(Message::RemoveConfirmed);
+        assert_eq!(app.list, ListMode::Browsing);
         let left: Vec<String> = store
             .list()
             .expect("listed")
             .into_iter()
             .map(|r| r.name)
             .collect();
-        assert_eq!(left, std::slice::from_ref(&name), "only the live run stays");
-        assert_eq!(app.status.as_deref(), Some("removed 2 ended runs"));
+        assert_eq!(left.len(), 2, "one went, the other two stayed");
+        assert!(!left.contains(&gone.name), "the chosen one went");
+        assert!(left.contains(&failed.name), "the unchosen one stayed");
+        assert_eq!(app.status.as_deref(), Some("removed 1 ended run"));
 
-        let _ = app.update(Message::ClearHistory);
+        // Pressing the same row twice takes it back out.
+        let _ = app.update(Message::Choose);
+        let two = failed.id.clone();
+        let _ = app.update(Message::ChooseToggle(RunId(two.clone())));
+        let _ = app.update(Message::ChooseToggle(RunId(two)));
+        assert!(app.list.chosen().is_empty(), "a second press unchooses");
+
         app.set_screen(Screen::Settings);
-        assert!(!app.confirm_clear, "leaving the list disarms");
+        assert_eq!(app.list, ListMode::Browsing, "leaving the list disarms");
         drop(listener);
         let _ = std::fs::remove_file(&sock);
     }

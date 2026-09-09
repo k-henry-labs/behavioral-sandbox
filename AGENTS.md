@@ -54,8 +54,8 @@ session on that socket (4.11). Every run leaves a record under the local data di
 output, the guest's `/results`), which `tormoni ls --all`, `show`, `rm` and `export` (one ustar file
 per run) read (4.12), and `tormoni-app` is the notebook of those runs: a sidebar over the
 list, one run's record with its display and output, a start form whose posture sentence is
-confirmed before anything boots, stop, re-run, delete, export, clearing the ended runs behind an
-inline confirm, a Settings screen whose palette, scale and landing screen persist beside the runs
+confirmed before anything boots, stop, re-run, delete, export, removing a chosen set of ended
+runs behind an inline confirm, a Settings screen whose palette, scale and landing screen persist beside the runs
 directory, and a shell through `tormoni exec --tty` in the operator's terminal (4.13). Frame pacing
 through the app on this panel is measured (4.14). On macOS ARM64 (phase 6) the tree builds, signs
 (`cargo xtask sign`) and boots the same sandboxes under Hypervisor.framework; this platform's
