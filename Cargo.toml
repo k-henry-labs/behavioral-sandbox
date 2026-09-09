@@ -42,6 +42,9 @@ anyhow = "1"
 clap = { version = "4", features = ["derive", "wrap_help"] }
 # Scrubs a secret from memory after `tormoni-channel` sends it, so it doesn't linger in freed memory.
 zeroize = "1"
+# The one JSON the app reads: the console's answer to a sign-in. Already in the graph under
+# `tracing-subscriber`.
+serde_json = "1"
 # Safe wrappers over the pty, termios and signal syscalls the interactive shell path needs on both
 # ends; already in the graph through clap's `terminal_size`. Each crate names only the features it
 # uses. The crate's internal `unsafe` is the dep's, not ours.

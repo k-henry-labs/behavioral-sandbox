@@ -2791,12 +2791,14 @@ dependencies = [
  "objc2-app-kit",
  "objc2-foundation 0.2.2",
  "rustix 1.1.4",
+ "serde_json",
  "tormoni-input",
  "tormoni-krun",
  "tormoni-record",
  "tormoni-supervisor",
  "tormoni-test-support",
  "ttf-parser",
+ "zeroize",
 ]
 
 [[package]]

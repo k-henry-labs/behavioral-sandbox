@@ -101,6 +101,10 @@ struct Cli {
     /// unknown name is refused with the three.
     #[arg(long, value_name = "NAME")]
     theme: Option<String>,
+    /// The console to sign in to and open pages of: an `http://` or `https://` address. Falls
+    /// back to `$TORMONI_CONSOLE`, then to the product's own.
+    #[arg(long, value_name = "URL")]
+    console: Option<String>,
     /// Open on this screen instead of the menu.
     #[arg(long, value_name = "SCREEN", conflicts_with = "name")]
     open: Option<OpenScreen>,
@@ -225,6 +229,13 @@ fn main() -> ExitCode {
             return ExitCode::from(EXIT_OPERATIONAL);
         }
     };
+    let console = match account::console(cli.console.as_deref(), std::env::var(account::ENV).ok()) {
+        Ok(origin) => origin,
+        Err(why) => {
+            eprintln!("tormoni-app: {why}");
+            return ExitCode::from(EXIT_OPERATIONAL);
+        }
+    };
     frame::report_adapter();
     let sinks = match frame::Sinks::open(cli.drawn_log.as_deref(), cli.input_log.as_deref()) {
         Ok(sinks) => Arc::new(sinks),
@@ -256,6 +267,7 @@ fn main() -> ExitCode {
         );
         app.mode = mode;
         app.theme_overridden = theme_overridden;
+        app.console = console.clone();
         app.scale = scale;
         app.opens_on = opens_on.unwrap_or(OpenScreen::List);
         if app.status.is_none() {
@@ -585,12 +597,20 @@ pub(crate) enum Message {
         RunName,
         iced::futures::channel::mpsc::UnboundedSender<String>,
     ),
-    /// Start signing in, which the account row does when nobody is signed in.
+    /// Start signing in: the console's Keys page opens for a token, and the block takes one.
     SignIn,
-    /// A sign-in answered: the account's address, or why there is none.
-    SignedIn(Result<String, String>),
+    /// As much of the token as has been pasted.
+    Token(String),
+    /// Ask the console whose the pasted token is.
+    Connect,
+    /// Stop signing in, keeping nothing of what was pasted.
+    SignInCancelled,
+    /// A sign-in answered: the account's identity, or why there is none.
+    SignedIn(Result<account::Identity, String>),
     /// Give up the account this window holds.
     SignOut,
+    /// Open one of the console's pages in the browser: Manage and Upgrade.
+    Console(account::Page),
     /// Something the operator should see in the window rather than on a stderr they may not have.
     Note(String),
     /// A run's lease ended, with why; the sandbox stopping is the ordinary case.
@@ -611,6 +631,8 @@ pub(crate) struct App {
     status: Option<String>,
     /// Who this window is signed in as. Nothing on any screen needs one.
     account: account::Account,
+    /// The console the account is signed in to, and whose pages Manage and Upgrade open.
+    console: String,
     output: Output,
     /// The shown run's result files, as of the last tick. Held here rather than read in `view`,
     /// which iced rebuilds once per message: with a guest presenting frames that is a directory
@@ -672,6 +694,7 @@ impl App {
             form: Form::blank(),
             status: None,
             account: account::Account::default(),
+            console: account::DEFAULT.to_string(),
             output: Output::default(),
             results: Vec::new(),
             log,
@@ -877,6 +900,17 @@ impl App {
         self.displays.retain(|name, _| wanted.contains(name));
     }
 
+    /// Opens `page` of the console in the browser; what came of it lands as the operator's line.
+    fn visit(&self, page: account::Page) -> Task<Message> {
+        let console = self.console.clone();
+        Task::perform(
+            async move { account::open(&console, page) },
+            |answer| match answer {
+                Ok(line) | Err(line) => Message::Note(line),
+            },
+        )
+    }
+
     /// The record with `name`, from the last tick.
     fn record_by_name(&self, name: &RunName) -> Option<&Record> {
         self.runs.iter().find(|r| r.name == name.as_str())
@@ -1032,17 +1066,43 @@ impl App {
                 Task::none()
             }
             Message::SignIn => {
-                self.account = account::Account::SigningIn;
-                Task::perform(async { account::begin() }, Message::SignedIn)
+                self.account = account::Account::Entering(account::Token::default());
+                self.status = None;
+                self.visit(account::Page::Keys)
             }
-            Message::SignedIn(Ok(email)) => {
-                self.status = Some(format!("signed in as {email}"));
-                self.account = account::Account::SignedIn { email };
+            Message::Token(pasted) => {
+                if let account::Account::Entering(token) = &mut self.account {
+                    *token = account::Token::from(pasted);
+                }
                 Task::none()
             }
+            Message::Connect => match std::mem::take(&mut self.account) {
+                account::Account::Entering(token) => {
+                    self.account = account::Account::SigningIn;
+                    let console = self.console.clone();
+                    Task::perform(
+                        async move { account::begin(&console, &token) },
+                        Message::SignedIn,
+                    )
+                }
+                other => {
+                    self.account = other;
+                    Task::none()
+                }
+            },
+            Message::SignInCancelled => {
+                self.account = account::Account::SignedOut;
+                Task::none()
+            }
+            Message::SignedIn(Ok(identity)) => {
+                self.status = Some(format!("signed in as @{}", identity.handle));
+                self.account = account::Account::SignedIn(identity);
+                Task::none()
+            }
+            // Another paste is the likely next thing, so the field stays, emptied.
             Message::SignedIn(Err(why)) => {
                 self.status = Some(why);
-                self.account = account::Account::SignedOut;
+                self.account = account::Account::Entering(account::Token::default());
                 Task::none()
             }
             Message::SignOut => {
@@ -1050,6 +1110,7 @@ impl App {
                 self.account = account::Account::SignedOut;
                 Task::none()
             }
+            Message::Console(page) => self.visit(page),
             Message::Started(Err(why)) | Message::Acted(Err(why)) => {
                 self.status = Some(why);
                 Task::none()
@@ -1439,41 +1500,60 @@ mod tests {
         app
     }
 
-    /// The account row's press runs the whole loop: a sign-in goes in flight, the answer that
-    /// there is no service to reach lands as the operator's line, and the window is signed out
-    /// again rather than left claiming an account nobody authenticated.
+    /// The block's whole loop up to the console's answer: Sign in asks for a token, what is
+    /// pasted is held only while it is being entered, Connect puts the sign-in in flight, and a
+    /// refusal lands as the operator's line with the field emptied for another paste rather
+    /// than the window signed out. A paste with no field to take it changes nothing.
     #[test]
-    fn a_sign_in_that_cannot_reach_a_service_leaves_the_window_signed_out() {
+    fn a_refused_token_leaves_the_block_asking_for_another() {
         let mut app = app_with(vec![], &[]);
         assert_eq!(app.account, account::Account::SignedOut, "a fresh launch");
+        let _ = app.update(Message::Token("tor_stray".to_string()));
+        assert_eq!(
+            app.account,
+            account::Account::SignedOut,
+            "nothing to paste into"
+        );
 
         let _ = app.update(Message::SignIn);
+        assert_eq!(
+            app.account,
+            account::Account::Entering(account::Token::default())
+        );
+        let _ = app.update(Message::Token("tor_abc".to_string()));
+        assert_eq!(
+            app.account,
+            account::Account::Entering(account::Token::from("tor_abc".to_string()))
+        );
+        let _ = app.update(Message::Connect);
         assert_eq!(app.account, account::Account::SigningIn, "in flight");
 
-        let _ = app.update(Message::SignedIn(account::begin()));
-        assert_eq!(app.account, account::Account::SignedOut);
-        assert!(
-            app.status
-                .as_deref()
-                .is_some_and(|s| s.contains("account service")),
-            "the operator is told why: {:?}",
-            app.status
+        let _ = app.update(Message::SignedIn(Err(
+            "the console refused the token".to_string()
+        )));
+        assert_eq!(
+            app.account,
+            account::Account::Entering(account::Token::default())
         );
+        assert_eq!(app.status.as_deref(), Some("the console refused the token"));
+        let _ = app.update(Message::SignInCancelled);
+        assert_eq!(app.account, account::Account::SignedOut);
     }
 
-    /// The signed-in state the loop would land in, and the way back out of it. Driven through
-    /// the messages a working sign-in answers with, since nothing here can produce one yet.
+    /// The signed-in state the loop lands in, and the way back out of it. Driven through the
+    /// message the console's answer arrives as, so no console is needed here.
     #[test]
     fn a_signed_in_window_shows_the_account_and_can_sign_out() {
         let mut app = app_with(vec![], &[]);
-        let _ = app.update(Message::SignedIn(Ok("someone@example.com".to_string())));
-        assert_eq!(
-            app.account,
-            account::Account::SignedIn {
-                email: "someone@example.com".to_string()
-            }
-        );
-        assert_eq!(app.account.label(), "someone@example.com");
+        let identity = account::Identity {
+            handle: "someone".to_string(),
+            display_name: Some("Someone Else".to_string()),
+        };
+        let _ = app.update(Message::SignedIn(Ok(identity.clone())));
+        assert_eq!(app.account, account::Account::SignedIn(identity));
+        assert_eq!(app.account.title(), "Someone Else");
+        assert_eq!(app.account.line(&app.console), "@someone");
+        assert_eq!(app.status.as_deref(), Some("signed in as @someone"));
 
         let _ = app.update(Message::SignOut);
         assert_eq!(app.account, account::Account::SignedOut);

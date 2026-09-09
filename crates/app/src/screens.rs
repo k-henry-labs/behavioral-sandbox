@@ -152,10 +152,7 @@ fn sidebar(app: &App, width: f32) -> Element<'_, Message> {
         ),
     ]
     .spacing(3);
-    // The account sits at the foot, apart from the tabs: nothing above it needs one, so it must
-    // not read as a fourth place to go.
-    let body = column![nav, space().height(Fill), account_row(app)];
-    container(body)
+    container(nav)
         .style(rail)
         .width(Length::Fixed(width))
         .height(Fill)
@@ -166,38 +163,6 @@ fn sidebar(app: &App, width: f32) -> Element<'_, Message> {
             bottom: 12.0,
             left: RAIL_PAD,
         })
-        .into()
-}
-
-/// The account row at the foot of the rail: who this window is signed in as, and the press that
-/// signs in or out. Laid out as a tab is, so the rail reads as one column of rows.
-fn account_row(app: &App) -> Element<'_, Message> {
-    let account = &app.account;
-    let mut line = row![
-        icons::glyph(icons::CIRCLE_USER),
-        text(account.label())
-            .size(TAB)
-            .wrapping(text::Wrapping::None),
-    ]
-    .spacing(12);
-    line = line.push(space().width(Fill));
-    if let Some(hint) = account.hint() {
-        line = line.push(text(hint).size(SMALL).style(|t| text::Style {
-            color: Some(muted(t)),
-        }));
-    }
-    // A sign-in already in flight has nothing a second press would add, and iced draws a button
-    // with no message as the disabled one it is.
-    let press = match account {
-        crate::account::Account::SignedOut => Some(Message::SignIn),
-        crate::account::Account::SigningIn => None,
-        crate::account::Account::SignedIn { .. } => Some(Message::SignOut),
-    };
-    button(line.align_y(iced::alignment::Vertical::Center))
-        .style(ghost)
-        .width(Fill)
-        .padding(TAB_PAD)
-        .on_press_maybe(press)
         .into()
 }
 
@@ -408,6 +373,7 @@ pub(crate) fn settings(app: &App) -> Element<'_, Message> {
     ]
     .spacing(6);
     let mut body = column![
+        account_block(app),
         setting(
             None,
             "Tormoni",
@@ -458,6 +424,75 @@ pub(crate) fn settings(app: &App) -> Element<'_, Message> {
         body = body.push(text(status).size(BODY));
     }
     framed(app, row![head_title("Settings")].into(), body)
+}
+
+/// The account, first on Settings: the product's name over "Not connected" and a Sign in; then
+/// a field for the token the console's Keys page mints, with Connect and Cancel; then the
+/// person over the handle with the account's mark beside them, and Upgrade, Manage and Sign
+/// out under.
+fn account_block(app: &App) -> Element<'_, Message> {
+    let account = &app.account;
+    let named = || {
+        column![
+            text(account.title()).size(TAB),
+            muted_line(account.line(&app.console), BODY)
+        ]
+        .spacing(4)
+        .width(Fill)
+    };
+    match account {
+        crate::account::Account::Entering(token) => {
+            // A token is a credential, and Settings is a screen shown over a shoulder.
+            let field = text_input("tor_…", token.as_str())
+                .secure(true)
+                .style(entry)
+                .font(MONO)
+                .on_input(Message::Token)
+                .on_submit_maybe((!token.is_empty()).then_some(Message::Connect))
+                .width(Fill);
+            column![
+                named(),
+                row![
+                    field,
+                    page_button("Connect", primary)
+                        .on_press_maybe((!token.is_empty()).then_some(Message::Connect)),
+                    page_button("Cancel", push).on_press(Message::SignInCancelled),
+                ]
+                .spacing(6)
+                .align_y(iced::alignment::Vertical::Center),
+            ]
+            .spacing(12)
+            .into()
+        }
+        crate::account::Account::SignedIn(_) => {
+            let actions = row![
+                page_button("Upgrade", primary)
+                    .on_press(Message::Console(crate::account::Page::Plans)),
+                page_button("Manage", push)
+                    .on_press(Message::Console(crate::account::Page::Account)),
+                page_button("Sign out", push).on_press(Message::SignOut),
+            ]
+            .spacing(6);
+            column![
+                row![named(), icons::glyph(icons::CIRCLE_USER)]
+                    .spacing(16)
+                    .align_y(iced::alignment::Vertical::Center),
+                actions,
+            ]
+            .spacing(12)
+            .into()
+        }
+        // A sign-in already in flight has nothing a second press would add, and iced draws a
+        // button with no message as the disabled one it is.
+        state => setting(
+            None,
+            account.title(),
+            account.line(&app.console),
+            page_button("Sign in", push).on_press_maybe(
+                matches!(state, crate::account::Account::SignedOut).then_some(Message::SignIn),
+            ),
+        ),
+    }
 }
 
 /// One setting as a source-list app lays one out: its name over a grey line of what it does,

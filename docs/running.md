@@ -50,7 +50,7 @@ so a sandbox started by the CLI is visible to the app and the other way round.
 
 Configuration is resolved in precedence order: 1. Command line flags. 2. Environment variables
 (`$TORMONI_VCPUS`, `$TORMONI_MEM_MIB`, `$TORMONI_GUEST_ROOT`, `$TORMONI_RUNS_DIR`, `$TORMONI_RUNS_KEEP`,
-`$TORMONI_OUTPUT_CAP_KIB`, `$TORMONI_LOG`, `$TORMONI_CLI`, `$TORMONI_THEME`). 3. The nearest `.tormoni.toml` in or above
+`$TORMONI_OUTPUT_CAP_KIB`, `$TORMONI_LOG`, `$TORMONI_CLI`, `$TORMONI_THEME`, `$TORMONI_CONSOLE`). 3. The nearest `.tormoni.toml` in or above
 the current working directory. 4. User defaults in `~/.tormoni.toml`. 5. Built-in defaults.
 
 ## What a run leaves
@@ -78,22 +78,36 @@ readable.
   to the guest), with Stop and Shell while it runs, Re-run and Delete after, and Export always.
 - **The start form**: every posture flag as a field, summarised in the record's own posture
   sentence ("This sandbox will: ..."), confirmed before anything boots.
-- **Settings** (the platform's command with `,`, from any screen): light, dark or the desktop's own
-  mode, and the interface scale, both applied live, the screen a plain launch opens on, and what
-  this machine has to run a sandbox with (the `tormoni` binary and guest root it found). The picks are
-  kept across launches in a file beside the runs directory. `--theme` and `$TORMONI_THEME` outrank the
-  saved palette, and `--open` the saved screen, for one launch.
+- **Settings** (the platform's command with `,`, from any screen): the account first, then light,
+  dark or the desktop's own mode, and the interface scale, both applied live, the screen a plain
+  launch opens on, and what this machine has to run a sandbox with (the `tormoni` binary and guest
+  root it found). The picks are kept across launches in a file beside the runs directory.
+  `--theme` and `$TORMONI_THEME` outrank the saved palette, and `--open` the saved screen, for one
+  launch.
 
-`tormoni-app NAME` opens straight onto a run; `--open list|new|settings` opens a screen. Starting and
-stopping go through the `tormoni` binary beside the app (`$TORMONI_CLI` overrides which one).
+Signing in is pasting a token. Sign in opens the console's Keys page in the browser, where a `tor_`
+token is minted, and the block takes it: Connect asks the console's `/v1/account` whose it is,
+through `curl` with the token on its stdin, and the block then shows the person over the handle,
+with Upgrade and Manage opening the console's plans and account pages and Sign out forgetting the
+account. The token is wiped once the console has answered, and nothing is written to disk. The
+console is `--console URL`, else `$TORMONI_CONSOLE`, else `https://tormoni.ai`; a stack on
+`http://localhost:3000` is one `--console http://localhost:3000` away.
+
+`Tormoni NAME` opens straight onto a run; `--open list|new|settings` opens a screen. Starting and
+stopping go through the `tormoni` binary beside the app, or under its bundle's `Contents/Resources`
+(`$TORMONI_CLI` overrides which one).
 
 ## Platform notes
 
 On macOS ARM64 the same verbs work, but this platform's libkrun builds no `--sound` and no guest
-input backend, and a display is viewed in `tormoni-app` rather than a window of the helper's own; sign
-the binary again after any build (`cargo xtask sign`). `cargo xtask bundle` assembles
-`artifacts/Tormoni.app` from the built pair, which is what makes the window's menu bar
-say `Tormoni` rather than the file name `tormoni-app`; the `tormoni` copied inside it is signed there. `--gpu` boots here and the
+input backend, and a display is viewed in `Tormoni` rather than a window of the helper's own; sign
+the binary again after any build (`cargo xtask sign`). The executable is named `Tormoni`, and macOS
+names the menu bar, the About, Hide and Quit items under it, and the Dock from the file name
+(measured on this host, macOS 26.6.2, 2026-09-09), so a bare `target/debug/Tormoni` reads right.
+`cargo xtask bundle` adds what a file name cannot carry: the identifier `ai.tormoni.app`, the icon,
+and the `tormoni` under `Contents/Resources`, entitled for the hypervisor before the bundle is sealed
+over it. `cargo xtask app` builds the pair, assembles that bundle and starts the copy inside it, with
+its output still on the terminal. `--gpu` boots here and the
 guest sees `card0` and `renderD128`; this host's virglrenderer carries no Venus, so the offer ends
 at the device. The [Architecture](./architecture.md) page carries the fuller status and the
 measurements.

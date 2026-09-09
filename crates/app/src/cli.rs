@@ -376,8 +376,8 @@ fn bundle_name(binary: &str) -> &str {
     }
 }
 
-/// Waits for `child` on a thread of its own, so a detached `tormoni` is reaped when it ends.
-fn reap(mut child: std::process::Child) {
+/// Waits for `child` on a thread of its own, so a detached child is reaped when it ends.
+pub(crate) fn reap(mut child: std::process::Child) {
     std::thread::spawn(move || {
         let _ = child.wait();
     });
