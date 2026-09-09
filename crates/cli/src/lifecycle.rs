@@ -574,7 +574,11 @@ mod tests {
         use tormoni_record::{Posture, Record, Store, Verb};
         let dir = tormoni_test_support::ScratchDir::created("settle-gone");
         let store = Store::at(dir.path().join("runs")).expect("a store");
-        let posture = Posture::new(std::path::PathBuf::from("/img"), 1, 512);
+        let posture = Posture::new(
+            std::path::PathBuf::from("/img"),
+            std::num::NonZeroU8::MIN,
+            std::num::NonZeroU32::new(512).expect("non-zero"),
+        );
         let mut abandoned = Record::begin("web", Verb::Up, vec![], posture.clone());
         abandoned.started_ms -= 10;
         abandoned.id = format!("{}-web", abandoned.started_ms);

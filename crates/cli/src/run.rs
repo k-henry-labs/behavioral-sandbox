@@ -279,10 +279,18 @@ fn record_display(display: tormoni_supervisor::Display) -> tormoni_record::Displ
 /// The record's posture for `cfg`: the same facts [`print_posture`] prints, in the record's
 /// shape.
 pub(crate) fn posture_of(cfg: &VmConfig, results: bool) -> Posture {
-    let mut p = Posture::new(cfg.root.clone(), cfg.vcpus.get(), cfg.mem_mib.get());
+    let mut p = Posture::new(cfg.root.clone(), cfg.vcpus, cfg.mem_mib);
     p.rootfs = record_rootfs(cfg.rootfs);
-    p.mounts = cfg.mounts.clone();
-    p.shares = cfg.shares.clone();
+    p.mounts = cfg
+        .mounts
+        .iter()
+        .map(|(guest, host)| tormoni_record::Mount::new(guest.clone(), host.clone()))
+        .collect();
+    p.shares = cfg
+        .shares
+        .iter()
+        .map(|(tag, host)| tormoni_record::Share::new(tag.clone(), host.clone()))
+        .collect();
     p.network = record_network(cfg.net);
     p.display = cfg.display.map(record_display);
     p.sound = cfg.sound;

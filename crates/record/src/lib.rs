@@ -25,7 +25,7 @@
 use std::ffi::OsString;
 use std::fmt;
 use std::io::{self, Read, Write};
-use std::num::NonZeroU32;
+use std::num::{NonZeroU8, NonZeroU32};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -238,18 +238,58 @@ impl End {
     }
 }
 
+/// A host directory the guest reached read-write at a guest path.
+///
+/// Named rather than a pair, because the record spells it `guest <- host` while the sentence
+/// reads it the other way about: with two paths of one type, the order is a thing a reader can
+/// only be told, and being told is what drifts.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Mount {
+    /// Where the guest saw it.
+    pub guest: PathBuf,
+    /// The host directory behind it.
+    pub host: PathBuf,
+}
+
+impl Mount {
+    /// `host` mounted at `guest`.
+    #[must_use]
+    pub fn new(guest: PathBuf, host: PathBuf) -> Self {
+        Self { guest, host }
+    }
+}
+
+/// An extra virtiofs device the guest mounted by tag itself.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Share {
+    /// The tag the guest mounts by.
+    pub tag: String,
+    /// The host path behind it.
+    pub host: PathBuf,
+}
+
+impl Share {
+    /// `host` offered under `tag`.
+    #[must_use]
+    pub fn new(tag: String, host: PathBuf) -> Self {
+        Self { tag, host }
+    }
+}
+
 /// What the sandbox could touch, as settled before it booted.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct Posture {
     /// The guest root directory.
     pub root: PathBuf,
     /// What the guest may do to its root.
     pub rootfs: Rootfs,
-    /// Host directories mounted read-write, as `(guest path, host path)`.
-    pub mounts: Vec<(PathBuf, PathBuf)>,
-    /// Extra virtiofs shares, as `(tag, host path)`.
-    pub shares: Vec<(String, PathBuf)>,
+    /// Host directories mounted read-write.
+    pub mounts: Vec<Mount>,
+    /// Extra virtiofs shares.
+    pub shares: Vec<Share>,
     /// The network posture.
     pub network: Network,
     /// The display, or `None` for a headless sandbox.
@@ -260,16 +300,40 @@ pub struct Posture {
     pub gpu: bool,
     /// Whether the run's results directory was mounted at [`RESULTS_GUEST_PATH`].
     pub results: bool,
-    /// vCPUs.
-    pub vcpus: u8,
-    /// Guest RAM in MiB.
-    pub mem_mib: u32,
+    /// vCPUs. Non-zero by type, as `tormoni_supervisor::VmConfig`'s is: a record of a machine with
+    /// no cpu describes one that never booted.
+    pub vcpus: NonZeroU8,
+    /// Guest RAM in MiB, non-zero for [`vcpus`](Self::vcpus)' reason.
+    pub mem_mib: NonZeroU32,
+}
+
+/// The limits a posture nobody configured carries: one cpu and libkrun's own 512 MiB, spelled as
+/// `tormoni_supervisor::VmConfig`'s default spells them.
+impl Default for Posture {
+    fn default() -> Self {
+        Self {
+            root: PathBuf::new(),
+            rootfs: Rootfs::default(),
+            mounts: Vec::new(),
+            shares: Vec::new(),
+            network: Network::default(),
+            display: None,
+            sound: false,
+            gpu: false,
+            results: false,
+            vcpus: NonZeroU8::MIN,
+            mem_mib: match NonZeroU32::new(512) {
+                Some(mib) => mib,
+                None => NonZeroU32::MIN,
+            },
+        }
+    }
 }
 
 impl Posture {
     /// A posture with these limits and nothing shared, to fill in.
     #[must_use]
-    pub fn new(root: PathBuf, vcpus: u8, mem_mib: u32) -> Self {
+    pub fn new(root: PathBuf, vcpus: NonZeroU8, mem_mib: NonZeroU32) -> Self {
         Self {
             root,
             vcpus,
@@ -291,11 +355,15 @@ impl Posture {
                 ""
             }
         )];
-        for (guest, host) in &self.mounts {
-            can.push(format!("write {} as {}", host.display(), guest.display()));
+        for m in &self.mounts {
+            can.push(format!(
+                "write {} as {}",
+                m.host.display(),
+                m.guest.display()
+            ));
         }
-        for (tag, host) in &self.shares {
-            can.push(format!("reach {} by the tag {tag}", host.display()));
+        for s in &self.shares {
+            can.push(format!("reach {} by the tag {}", s.host.display(), s.tag));
         }
         if self.results {
             can.push(format!("write its results to {RESULTS_GUEST_PATH}"));
@@ -409,14 +477,14 @@ impl Record {
             "root",
             &format!("{} {}", p.root.display(), p.rootfs.as_word()),
         );
-        for (guest, host) in &p.mounts {
+        for m in &p.mounts {
             line(
                 "mount",
-                &format!("{} <- {}", guest.display(), host.display()),
+                &format!("{} <- {}", m.guest.display(), m.host.display()),
             );
         }
-        for (tag, host) in &p.shares {
-            line("share", &format!("{tag} <- {}", host.display()));
+        for s in &p.shares {
+            line("share", &format!("{} <- {}", s.tag, s.host.display()));
         }
         line("network", &p.network.as_word());
         if let Some(display) = p.display {
@@ -486,14 +554,14 @@ impl Record {
                     record
                         .posture
                         .mounts
-                        .push((PathBuf::from(guest), PathBuf::from(host)));
+                        .push(Mount::new(PathBuf::from(guest), PathBuf::from(host)));
                 }
                 "share" => {
                     let (tag, host) = value.split_once(" <- ").ok_or_else(bad)?;
                     record
                         .posture
                         .shares
-                        .push((tag.to_string(), PathBuf::from(host)));
+                        .push(Share::new(tag.to_string(), PathBuf::from(host)));
                 }
                 "network" => record.posture.network = Network::from_word(value).ok_or_else(bad)?,
                 "display" => {
@@ -1260,12 +1328,18 @@ mod tests {
     use super::*;
 
     fn posture() -> Posture {
-        let mut p = Posture::new(PathBuf::from("/img/rootfs"), 2, 768);
+        let mut p = Posture::new(
+            PathBuf::from("/img/rootfs"),
+            NonZeroU8::new(2).expect("non-zero"),
+            NonZeroU32::new(768).expect("non-zero"),
+        );
         p.rootfs = Rootfs::ReadOnly;
-        p.mounts
-            .push((PathBuf::from("/mnt"), PathBuf::from("/home/x/out dir")));
+        p.mounts.push(Mount::new(
+            PathBuf::from("/mnt"),
+            PathBuf::from("/home/x/out dir"),
+        ));
         p.shares
-            .push(("src".to_string(), PathBuf::from("/home/x/src")));
+            .push(Share::new("src".to_string(), PathBuf::from("/home/x/src")));
         p.network = Network::None;
         p.display = DisplayMode::parse("640x480@60");
         p.sound = true;
@@ -1317,9 +1391,10 @@ mod tests {
     }
 
     /// A switch line whose word is neither `on` nor `off` is refused, as every other posture line
-    /// is: read as `off` it would report a sandbox weaker than the one that ran.
+    /// is: read as `off` it would report a sandbox weaker than the one that ran. A machine with no
+    /// cpu or no memory is refused for the same reason, by the limits' own types.
     #[test]
-    fn a_switch_this_build_cannot_read_is_refused_rather_than_read_as_off() {
+    fn a_posture_line_this_build_cannot_read_is_refused_rather_than_read_as_less() {
         let record = Record::begin("s", Verb::Run, vec!["true".into()], posture());
         let text = record.to_text();
         assert!(Record::parse(&text).is_ok(), "the record itself reads");
@@ -1330,6 +1405,11 @@ mod tests {
                 Record::parse(&bad).is_err(),
                 "{key} of an unknown word parsed"
             );
+        }
+        for limits in ["0 768", "2 0"] {
+            let bad = text.replace("limits 2 768", &format!("limits {limits}"));
+            assert_ne!(bad, text, "the limits line is there to break");
+            assert!(Record::parse(&bad).is_err(), "limits {limits} parsed");
         }
     }
 
@@ -1451,7 +1531,12 @@ mod tests {
             s.contains("It will not: read anything else on this machine, reach the network."),
             "{s}"
         );
-        let bare = Posture::new(PathBuf::from("/img"), 1, 512).sentence();
+        let bare = Posture::new(
+            PathBuf::from("/img"),
+            NonZeroU8::MIN,
+            NonZeroU32::new(512).expect("non-zero"),
+        )
+        .sentence();
         assert!(bare.contains("It will not: read anything else on this machine, reach the network, show a display, play or capture sound, use the host GPU for its own rendering."), "{bare}");
     }
 

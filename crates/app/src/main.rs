@@ -49,6 +49,14 @@ const HISTORY: usize = 64;
 /// to when it is re-run.
 const DEFAULT_DISPLAY: &str = "640x480";
 
+/// The limits a form offers before anyone changes it, and what a field nobody typed a number in
+/// falls back to. Non-zero by type, as the record's own limits are.
+pub(crate) const DEFAULT_VCPUS: std::num::NonZeroU8 = std::num::NonZeroU8::MIN;
+pub(crate) const DEFAULT_MEM_MIB: std::num::NonZeroU32 = match std::num::NonZeroU32::new(512) {
+    Some(mib) => mib,
+    None => std::num::NonZeroU32::MIN,
+};
+
 /// Bytes of an output file the pane shows, from its end.
 const OUTPUT_TAIL: u64 = 256 * 1024;
 
@@ -398,8 +406,8 @@ impl Form {
                 .unwrap_or_default(),
             display_size: DEFAULT_DISPLAY.to_string(),
             results: true,
-            vcpus: "1".to_string(),
-            mem_mib: "512".to_string(),
+            vcpus: DEFAULT_VCPUS.to_string(),
+            mem_mib: DEFAULT_MEM_MIB.to_string(),
             ..Self::default()
         }
     }
@@ -415,13 +423,13 @@ impl Form {
             mounts: p
                 .mounts
                 .iter()
-                .map(|(g, h)| format!("{}={}", g.display(), h.display()))
+                .map(|m| format!("{}={}", m.guest.display(), m.host.display()))
                 .collect::<Vec<_>>()
                 .join(" "),
             shares: p
                 .shares
                 .iter()
-                .map(|(t, h)| format!("{t}={}", h.display()))
+                .map(|s| format!("{}={}", s.tag, s.host.display()))
                 .collect::<Vec<_>>()
                 .join(" "),
             network: p.network == tormoni_record::Network::Tsi,
@@ -1281,7 +1289,11 @@ mod tests {
 
     /// A run with a display, live or not, for the watch-set tests.
     fn displayed(name: &str, with_display: bool) -> Record {
-        let mut p = tormoni_record::Posture::new(PathBuf::from("/img"), 1, 512);
+        let mut p = tormoni_record::Posture::new(
+            PathBuf::from("/img"),
+            std::num::NonZeroU8::MIN,
+            std::num::NonZeroU32::new(512).expect("non-zero"),
+        );
         p.display = with_display
             .then(|| tormoni_record::DisplayMode::parse("640x480"))
             .flatten();
@@ -1597,10 +1609,16 @@ mod tests {
     /// A re-run's form is the record's command and posture again.
     #[test]
     fn a_rerun_form_is_the_records_posture_again() {
-        let mut p = tormoni_record::Posture::new(PathBuf::from("/img"), 2, 768);
+        let mut p = tormoni_record::Posture::new(
+            PathBuf::from("/img"),
+            std::num::NonZeroU8::new(2).expect("non-zero"),
+            std::num::NonZeroU32::new(768).expect("non-zero"),
+        );
         p.rootfs = tormoni_record::Rootfs::Writable;
-        p.mounts
-            .push((PathBuf::from("/mnt"), PathBuf::from("/home/x/out")));
+        p.mounts.push(tormoni_record::Mount::new(
+            PathBuf::from("/mnt"),
+            PathBuf::from("/home/x/out"),
+        ));
         p.network = tormoni_record::Network::Tsi;
         p.display = tormoni_record::DisplayMode::parse("800x600");
         p.results = false;

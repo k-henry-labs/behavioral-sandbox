@@ -22,7 +22,11 @@ fn planted(runs: &Path) -> tormoni_record::Record {
         "exportee",
         tormoni_record::Verb::Run,
         vec!["true".into()],
-        tormoni_record::Posture::new("/img".into(), 1, 512),
+        tormoni_record::Posture::new(
+            "/img".into(),
+            std::num::NonZeroU8::MIN,
+            std::num::NonZeroU32::new(512).expect("non-zero"),
+        ),
     );
     record.id = "1756860007123-exportee".to_string();
     let run = store.create(&record).expect("created");

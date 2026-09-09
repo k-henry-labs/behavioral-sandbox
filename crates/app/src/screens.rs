@@ -1027,12 +1027,16 @@ fn posture_tags(record: &Record) -> String {
     match (p.mounts.len(), p.shares.len()) {
         (0, 0) => parts.push("no host directories".to_string()),
         (1, 0) => {
-            let (guest, host) = &p.mounts[0];
-            parts.push(format!("{} \u{2190} {}", guest.display(), host.display()));
+            let m = &p.mounts[0];
+            parts.push(format!(
+                "{} \u{2190} {}",
+                m.guest.display(),
+                m.host.display()
+            ));
         }
         (0, 1) => {
-            let (tag, host) = &p.shares[0];
-            parts.push(format!("{tag} \u{2190} {}", host.display()));
+            let s = &p.shares[0];
+            parts.push(format!("{} \u{2190} {}", s.tag, s.host.display()));
         }
         (m, sh) => parts.push(format!("{} host directories", m + sh)),
     }
@@ -1174,14 +1178,17 @@ fn posture_lines(record: &Record) -> Vec<(String, String)> {
         "root".to_string(),
         format!("{}, {}", p.root.display(), p.rootfs.as_word()),
     )];
-    for (guest, host) in &p.mounts {
+    for m in &p.mounts {
         lines.push((
             "mount".to_string(),
-            format!("{} = {}", guest.display(), host.display()),
+            format!("{} = {}", m.guest.display(), m.host.display()),
         ));
     }
-    for (tag, host) in &p.shares {
-        lines.push(("share".to_string(), format!("{tag} = {}", host.display())));
+    for s in &p.shares {
+        lines.push((
+            "share".to_string(),
+            format!("{} = {}", s.tag, s.host.display()),
+        ));
     }
     if p.mounts.is_empty() && p.shares.is_empty() {
         lines.push(("share".to_string(), "none".to_string()));
@@ -1339,8 +1346,11 @@ pub(crate) fn new_run<'a>(app: &'a App, form: &'a Form) -> Element<'a, Message> 
     };
     let mut posture = tormoni_record::Posture::new(
         std::path::PathBuf::from(form.root.trim()),
-        form.vcpus.trim().parse().unwrap_or(1),
-        form.mem_mib.trim().parse().unwrap_or(512),
+        form.vcpus.trim().parse().unwrap_or(crate::DEFAULT_VCPUS),
+        form.mem_mib
+            .trim()
+            .parse()
+            .unwrap_or(crate::DEFAULT_MEM_MIB),
     );
     posture.rootfs = if form.writable_root {
         tormoni_record::Rootfs::Writable
@@ -1356,13 +1366,13 @@ pub(crate) fn new_run<'a>(app: &'a App, form: &'a Form) -> Element<'a, Message> 
         .mounts
         .split_whitespace()
         .filter_map(|m| m.split_once('='))
-        .map(|(g, h)| (g.into(), h.into()))
+        .map(|(guest, host)| tormoni_record::Mount::new(guest.into(), host.into()))
         .collect();
     posture.shares = form
         .shares
         .split_whitespace()
         .filter_map(|m| m.split_once('='))
-        .map(|(t, h)| (t.to_string(), h.into()))
+        .map(|(tag, host)| tormoni_record::Share::new(tag.to_string(), host.into()))
         .collect();
     posture.display = form
         .display
