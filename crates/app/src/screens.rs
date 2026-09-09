@@ -819,9 +819,32 @@ fn page_button<'a>(
         .padding(PAGE_PAD)
 }
 
+/// The control that closes the window, at the end of every head where the platform draws no
+/// close button of its own. The sandboxes are their own processes and outlive this window, so
+/// there is nothing to confirm: quitting puts the notebook away, it does not stop a run.
+fn quit_button<'a>() -> Element<'a, Message> {
+    button(icons::glyph(icons::CLOSE, TOGGLE_ICON).center().width(HALO))
+        .style(round)
+        .padding(0)
+        .height(HALO)
+        .on_press(Message::Quit)
+        .into()
+}
+
 /// A window's head: one row centred on the line the traffic lights sit on, and clear of them.
+///
+/// The head fills the line, so whatever it puts at its own right edge stays there and the quit
+/// control sits outside it: on the notebook that puts the quit beyond `New run`.
 fn head_bar<'a>(app: &App, head: Element<'a, Message>) -> Element<'a, Message> {
-    container(head)
+    let line: Element<'a, Message> = if crate::chrome::DRAWS_ITS_OWN_QUIT {
+        row![container(head).width(Fill), quit_button()]
+            .align_y(iced::alignment::Vertical::Center)
+            .spacing(12)
+            .into()
+    } else {
+        head
+    };
+    container(line)
         .height(HEAD_BAR)
         .align_y(iced::alignment::Vertical::Center)
         .padding(iced::Padding {

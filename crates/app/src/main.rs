@@ -483,6 +483,8 @@ pub(crate) enum Message {
     Resized(iced::window::Id),
     /// The head's own line was double-clicked, which is how a macOS window is zoomed.
     ZoomWindow,
+    /// The head's quit control was pressed, where the platform draws no close button of its own.
+    Quit,
     Open(RunId),
     Back,
     List,
@@ -865,6 +867,9 @@ impl App {
             Message::ZoomWindow => self
                 .window
                 .map_or_else(Task::none, iced::window::toggle_maximize),
+            // The running sandboxes are helper processes of their own and keep running; what
+            // this ends is the notebook looking at them.
+            Message::Quit => iced::exit(),
             Message::ResetSettings => {
                 self.mode = theme::Mode::default();
                 self.scale = 100;
