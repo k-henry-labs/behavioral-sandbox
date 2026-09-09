@@ -422,9 +422,9 @@ impl Record {
         if let Some(display) = p.display {
             line("display", &display.as_spec());
         }
-        line("sound", &if p.sound { "on" } else { "off" });
-        line("gpu", &if p.gpu { "on" } else { "off" });
-        line("results", &if p.results { "on" } else { "off" });
+        line("sound", &on_off(p.sound));
+        line("gpu", &on_off(p.gpu));
+        line("results", &on_off(p.results));
         line("limits", &format!("{} {}", p.vcpus, p.mem_mib));
         line("started", &self.started_ms);
         if let Some(pid) = self.pid {
@@ -499,9 +499,9 @@ impl Record {
                 "display" => {
                     record.posture.display = Some(DisplayMode::parse(value).ok_or_else(bad)?)
                 }
-                "sound" => record.posture.sound = value.as_str() == "on",
-                "gpu" => record.posture.gpu = value.as_str() == "on",
-                "results" => record.posture.results = value.as_str() == "on",
+                "sound" => record.posture.sound = on_off_from(value).ok_or_else(bad)?,
+                "gpu" => record.posture.gpu = on_off_from(value).ok_or_else(bad)?,
+                "results" => record.posture.results = on_off_from(value).ok_or_else(bad)?,
                 "limits" => {
                     let (vcpus, mem) = value.split_once(' ').ok_or_else(bad)?;
                     record.posture.vcpus = vcpus.parse().map_err(|_| bad())?;
@@ -530,6 +530,21 @@ impl Record {
             )));
         }
         Ok(record)
+    }
+}
+
+/// The word a posture switch is spelled as.
+fn on_off(on: bool) -> &'static str {
+    if on { "on" } else { "off" }
+}
+
+/// The switch a word names, or `None` for a word this build does not know, which is a record it
+/// cannot read rather than a switch that is off.
+fn on_off_from(word: &str) -> Option<bool> {
+    match word {
+        "on" => Some(true),
+        "off" => Some(false),
+        _ => None,
     }
 }
 
@@ -1299,6 +1314,23 @@ mod tests {
         assert_eq!(End::parse("stopped now"), None);
         assert_eq!(End::parse("exit"), None);
         assert_eq!(End::parse("failed"), Some(End::Failed));
+    }
+
+    /// A switch line whose word is neither `on` nor `off` is refused, as every other posture line
+    /// is: read as `off` it would report a sandbox weaker than the one that ran.
+    #[test]
+    fn a_switch_this_build_cannot_read_is_refused_rather_than_read_as_off() {
+        let record = Record::begin("s", Verb::Run, vec!["true".into()], posture());
+        let text = record.to_text();
+        assert!(Record::parse(&text).is_ok(), "the record itself reads");
+        for key in ["sound", "gpu", "results"] {
+            let bad = text.replace(&format!("{key} on"), &format!("{key} later-state"));
+            assert_ne!(bad, text, "the {key} line is there to break");
+            assert!(
+                Record::parse(&bad).is_err(),
+                "{key} of an unknown word parsed"
+            );
+        }
     }
 
     /// The clock spells a moment in UTC and a span in the unit a reader wants.
