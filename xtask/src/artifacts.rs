@@ -202,23 +202,48 @@ fn sha256_with(hashers: &[(&str, &[&str])], path: &Path) -> Result<String> {
 mod tests {
     use super::*;
 
+    /// The sha256 of no bytes, which every implementation agrees on.
+    const EMPTY_DIGEST: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+
     /// A hasher that is not installed is passed over for the next; the digest of an empty file
     /// is the one every sha256 tool answers.
     #[test]
     fn a_missing_hasher_is_skipped_for_the_next() {
+        use std::os::unix::fs::PermissionsExt;
         let scratch = tormoni_test_support::ScratchDir::created("sha256");
         let empty = scratch.path().join("empty");
         std::fs::write(&empty, b"").unwrap();
-        let digest = sha256_with(
-            &[("no-such-hasher-here", &[]), ("shasum", &["-a", "256"])],
-            &empty,
+
+        // A hasher of this test's own, rather than whichever real one this host happens to carry:
+        // the property is that a missing program is passed over, and naming `sha256sum` or
+        // `shasum` here would make the test a report on the image it runs in.
+        let stand_in = scratch.path().join("stand-in-hasher");
+        std::fs::write(
+            &stand_in,
+            format!("#!/bin/sh\necho '{EMPTY_DIGEST}  '\"$1\"\n"),
         )
-        .expect("the second hasher answers");
-        assert_eq!(
-            digest,
-            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-        );
+        .unwrap();
+        std::fs::set_permissions(&stand_in, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let stand_in = stand_in.to_str().expect("a utf-8 scratch path");
+
+        let digest = sha256_with(&[("no-such-hasher-here", &[]), (stand_in, &[])], &empty)
+            .expect("the second hasher answers");
+        assert_eq!(digest, EMPTY_DIGEST);
+
         let why = sha256_with(&[("no-such-hasher-here", &[])], &empty).unwrap_err();
         assert!(why.to_string().contains("no sha256 tool"), "{why}");
+    }
+
+    /// Whatever this host's real hasher is, it agrees with the digest of an empty file. This is
+    /// the half that does depend on a tool being installed, and the build needs one anyway.
+    #[test]
+    fn the_hosts_own_hasher_reads_the_known_digest() {
+        let scratch = tormoni_test_support::ScratchDir::created("sha256-host");
+        let empty = scratch.path().join("empty");
+        std::fs::write(&empty, b"").unwrap();
+        assert_eq!(
+            sha256_of(&empty).expect("a hasher on this host"),
+            EMPTY_DIGEST
+        );
     }
 }

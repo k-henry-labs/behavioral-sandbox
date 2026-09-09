@@ -169,7 +169,7 @@ pub(crate) fn run_app(release: bool, args: &[String]) -> Result<()> {
         bundle_app(release)?;
     }
     let built = target_dir().join(if release { "release" } else { "debug" });
-    let program = app_program(&built);
+    let program = app_program(&built, cfg!(target_os = "macos"));
     println!("$ {}", program.display());
     let status = Command::new(&program)
         .args(args)
@@ -181,10 +181,13 @@ pub(crate) fn run_app(release: bool, args: &[String]) -> Result<()> {
     Ok(())
 }
 
-/// Where the app is started from: the copy inside the bundle on macOS, since that is what names
-/// it, and the built binary on a platform that has no bundle to run from.
-fn app_program(built: &Path) -> PathBuf {
-    if cfg!(target_os = "macos") {
+/// Where the app is started from: the copy inside the bundle where one was assembled, since that
+/// is what names it, and the built binary where there is no bundle to run from.
+///
+/// `bundled` is an argument rather than a `cfg!` so both answers are reachable from a test on
+/// either host; the caller is the one place that asks the platform.
+fn app_program(built: &Path, bundled: bool) -> PathBuf {
+    if bundled {
         executable_in(&bundle_path())
     } else {
         built.join(BUILT_APP)
@@ -337,16 +340,23 @@ mod tests {
     #[test]
     fn the_app_is_started_from_inside_the_bundle_where_there_is_one() {
         let built = Path::new("/tmp/target/debug");
-        let program = app_program(built);
-        if cfg!(target_os = "macos") {
-            assert_eq!(program, executable_in(&bundle_path()), "{program:?}");
-            assert!(
-                program.starts_with(artifacts_dir()),
-                "it must be the assembled copy, not the built one: {program:?}"
-            );
-        } else {
-            assert_eq!(program, built.join(APP), "{program:?}");
-        }
+
+        let bundled = app_program(built, true);
+        assert_eq!(bundled, executable_in(&bundle_path()), "{bundled:?}");
+        assert!(
+            bundled.starts_with(artifacts_dir()),
+            "it must be the assembled copy, not the built one: {bundled:?}"
+        );
+
+        // The other answer, which no `cfg!` hides from this host: the file cargo wrote, under the
+        // name cargo wrote it, not the name the bundle would have renamed it to.
+        let bare = app_program(built, false);
+        assert_eq!(bare, built.join(BUILT_APP), "{bare:?}");
+        assert_ne!(
+            bare,
+            built.join(APP),
+            "cargo never writes a file called {APP}"
+        );
     }
 
     /// The plist names an icon the tree holds, as an `.icns`; a renamed or missing file would
