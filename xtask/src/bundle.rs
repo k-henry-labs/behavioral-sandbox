@@ -32,8 +32,17 @@ pub(crate) const APP: &str = "Tormoni";
 /// The bundle's own directory name, which Finder shows as the application's.
 const BUNDLE: &str = "Tormoni.app";
 
-/// The command line binary, copied in beside the application.
+/// The command line binary, copied in beside the application. Its name is the command a person
+/// types, so it is also what cargo builds it as.
 const CLI: &str = "tormoni";
+
+/// What cargo builds the application as, which is **not** what it ships as.
+///
+/// One target directory holds every binary of the workspace, and macOS's default filesystem is
+/// case-insensitive, so building a `Tormoni` beside `tormoni` would write one file and the
+/// release would carry whichever was linked last.
+/// `the_two_binaries_cannot_collide_in_one_directory` is the guard.
+pub(crate) const BUILT_APP: &str = "tormoni-app";
 
 /// The icon inside the bundle, which the plist names.
 const ICON: &str = "Tormoni.icns";
@@ -60,7 +69,7 @@ pub(crate) fn bundle_app(release: bool) -> Result<()> {
 /// the CLI copy is entitled, then the bundle is sealed over it.
 pub(crate) fn assemble(release: bool, extras: &[(&Path, &str)]) -> Result<PathBuf> {
     let built = target_dir().join(if release { "release" } else { "debug" });
-    for binary in [APP, CLI] {
+    for binary in [BUILT_APP, CLI] {
         if !built.join(binary).is_file() {
             bail!(
                 "no {binary} at {} — build it first with `cargo build{}`",
@@ -81,8 +90,8 @@ pub(crate) fn assemble(release: bool, extras: &[(&Path, &str)]) -> Result<PathBu
         std::fs::create_dir_all(dir).with_context(|| format!("creating {}", dir.display()))?;
     }
 
-    std::fs::copy(built.join(APP), executable_in(&app))
-        .with_context(|| format!("copying {APP} into {}", macos.display()))?;
+    std::fs::copy(built.join(BUILT_APP), executable_in(&app))
+        .with_context(|| format!("copying {BUILT_APP} into {} as {APP}", macos.display()))?;
     std::fs::copy(built.join(CLI), cli_in(&app))
         .with_context(|| format!("copying {CLI} into {}", resources.display()))?;
     for (from, name) in extras {
@@ -178,7 +187,7 @@ fn app_program(built: &Path) -> PathBuf {
     if cfg!(target_os = "macos") {
         executable_in(&bundle_path())
     } else {
-        built.join(APP)
+        built.join(BUILT_APP)
     }
 }
 
@@ -237,7 +246,7 @@ pub(crate) enum Payload {
 pub(crate) fn linux_layout() -> Vec<(String, Payload)> {
     vec![
         (format!("bin/{CLI}"), Payload::Binary(CLI)),
-        (format!("bin/{APP}"), Payload::Binary(APP)),
+        (format!("bin/{APP}"), Payload::Binary(BUILT_APP)),
         (
             format!("share/applications/{APP_ID}.desktop"),
             Payload::Desktop,
@@ -299,8 +308,25 @@ mod tests {
         let (_, bin) = manifest.split_once("[[bin]]").expect("a [[bin]] table");
         assert_eq!(
             quoted_after(bin, "name = "),
-            APP,
-            "crates/app/Cargo.toml builds a binary the bundle would not start"
+            BUILT_APP,
+            "crates/app/Cargo.toml builds a binary the bundle would not find"
+        );
+        assert!(
+            info_plist("1.2.3").contains(&format!("<string>{APP}</string>")),
+            "the bundle starts what it copied in as {APP}"
+        );
+    }
+
+    /// The two binaries share one target directory, and the default macOS filesystem folds case,
+    /// so names differing only in case would be one file: the release would carry the same
+    /// program twice, and which one is a race between two linker runs. This is not theory; it
+    /// shipped a bundle whose `tormoni` was the notebook.
+    #[test]
+    fn the_two_binaries_cannot_collide_in_one_directory() {
+        assert_ne!(
+            BUILT_APP.to_lowercase(),
+            CLI.to_lowercase(),
+            "cargo would write {BUILT_APP} and {CLI} to one path where the filesystem folds case"
         );
     }
 
@@ -392,7 +418,7 @@ mod tests {
             "{layout:?}"
         );
         assert!(
-            layout.contains(&(format!("bin/{APP}"), Payload::Binary(APP))),
+            layout.contains(&(format!("bin/{APP}"), Payload::Binary(BUILT_APP))),
             "{layout:?}"
         );
     }

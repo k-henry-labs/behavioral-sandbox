@@ -8,6 +8,7 @@
 //!   so an install is whole once libkrun is present.
 //! - **`SHA256SUMS` beside it**, in `sha256sum` text form, which the installer verifies.
 
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
@@ -139,19 +140,41 @@ fn stage_linux(rootfs: &Path, artifact: &Path) -> Result<()> {
             }
         }
     }
-    run_tool(
-        "tar",
-        &[
-            "--owner=0".as_ref(),
-            "--group=0".as_ref(),
-            "--numeric-owner".as_ref(),
-            "-czf".as_ref(),
-            artifact.as_os_str(),
-            "-C".as_ref(),
-            stage.as_os_str(),
-            top.as_ref(),
-        ],
-    )
+    archive_linux(&root, artifact)
+}
+
+/// Tars the staged tree at `root` into `artifact`, its top-level directories at the archive's
+/// own root.
+///
+/// **No wrapper directory.** `install.sh` untars this straight into `/usr/local`, so a member
+/// named `<name>/bin/tormoni` would install to `/usr/local/<name>/bin/tormoni` and nothing would
+/// be on `PATH`. Owned by 0:0, since a root `tar -x` keeps whatever the archive says.
+fn archive_linux(root: &Path, artifact: &Path) -> Result<()> {
+    let mut args: Vec<&OsStr> = vec![
+        "--owner=0".as_ref(),
+        "--group=0".as_ref(),
+        "--numeric-owner".as_ref(),
+        "-czf".as_ref(),
+        artifact.as_os_str(),
+        "-C".as_ref(),
+        root.as_os_str(),
+    ];
+    let tops = linux_top_levels();
+    args.extend(tops.iter().map(|t| OsStr::new(t.as_str())));
+    run_tool("tar", &args)
+}
+
+/// The directories the Linux layout puts at the archive's root, in order, each once.
+fn linux_top_levels() -> Vec<String> {
+    let mut tops: Vec<String> = Vec::new();
+    for (rel, _) in bundle::linux_layout() {
+        if let Some(top) = rel.split('/').next()
+            && !tops.iter().any(|t| t == top)
+        {
+            tops.push(top.to_string());
+        }
+    }
+    tops
 }
 
 /// Marks a staged binary 0755, which a copy does not carry over.
@@ -181,6 +204,48 @@ mod tests {
         assert!(
             why.contains("macOS on aarch64") && why.contains("Linux on x86_64"),
             "{why}"
+        );
+    }
+
+    /// The archive carries `bin/` and `share/` at its own root, because `install.sh` untars it
+    /// into `/usr/local` without stripping anything: a wrapper directory would put every file
+    /// one level too deep, leaving nothing on `PATH` and no guest tree where the CLI looks.
+    ///
+    /// The staged tree holds one file per layout entry; on a case-insensitive host the two
+    /// binary names fold into one, which costs a member and not the property under test.
+    #[test]
+    fn the_linux_archive_has_no_wrapper_directory() {
+        assert_eq!(linux_top_levels(), ["bin", "share"]);
+        let scratch = tormoni_test_support::ScratchDir::created("dist-linux");
+        let root = scratch.path().join("stage");
+        for (rel, _) in bundle::linux_layout() {
+            let dest = root.join(&rel);
+            std::fs::create_dir_all(dest.parent().expect("a parent")).expect("staged");
+            std::fs::write(&dest, b"x").expect("staged");
+        }
+        let artifact = scratch.path().join("tormoni-linux-x86_64.tgz");
+        archive_linux(&root, &artifact).expect("archived");
+
+        let out = std::process::Command::new("tar")
+            .arg("-tzf")
+            .arg(&artifact)
+            .output()
+            .expect("tar lists the archive");
+        let members: Vec<&str> = std::str::from_utf8(&out.stdout)
+            .expect("utf-8")
+            .lines()
+            .filter(|m| !m.ends_with('/'))
+            .collect();
+        for member in &members {
+            assert!(
+                member.starts_with("bin/") || member.starts_with("share/"),
+                "{member} is not at the archive's root, so it would install one level too deep"
+            );
+        }
+        assert!(members.contains(&"bin/tormoni"), "{members:?}");
+        assert!(
+            members.iter().any(|m| m.starts_with("share/")),
+            "{members:?}"
         );
     }
 

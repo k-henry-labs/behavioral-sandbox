@@ -10,7 +10,7 @@ publish = false
 description = "The tormoni GUI application (`Tormoni`): the notebook."
 
 [[bin]]
-name = "Tormoni"
+name = "tormoni-app"
 path = "src/main.rs"
 
 [dependencies]

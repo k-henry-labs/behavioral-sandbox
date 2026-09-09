@@ -73,8 +73,13 @@ const MAX_THUMBNAILS: usize = 12;
 /// thrashes. The compiler holds the two constants in step, so neither can be raised alone.
 const _: () = assert!(MAX_THUMBNAILS < frame::MAX_TEXTURES);
 
-/// The executable's name, which is what the platform names this application by.
-pub(crate) const NAME: &str = env!("CARGO_BIN_NAME");
+/// What the platform calls this application: the name the packaged executable carries, which
+/// macOS reads for the menu bar and the Dock and a desktop entry names in `Exec`.
+///
+/// Not `CARGO_BIN_NAME`. Cargo writes every binary of a workspace into one directory, and the
+/// default macOS filesystem is case-insensitive, so a `Tormoni` built beside `tormoni` would be
+/// the same file; the build keeps them apart and `cargo xtask dist` renames this one.
+pub(crate) const NAME: &str = "Tormoni";
 
 /// The identifier the application registers under. The Linux window carries it, which is what
 /// pairs the window with its desktop entry; xtask's bundle carries the same word as

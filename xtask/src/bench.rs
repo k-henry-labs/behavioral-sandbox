@@ -357,7 +357,7 @@ fn bench_boundary(ctx: &BenchContext, display: &str, frames: usize, stage: &Path
 /// and each frame uploaded. The panel bounds what reaches the screen, so uploaded against
 /// presented is the number.
 fn bench_app(ctx: &BenchContext, display: &str, frames: usize, stage: &Path) -> Result<()> {
-    let app = ctx.tormoni.with_file_name(crate::bundle::APP);
+    let app = ctx.tormoni.with_file_name(crate::bundle::BUILT_APP);
     if !app.is_file() {
         bail!(
             "no release app at {} — run `cargo build --release -p tormoni-app`",
