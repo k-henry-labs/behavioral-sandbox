@@ -20,16 +20,17 @@ the safe libkrun wrapper (`tormoni-krun`), the process supervisor (`tormoni-supe
 its verbs, the run record and its ustar export (`tormoni-record`), the guest image build and the gate
 (`xtask`), and the display path: a virtio-gpu scanout landing in host RAM and shown in a window,
 with that window's keyboard and pointer going back as two virtio-input devices, a second guest
-image that boots a Wayland compositor on it, and an opt-in virtio-snd card. `tormoni-app` is the
+image that boots a Wayland compositor on it, and an opt-in virtio-snd card. `Tormoni` is the
 notebook of those runs: a sidebar over the list, a live run's display and input in the window, a
 start form that shows the posture before boot, export, a selection of ended runs removed behind a
 confirm, and a Settings screen whose palette, scale and landing screen persist. On macOS ARM64 the
 tree signs (`cargo xtask sign`), bundles (`cargo xtask bundle`) and boots the same sandboxes under
 Hypervisor.framework.
 
-**Status.** Pre-release: one maintainer, no external review, and no release. macOS's libkrun builds
+**Status.** Pre-release: one maintainer, no external review; a `v*` tag releases the tree through
+`cargo xtask dist` and `install.sh`. macOS's libkrun builds
 neither the `--sound` nor the guest input backend, and the display helper's own window is compiled
-out there, so a display on macOS is viewed in `tormoni-app`. `--gpu` offers a guest the 3D path behind
+out there, so a display on macOS is viewed in `Tormoni`. `--gpu` offers a guest the 3D path behind
 `krun_has_feature`; measured acceleration exists nowhere yet, for reasons below.
 
 ### Design rules
@@ -97,7 +98,7 @@ One verb, end to end, with the boundary each step sits on:
 5. **A display leaves the guest as pixels.** The guest draws into a dumb buffer; its `virtio_gpu`
    driver transfers and flushes; the frame lands in host RAM in a sealed memfd of equal slots. A
    second process leases that scanout over the control socket, maps it, and uploads by damage
-   rectangle into a wgpu texture, which is how `tormoni-app` shows a run another process started.
+   rectangle into a wgpu texture, which is how `Tormoni` shows a run another process started.
 6. **Input goes back the same way.** Window events become `tormoni-input` reports and travel as
    `kbd|ptr TYPE CODE VALUE` lines down an `input` session on the control socket, arriving as two
    virtio-input devices. The replay file and the socket speak one grammar, so both feeders are the
@@ -122,7 +123,7 @@ the subprocess. Three warmups discarded, then one hundred runs, nearest-rank per
 |---|---|
 | Cold boot, wall clock, n=100 | p50 157 ms, p90 162 ms, p99 169 ms (min 150, max 170) |
 | An idle `tormoni up` sandbox, 512 MiB configured | 102 MiB resident, steady over three samples |
-| `tormoni-app` idling (on the menu screen it had that day) | 101 MiB resident |
+| `Tormoni` idling (on the menu screen it had that day) | 101 MiB resident |
 
 Resident is what was touched, not what was granted: the helper holds a 512 MiB guest with a
 102 MiB resident set.

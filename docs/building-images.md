@@ -16,6 +16,11 @@ cargo xtask init                      # this host's arch, into tormoni's default
 cargo xtask init --root DIR --force   # somewhere else, replacing a tree already there
 ```
 
+`cargo xtask dist` writes the same tree for this host's guest and packs it into the release
+artifact (`rootfs.tar.gz` under `Tormoni.app/Contents/Resources`, or under `share/tormoni` in the
+Linux tarball), which `install.sh` unpacks to that default root. A release is whole without a
+checkout.
+
 It is a fixture, not the image: no runtimes, no locked closure, no reproducibility claim, and the
 tree carries the invoking user's ownership rather than `0:0`. `--force` refuses a directory that
 does not already look like a guest tree, so it cannot be pointed at a home directory.

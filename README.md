@@ -46,7 +46,7 @@ guest image the tree builds:
 * **Keep it.** Every run leaves a record: the posture as settled, the captured output, and the
   guest's `/results`. `tormoni show`, `tormoni rm` and `tormoni export` read, remove and package them, one ustar
   file per run.
-* **Drive it from a window.** `tormoni-app` is the notebook: every run on the machine, live and past; a
+* **Drive it from a window.** `Tormoni` is the notebook: every run on the machine, live and past; a
   live run's display with your keyboard and pointer going in; a form that shows a sandbox's posture
   before it boots. A sidebar reaches its screens, and its palette, interface scale and landing
   screen persist across launches.
@@ -54,9 +54,11 @@ guest image the tree builds:
 macOS ARM64 builds, signs (`cargo xtask sign`), bundles as `Tormoni.app` (`cargo xtask bundle`) and
 boots the same sandboxes under Hypervisor.framework.
 
-**Status.** Pre-release: one maintainer, no external review, and no release to install. macOS's
+**Status.** Pre-release: one maintainer, no external review. A release installs with
+`curl -fsSL https://tormoni.ai/install.sh | sh` on macOS ARM64 and Linux x86_64 (the [running](docs/running.md)
+page says what it does and cannot do). macOS's
 libkrun builds neither the `--sound` nor the guest input backend, and the display helper's own
-window is compiled out there, so a display on macOS is viewed in `tormoni-app`. `--gpu` offers a guest
+window is compiled out there, so a display on macOS is viewed in `Tormoni`. `--gpu` offers a guest
 the 3D path (virgl + Venus) where libkrun reports the feature, but no host measured so far carries a
 Venus-built renderer, so guest acceleration is unproven.
 
@@ -105,6 +107,7 @@ cargo xtask init             # a guest tree where tormoni looks for one, so a sa
 cargo xtask ci               # the gate: fmt, prose drift, clippy, build, test, docs, deny
 cargo xtask sign             # macOS: re-entitle the built tormoni after any other build
 cargo xtask bundle           # macOS: assemble artifacts/Tormoni.app from the built pair
+cargo xtask dist             # this host's release under dist/, as install.sh downloads it
 cargo xtask build-rootfs     # the guest image (Alpine + runtimes + the static agent)
 cargo xtask build-rootfs --desktop   # the desktop image (+ a Wayland compositor and a terminal)
 ```
@@ -124,7 +127,7 @@ types. `cargo … -p` takes the package, a path takes the directory.
 | `crates/record` | `tormoni-record` | The run record the notebook keeps: posture, captured output, and the guest's `/results`, one directory per run, exportable as one tar file. |
 | `crates/input` | `tormoni-input` | The guest's keyboard and pointer: device shapes, reports, and the line grammar the replay file and the control socket feed. |
 | `crates/cli` | `tormoni` | The `tormoni` CLI and its verbs. The binary on `PATH` is `tormoni`. |
-| `crates/app` | `tormoni-app` | The GUI application, on iced: the notebook of runs reached from a sidebar, a run's record with its display and output, a start form, stop, re-run, delete, export, clear history, a persisted palette, scale and landing screen, and a shell in your terminal. One AppKit call gives its window a toolbar, which is what puts the window's own buttons on the line its head is drawn to. |
+| `crates/app` | `tormoni-app` | The GUI application, `Tormoni`, on iced: the notebook of runs reached from a sidebar, a run's record with its display and output, a start form, stop, re-run, delete, export, clear history, a persisted palette, scale and landing screen, and a shell in your terminal. One AppKit call gives its window a toolbar, which is what puts the window's own buttons on the line its head is drawn to. |
 | `crates/test-support` | `tormoni-test-support` | Shared test fixtures: a self-reclaiming scratch dir, a log sink, a deterministic generator. Dev-only, never shipped. |
 | `docs` | | This documentation, as an mdBook. |
 | `xtask` | `xtask` | Dev orchestration: `cargo xtask ci`, the guest image build, the vendor mirror. Never shipped. |
@@ -139,8 +142,11 @@ happens on Arch Linux `x86_64` and macOS ARM64.
 
 ## Releases and scope
 
-There is no published roadmap and no promised date, and no installed base to break. A capability
-becomes a feature when a test exercises it end to end, and is not announced before that. The first
+A `v*` tag builds a release: `.github/workflows/release.yml` runs `cargo xtask dist` on macOS ARM64
+and on Linux x86_64 and publishes the two artifacts, `SHA256SUMS` and `install.sh`, which
+`https://tormoni.ai/install.sh` redirects to. There is no published roadmap and no promised date.
+A capability becomes a feature when a test exercises it end to end, and is not announced before
+that. The first
 supported release, `v0.1.0`, will pin the host↔guest wire framing and the supervisor API; until then
 everything, including the crate names, changes without notice.
 

@@ -24,7 +24,7 @@ every sandbox is a helper this project spawned, tracked and reaped.
 - **Keep it.** Every run leaves a record: the posture as settled, the captured output, and the
   directory the guest saw as `/results`. `tormoni ls --all`, `show`, `rm` and `export` read, remove and
   package them, one ustar file per run.
-- **Drive it from a window.** `tormoni-app` is the notebook of those runs, live and past: a sidebar over
+- **Drive it from a window.** `Tormoni` is the notebook of those runs, live and past: a sidebar over
   the list, one run's record with its display and output, a start form that shows a sandbox's
   posture before it boots, and a shell in your own terminal. Its palette, interface scale and
   landing screen persist across launches.
@@ -32,9 +32,11 @@ every sandbox is a helper this project spawned, tracked and reaped.
 Both platforms run the same sandboxes: KVM on Linux, and Hypervisor.framework on macOS ARM64, where
 the tree also signs itself (`cargo xtask sign`) and bundles as `Tormoni.app` (`cargo xtask bundle`).
 
-**Status.** Pre-release: one maintainer, no external review, and no release to install. macOS's
+**Status.** Pre-release: one maintainer, no external review. A release installs with
+`curl -fsSL https://tormoni.ai/install.sh | sh` on macOS ARM64 and Linux x86_64; [Running a
+sandbox](./running.md#installing) says what that does and cannot do. macOS's
 libkrun builds neither the `--sound` nor the guest input backend, so a display there is viewed in
-`tormoni-app`. `--gpu` offers a guest the 3D path where libkrun reports the feature, but no host
+`Tormoni`. `--gpu` offers a guest the 3D path where libkrun reports the feature, but no host
 measured so far carries a Venus-built renderer, so guest acceleration is unproven.
 
 This book is short, and deliberately so: it describes the rules the project is built to, the crates

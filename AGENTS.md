@@ -38,7 +38,8 @@ claim about adoption. No one outside this project has run it.
 It is gitignored working state, not a tracked file, so a fresh clone will not have one.
 A checkbox there means done **and** evidenced, never merely attempted.
 
-**The tree boots sandboxes, and there is no release.** The Firecracker engine was deleted rather
+**The tree boots sandboxes, and a `v*` tag releases it.** `.github/workflows/release.yml` runs
+`cargo xtask dist` on each host and publishes what `install.sh` fetches; a human makes the tag. The Firecracker engine was deleted rather
 than carried alongside its replacement; the libkrun supervisor (phase 2) and the headless verbs
 (phase 3) are in. On a host whose hypervisor answers (`/dev/kvm` on Linux, Hypervisor.framework
 on macOS ARM64) and a guest image the tree builds, `tormoni run` runs one command in a sandbox,
@@ -48,11 +49,11 @@ and `tormoni ls`, `tormoni exec` and `tormoni stop` reach one this process did n
 pointer reach the guest as two virtio-input devices (4.2, 4.3), the desktop image boots to a
 terminal in a Wayland session under it (4.5), and `--sound` gives the guest a virtio-snd card
 backed by the host audio server (4.7). A second process leases a display over the control socket
-as a sealed memfd and a record per present (4.9), and `tormoni-app` shows one in an iced window through
+as a sealed memfd and a record per present (4.9), and `Tormoni` shows one in an iced window through
 a wgpu texture upload (4.10), and its keyboard and pointer reach the guest as lines down an `input`
 session on that socket (4.11). Every run leaves a record under the local data dir (posture, captured
 output, the guest's `/results`), which `tormoni ls --all`, `show`, `rm` and `export` (one ustar file
-per run) read (4.12), and `tormoni-app` is the notebook of those runs: a sidebar over the
+per run) read (4.12), and `Tormoni` is the notebook of those runs: a sidebar over the
 list, one run's record with its display and output, a start form whose posture sentence is
 confirmed before anything boots, stop, re-run, delete, export, removing a selected set of ended
 runs behind an inline confirm, a Settings screen whose palette, scale and landing screen persist beside the runs
@@ -60,7 +61,7 @@ directory, and a shell through `tormoni exec --tty` in the operator's terminal (
 through the app on this panel is measured (4.14). On macOS ARM64 (phase 6) the tree builds, signs
 (`cargo xtask sign`) and boots the same sandboxes under Hypervisor.framework; this platform's
 libkrun builds neither the `--sound` nor the guest input backend, the display helper's own window
-is compiled out (its event loop needs the main thread), so a display there is viewed in `tormoni-app`,
+is compiled out (its event loop needs the main thread), so a display there is viewed in `Tormoni`,
 and the guest image build stays on Linux. `--gpu` (phase 5) offers a guest the 3D path (virgl +
 Venus) behind `krun_has_feature`; acceleration is unproven on every measured host, and the ML
 guest image is a scaffold no host has built.
@@ -112,16 +113,19 @@ list of packages. Therefore a stale `-p` fails the gate, not the terminal of a r
 | `crates/record` | `tormoni-record` | The run record: one directory per run under the local data dir with the posture as settled, the captured output (capped), and `results/`, the directory the guest sees as `/results`. Written by the CLI at start and end, read by both binaries; `export` writes one as a ustar file. |
 | `crates/input` | `tormoni-input` | The guest's keyboard and pointer: the two device shapes, the reports a window's events become, and the `kbd\|ptr TYPE CODE VALUE` line grammar every feeder speaks (the replay file, the `input` request). Both binaries translate through it. |
 | `crates/cli` | `tormoni` | The `tormoni` binary and its verbs. The package, the binary, and the command are all `tormoni`. Its library half is the internals of the CLI, not a public API. |
-| `crates/app` | `tormoni-app` | The GUI application, on iced: the notebook of runs (live and past, from `tormoni-record`), one run's record with its display (leased over the control socket, uploaded to a wgpu texture by its damage rectangle) and its captured output, a start form, stop, re-run, delete, and a shell in the operator's terminal. Starting, stopping and the shell go through the `tormoni` binary beside it. Its `chrome` module is the second crate that may use `unsafe`, for the one AppKit call that gives the window a toolbar. |
+| `crates/app` | `tormoni-app` | The GUI application, on iced: the notebook of runs (live and past, from `tormoni-record`), one run's record with its display (leased over the control socket, uploaded to a wgpu texture by its damage rectangle) and its captured output, a start form, stop, re-run, delete, and a shell in the operator's terminal. Its binary is `Tormoni`, the one name the platform shows. Starting, stopping and the shell go through the `tormoni` binary beside it, or under the bundle's `Contents/Resources`. Its `chrome` module is the second crate that may use `unsafe`, for the one AppKit call that gives the window a toolbar. |
 | `crates/test-support` | `tormoni-test-support` | Test fixtures: a self-reclaiming scratch dir, a log sink, and the deterministic generator the in-gate fuzz suites use. |
 | `xtask` | `xtask` | Dev orchestration: the gate, artifact builds, benchmarks, and packaging. It is never shipped and never renamed (`cargo xtask` is a `--package xtask` alias). |
 | `docs/` | | mdBook. `SUMMARY.md` is the index. The names are flat `topic-subtopic.md`. The hierarchy is in `SUMMARY.md`, not in directories. |
 
-**Two binaries will ship**, from one workspace: `tormoni` (the CLI, which also carries the hidden
-helper subcommand that becomes a VM) and the GUI application, `tormoni-app`, the notebook. Neither is a
-daemon. A VM registers a socket
-under the runtime directory, and both binaries find live VMs by reading it, so a VM started by one
-is visible to the other. `scratch/ROADMAP.md` holds the reasoning.
+**Two binaries ship**, from one workspace, in the shape Ollama ships its own: `tormoni` (the CLI,
+which also carries the hidden helper subcommand that becomes a VM) and `Tormoni` (the GUI, package
+`tormoni-app`, the notebook). `cargo xtask dist` packages them: on macOS as `Tormoni.app`, with
+`Contents/MacOS/Tormoni`, `Contents/Resources/tormoni` and the guest tree beside it, which
+`install.sh` puts in `/Applications` and symlinks onto `/usr/local/bin/tormoni`; on Linux as a
+tarball of `bin/`, a desktop entry, the icon and the tree under `share/`. Neither is a daemon. A VM
+registers a socket under the runtime directory, and both binaries find live VMs by reading it, so
+a VM started by one is visible to the other. `scratch/ROADMAP.md` holds the reasoning.
 
 ## Building from source
 
@@ -170,7 +174,10 @@ cargo xtask setup            # what this host can and cannot do
 cargo xtask init             # a guest tree where `tormoni` looks for one: minirootfs + the agent
 cargo xtask ci               # the gate (and signs what it built, on macOS)
 cargo xtask sign             # macOS only: re-entitle the built `tormoni` after any other build
-cargo xtask bundle           # macOS only: assemble artifacts/Tormoni.app from the built pair
+cargo xtask bundle           # macOS only: assemble artifacts/Tormoni.app from the built pair, sealed
+cargo xtask app              # start the notebook from that bundle
+cargo xtask app-icon         # macOS only: cut crates/app/icon/tormoni.svg into the committed icon files
+cargo xtask dist             # this host's release under dist/, with its guest tree and SHA256SUMS
 cargo xtask build-rootfs     # the guest image (Alpine + the GUEST_PACKAGES runtimes + static agent)
 cargo xtask build-rootfs --desktop   # the desktop image (+ cage, foot, seatd, udev, and tormoni-session)
 cargo xtask build-rootfs --arch aarch64   # an image for the other arch, from either Linux builder

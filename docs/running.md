@@ -12,6 +12,54 @@ tormoni run --root ~/.local/share/tormoni/rootfs -- uname -a
 The guest root falls back to `$TORMONI_GUEST_ROOT`, then `~/.local/share/tormoni/rootfs`, so after one
 `export` the `--root` flag can be dropped.
 
+## Installing
+
+```console
+curl -fsSL https://tormoni.ai/install.sh | sh
+```
+
+The address redirects to the latest release's `install.sh` on GitHub, as Ollama's does. The script
+is one function called on its last line, so a truncated download runs nothing. It refuses any host
+but macOS on ARM64 and Linux on x86_64, downloads that host's artifact and `SHA256SUMS`, verifies
+the digest, and then:
+
+- **macOS**: puts `Tormoni.app` in `/Applications`, symlinks `/usr/local/bin/tormoni` to the
+  `tormoni` inside it (as this user first, then with `sudo`), and opens the app unless
+  `TORMONI_NO_START` is set.
+- **Linux**: needs `sudo`, untars `bin/tormoni`, `bin/Tormoni`, a desktop entry, the icon and the
+  guest tree under the first of `/usr/local`, `/usr` or `/` whose `bin` is on `PATH`, and warns if
+  `/dev/kvm` is not readable and writable by you (membership of the `kvm` group, usually).
+- **Both**: unpacks the guest tree the release carries to `~/.local/share/tormoni/rootfs`, keeping
+  a tree it did not write unless `TORMONI_REPLACE_ROOTFS=1`; asks before running the package
+  manager's libkrun line (`--yes` or `TORMONI_INSTALL_YES=1` skips the question; with no terminal
+  it prints the line and exits 1); and `TORMONI_VERSION=0.0.1` takes that tag's assets.
+  `--dry-run` prints every command that would change the machine and runs none, which is what the
+  gate's tests drive it with.
+
+What it cannot claim, each with its mechanism:
+
+- The binaries are signed ad hoc (`codesign --sign -`), not notarized, and carry no Developer ID.
+  `curl` and `unzip` set no quarantine attribute, so the app the script installs opens; the same
+  zip saved by a browser is quarantined, and Gatekeeper refuses it until a Developer ID and
+  notarization exist.
+- On macOS the binaries load libkrun by the install name Homebrew gave it and libkrunfw from
+  `/opt/homebrew/lib`, baked in at build time (`crates/krun/build.rs`), so Homebrew at that prefix
+  is a requirement of the release. On Linux the binary was linked in a Fedora 43 container, so its
+  glibc floor is 2.42, and the loader needs `libkrun.so.1`: Arch, Fedora and openSUSE package it,
+  Debian and Ubuntu do not.
+- The `tormoni` inside the bundle carries the hypervisor entitlement; a byte copy keeps it, a
+  relink loses it.
+- The prompt, `sudo`, and the real download are outside the gate: they are run by hand on each
+  host before a tag.
+
+### Removing
+
+macOS: `/Applications/Tormoni.app`, `/usr/local/bin/tormoni`, and under `~/.local/share/tormoni`
+the `rootfs` tree and `rootfs.sha256`. Linux: `/usr/local/bin/tormoni`, `/usr/local/bin/Tormoni`,
+`/usr/local/share/tormoni`, `/usr/local/share/applications/ai.tormoni.app.desktop`,
+`/usr/local/share/icons/hicolor/512x512/apps/ai.tormoni.app.png`, plus the same two user paths.
+Run records under `~/.local/share/tormoni/runs` are yours and are not removed.
+
 ## The verbs
 
 | Verb | What it does |
@@ -69,7 +117,7 @@ readable.
 
 ## The notebook
 
-`tormoni-app` opens on the notebook, with a sidebar reaching its three screens:
+`Tormoni` opens on the notebook, with a sidebar reaching its three screens:
 
 - **The list**: every run, newest first, live ones with a thumbnail of their display. `Select`
   turns each ended row into a tick box, `All` takes every one of them, and `Remove` takes what was
