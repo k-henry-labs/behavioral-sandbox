@@ -15,6 +15,7 @@ mod fonts;
 mod guest_bins;
 mod icons;
 mod init;
+mod install_script;
 mod lints;
 mod rootfs;
 mod sign;
@@ -414,6 +415,7 @@ fn ci() -> Result<()> {
     // The prose-drift lint runs early: it is sub-second, and a comment pointing at a renamed
     // repo path or a dead Markdown link should surface before the slow compile steps.
     drift::check(workspace_root())?;
+    install_script::check(workspace_root())?;
     // The pinned stable toolchain and the declared MSRV floor are kept in step by hand;
     // catch a bump that moved only one before the compile, not after a downstream MSRV surprise.
     toolchain_msrv_agree(workspace_root())?;
