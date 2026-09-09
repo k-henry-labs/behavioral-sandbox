@@ -33,7 +33,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -43,7 +43,7 @@ jobs:
       - name: Install the pinned nightly toolchain
         run: rustup toolchain install nightly-2026-07-20 --profile minimal
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           # The fuzz harness is its own workspace; cache it alongside the root (for xtask).
           workspaces: |
@@ -67,7 +67,7 @@ jobs:
       # takes the newest entry sharing the prefix, which makes a cold cache a seed-only run rather
       # than a failure.
       - name: Restore the fuzzing corpus
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: fuzz/corpus
           key: fuzz-corpus-smoke-${{ github.run_id }}
@@ -80,7 +80,7 @@ jobs:
 
       - name: Upload the crashing input
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: fuzz-smoke-artifacts
           path: fuzz/artifacts/

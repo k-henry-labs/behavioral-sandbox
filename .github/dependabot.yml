@@ -1,6 +1,11 @@
-# Dependabot keeps the third-party GitHub Actions current. Each `uses:` names a major tag, so a
-# patch lands without a commit here and this opens a weekly PR when a major moves. One grouped PR,
-# so a routine bump is a single review rather than one per action.
+# Dependabot keeps the GitHub Actions current. Each `uses:` names a full commit SHA with its
+# version in a trailing comment, which is OpenSSF's hardening guidance: a tag is mutable, so
+# whoever controls an action's repo can repoint `v2` at other code, and a SHA cannot be moved.
+# Dependabot reads the comment, so it still proposes a bump and rewrites both. The cost is that
+# every patch now needs a commit here; the grouping keeps that to one review a week.
+#
+# Not covered: actionlint, fetched by sha256 in `ci.yml` rather than as an action. Bump it by hand
+# from upstream's `checksums.txt`.
 #
 # Actions only, on purpose: the Rust dependency lock is hand-pinned and mirrored offline (the
 # vendored mirror plus audit.yml's daily RustSec check), so Cargo bumps stay a manual, reviewed
