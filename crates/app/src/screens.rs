@@ -447,7 +447,7 @@ fn account_block(app: &App) -> Element<'_, Message> {
                 .secure(true)
                 .style(entry)
                 .font(MONO)
-                .on_input(Message::Token)
+                .on_input(|pasted| Message::Token(crate::account::Token::from(pasted)))
                 .on_submit_maybe((!token.is_empty()).then_some(Message::Connect))
                 .width(Fill);
             column![

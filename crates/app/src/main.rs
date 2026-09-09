@@ -619,7 +619,7 @@ pub(crate) enum Message {
     /// Start signing in: the console's Keys page opens for a token, and the block takes one.
     SignIn,
     /// As much of the token as has been pasted.
-    Token(String),
+    Token(account::Token),
     /// Ask the console whose the pasted token is.
     Connect,
     /// Stop signing in, keeping nothing of what was pasted.
@@ -1091,7 +1091,7 @@ impl App {
             }
             Message::Token(pasted) => {
                 if let account::Account::Entering(token) = &mut self.account {
-                    *token = account::Token::from(pasted);
+                    *token = pasted;
                 }
                 Task::none()
             }
@@ -1527,7 +1527,9 @@ mod tests {
     fn a_refused_token_leaves_the_block_asking_for_another() {
         let mut app = app_with(vec![], &[]);
         assert_eq!(app.account, account::Account::SignedOut, "a fresh launch");
-        let _ = app.update(Message::Token("tor_stray".to_string()));
+        let _ = app.update(Message::Token(account::Token::from(
+            "tor_stray".to_string(),
+        )));
         assert_eq!(
             app.account,
             account::Account::SignedOut,
@@ -1539,7 +1541,7 @@ mod tests {
             app.account,
             account::Account::Entering(account::Token::default())
         );
-        let _ = app.update(Message::Token("tor_abc".to_string()));
+        let _ = app.update(Message::Token(account::Token::from("tor_abc".to_string())));
         assert_eq!(
             app.account,
             account::Account::Entering(account::Token::from("tor_abc".to_string()))

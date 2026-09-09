@@ -327,7 +327,10 @@ install_linux() {
     stop_app
     status "Installing under $INSTALL_DIR: bin/tormoni, bin/$APP, share/applications, share/icons, share/tormoni"
     as_root rm -rf "$INSTALL_DIR/share/tormoni"
-    as_root tar -xzf "$TEMP_DIR/$ASSET" -C "$INSTALL_DIR"
+    # root's tar takes ownership and mode from the archive by default, so an archive naming a
+    # setuid file would be obeyed. The release carries none; these say so rather than trust it.
+    as_root tar --no-same-owner --no-same-permissions -xzf "$TEMP_DIR/$ASSET" -C "$INSTALL_DIR"
+    as_root chmod 0755 "$BINDIR/tormoni" "$BINDIR/$APP"
     if available update-desktop-database; then
         as_root update-desktop-database "$INSTALL_DIR/share/applications" 2>/dev/null || true
     fi
