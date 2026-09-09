@@ -20,12 +20,23 @@ version: 2
 updates:
   - package-ecosystem: "github-actions"
     directory: "/"
+    # Pinned to a day and hour rather than bare `weekly`, so the PR arrives when someone is
+    # looking instead of at whatever hour Dependabot picked.
     schedule:
       interval: "weekly"
-    # `ci: bump ...` rather than Dependabot's default `Bump ...`, so its PR lands as a Conventional
-    # Commit like every other commit in this tree, with nothing to reword at merge.
+      day: "monday"
+      time: "09:00"
+      timezone: "America/Chicago"
+    # No release is taken on the day it ships. A compromised or yanked version is usually caught
+    # within days (xz-utils, event-stream, the npm takeovers), so waiting a week costs nothing here
+    # and is most of what pinning by commit SHA would have bought, without the commit-per-patch.
+    cooldown:
+      default-days: 7
+    # `ci(deps): bump ...` rather than Dependabot's default `Bump ...`, so its PR lands as a
+    # Conventional Commit like every other commit in this tree, with nothing to reword at merge.
     commit-message:
       prefix: "ci"
+      include: "scope"
     groups:
       github-actions:
         patterns:
