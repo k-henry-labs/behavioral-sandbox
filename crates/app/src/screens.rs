@@ -264,18 +264,26 @@ const NAV_TOP: f32 = TOGGLE_TOP + TOGGLE + 18.0;
 /// The room inside a sidebar row, around its icon and label.
 const TAB_PAD: [f32; 2] = [9.0, 12.0];
 
-/// Where the toggle stands on a line with no lights: over the column the tabs' icons stand in.
-const TOGGLE_LEAD: f32 = RAIL_PAD + TAB_PAD[1] + ICON / 2.0 - TOGGLE / 2.0;
+/// Where the toggle stands with the rail out and no window buttons on the line: over the column
+/// the tabs' icons stand in, so the four of them read as one column.
+const TOGGLE_OVER_ICONS: f32 = RAIL_PAD + TAB_PAD[1] + ICON / 2.0 - TOGGLE / 2.0;
 
-/// Where the toggle stands, given the room `lights` the window's own buttons take. With them:
-/// over the room they leave when the sidebar is folded away, at the sidebar's own inner edge when
-/// it is out, and along that line while it moves. Without: in one place, the tabs' icon column,
-/// since nothing is there for it to make way for.
+/// Where it stands with the rail folded away. There is no icon column left to align to, and the
+/// window's edge is not an alignment, so its hover circle takes the page's own gutter and shares
+/// the margin everything below it has.
+const TOGGLE_FOLDED: f32 = GUTTER + HALO_OVERHANG;
+
+/// Where the toggle stands, given the room `lights` the window's own buttons take. Each platform
+/// slides it between a folded place and an open one along the fold. With lights: over the room
+/// they leave when folded, at the sidebar's own inner edge when out. Without: on the page's
+/// gutter when folded, over the tabs' icon column when out.
 fn toggle_at(out: f32, lights: f32) -> f32 {
-    if lights <= 0.0 {
-        return TOGGLE_LEAD;
-    }
-    lights + (SIDEBAR - RAIL_PAD - TOGGLE - lights) * out
+    let (folded, open) = if lights > 0.0 {
+        (lights, SIDEBAR - RAIL_PAD - TOGGLE)
+    } else {
+        (TOGGLE_FOLDED, TOGGLE_OVER_ICONS)
+    };
+    folded + (open - folded) * out
 }
 
 /// Where a pane's head starts, at this much of the sidebar: at the gutter, out past where the
@@ -703,33 +711,33 @@ pub(crate) fn list(app: &App) -> Element<'_, Message> {
     let past: Vec<&Record> = app.runs.iter().filter(|r| !app.is_live(r)).collect();
     let start = row![head_title("Sandboxes"), space().width(Fill)];
     let header = match &app.list {
-        // The last point a choice can be kept, and it says how many rather than "these": the
+        // The last point a selection can be kept, and it says how many rather than "these": the
         // count is the thing a reader checks before pressing a destructive button.
         crate::ListMode::Confirming(ids) => row![
             head_title(format!("Remove {}?", crate::runs(ids.len()))),
             space().width(Fill),
             small_button("Remove", destructive).on_press(Message::RemoveConfirmed),
-            small_button("Keep", push).on_press(Message::ChooseCancelled),
+            small_button("Keep", push).on_press(Message::SelectCancelled),
         ],
-        crate::ListMode::Choosing(ids) => {
+        crate::ListMode::Selecting(ids) => {
             let every = past.len();
             let all = ids.len() == every && every > 0;
             row![
-                head_title(format!("{} of {every} chosen", ids.len())),
+                head_title(format!("{} of {every} selected", ids.len())),
                 space().width(Fill),
                 small_button(if all { "None" } else { "All" }, push)
-                    .on_press(Message::ChooseAll(!all)),
-                // Nothing chosen is nothing to remove, and iced draws a button with no message as
+                    .on_press(Message::SelectAll(!all)),
+                // Nothing selected is nothing to remove, and iced draws a button with no message as
                 // the disabled one it is.
                 small_button("Remove", destructive)
-                    .on_press_maybe((!ids.is_empty()).then_some(Message::RemoveChosen)),
-                small_button("Done", push).on_press(Message::ChooseCancelled),
+                    .on_press_maybe((!ids.is_empty()).then_some(Message::RemoveSelected)),
+                small_button("Done", push).on_press(Message::SelectCancelled),
             ]
         }
         crate::ListMode::Browsing => {
             let mut ordinary = start;
             if !past.is_empty() {
-                ordinary = ordinary.push(small_button("Choose", push).on_press(Message::Choose));
+                ordinary = ordinary.push(small_button("Select", push).on_press(Message::Select));
             }
             ordinary.push(small_button("New run", push).on_press(Message::NewRun))
         }
@@ -995,19 +1003,19 @@ fn run_row<'a>(app: &'a App, record: &'a Record) -> Element<'a, Message> {
         .style(move |t| text::Style {
             color: Some(muted(t)),
         });
-    // While a choice is being made every row reads the same way: a box says whether it is in, and
+    // While a selection is being made every row reads the same way: a box says whether it is in, and
     // the row's own actions step aside so the only destructive press is the header's.
-    let choosing = app.list.is_choosing();
-    let chosen = app.list.chosen().contains(record.id.as_str());
+    let selecting = app.list.is_selecting();
+    let selected = app.list.selected().contains(record.id.as_str());
     let mut body = row![];
-    if choosing {
-        // A live run is refused a delete, so it is shown as something that cannot be chosen
+    if selecting {
+        // A live run is refused a delete, so it is shown as something that cannot be selected
         // rather than offered a box that would not answer.
         let box_icon = if live {
             icons::glyph(icons::SQUARE, ICON).style(|t| text::Style {
                 color: Some(muted(t).scale_alpha(0.4)),
             })
-        } else if chosen {
+        } else if selected {
             icons::glyph(icons::SQUARE_CHECK, ICON)
         } else {
             icons::glyph(icons::SQUARE, ICON)
@@ -1015,7 +1023,7 @@ fn run_row<'a>(app: &'a App, record: &'a Record) -> Element<'a, Message> {
         body = body.push(box_icon);
     }
     body = body.push(told).push(state_text);
-    if !choosing {
+    if !selecting {
         // What this row can be told to do, at its own end: a sandbox is stopped where it is
         // listed rather than only on its own screen. There is no pause, because libkrun has no
         // suspend.
@@ -1025,9 +1033,9 @@ fn run_row<'a>(app: &'a App, record: &'a Record) -> Element<'a, Message> {
     // A button rather than a container under a `mouse_area`: the row is a thing you click, so it
     // answers the pointer with the step of grey a source list gives a row under one. A nested
     // checkbox would never see the press, which is why the whole row is the target.
-    let press = match (choosing, live) {
+    let press = match (selecting, live) {
         (true, true) => None,
-        (true, false) => Some(Message::ChooseToggle(crate::RunId::of(record))),
+        (true, false) => Some(Message::SelectToggle(crate::RunId::of(record))),
         (false, _) => Some(Message::Open(crate::RunId::of(record))),
     };
     button(body)
@@ -1346,7 +1354,7 @@ fn results_lines(app: &App, record: &Record) -> Vec<(String, String)> {
         .collect()
 }
 
-/// The captured output: one button per stream, and the tail of the chosen one.
+/// The captured output: one button per stream, and the tail of the selected one.
 fn output_pane<'a>(app: &'a App, record: &'a Record) -> iced::widget::Container<'a, Message> {
     let mut head = row![heading("OUTPUT"), space().width(Fill)].spacing(8);
     for stream in Stream::of(record.verb) {
@@ -1582,18 +1590,32 @@ mod tests {
         }
     }
 
-    /// With no lights on the line, the toggle has nothing to make way for: it stands over the
-    /// tabs' icon column at every step of the fold, so folding moves the head and not the button.
-    /// This is the Linux layout, and macOS's in full screen, where the titlebar auto-hides.
+    /// With no window buttons on the line, the toggle has two places to be and slides between
+    /// them: over the tabs' icon column while the rail is out, and on the page's gutter once it
+    /// is folded away, because a folded rail leaves nothing at the icon column to align to. This
+    /// is the Linux layout, and macOS's in full screen, where the titlebar auto-hides.
     #[test]
-    fn without_lights_the_toggle_stands_over_the_icon_column_and_stays_put() {
+    fn without_lights_the_toggle_runs_between_the_gutter_and_the_icon_column() {
         let icon_centre = RAIL_PAD + TAB_PAD[1] + ICON / 2.0;
+        let open_centre = toggle_at(1.0, 0.0) + TOGGLE / 2.0;
+        assert!(
+            (open_centre - icon_centre).abs() < 0.01,
+            "out, the toggle is centred at {open_centre} and the icons at {icon_centre}"
+        );
+        // Folded, what lines up is the hover circle's own edge, since that is the mark a reader
+        // sees, not the glyph's box inside it.
+        let folded_halo_left = toggle_at(0.0, 0.0) - HALO_OVERHANG;
+        assert!(
+            (folded_halo_left - GUTTER).abs() < 0.01,
+            "folded, the circle starts at {folded_halo_left} and the gutter is {GUTTER}"
+        );
+        // And it is one slide, not a jump: every step is between the two ends.
         for step in 0u8..=100 {
             let out = f32::from(step) / 100.0;
-            let toggle_centre = toggle_at(out, 0.0) + TOGGLE / 2.0;
+            let at = toggle_at(out, 0.0);
             assert!(
-                (toggle_centre - icon_centre).abs() < 0.01,
-                "at {out} out, the toggle is centred at {toggle_centre}, the icons at {icon_centre}"
+                (toggle_at(1.0, 0.0) - 0.01..=toggle_at(0.0, 0.0) + 0.01).contains(&at),
+                "at {out} out the toggle left its own track, at {at}"
             );
         }
     }
@@ -1603,15 +1625,8 @@ mod tests {
     /// full-screen Mac begins 119 in, past a band holding nothing.
     #[test]
     fn full_screen_leaves_no_room_for_buttons_that_are_not_on_the_line() {
-        for step in 0u8..=100 {
-            let out = f32::from(step) / 100.0;
-            assert_eq!(
-                toggle_at(out, 0.0),
-                TOGGLE_LEAD,
-                "the toggle moved at {out} out with no lights"
-            );
-        }
-        // And the room is real when they are on it: the two layouts are not the same function.
+        // The two layouts are not the same function: with the buttons on the line the toggle
+        // starts further in, and the head with it.
         assert!(
             toggle_at(0.0, 91.0) > toggle_at(0.0, 0.0),
             "91 of lights should push the toggle past the icon column"

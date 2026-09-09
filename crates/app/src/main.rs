@@ -143,35 +143,35 @@ impl std::fmt::Display for OpenScreen {
 
 /// What the notebook's list is doing.
 ///
-/// The chosen ids live in the mode rather than beside it, so there is no selection to leave
+/// The selected ids live in the mode rather than beside it, so there is no selection to leave
 /// behind when the list goes back to being read, and no third state where a stale set and a
 /// cleared flag disagree. Only ended runs are ever in it: a live one is refused a delete anyway.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ListMode {
     /// Reading the list; pressing a row opens its run.
     Browsing,
-    /// Choosing records to remove; pressing a row adds or removes it instead of opening it.
-    Choosing(BTreeSet<String>),
+    /// Selecting records to remove; pressing a row adds or removes it instead of opening it.
+    Selecting(BTreeSet<String>),
     /// Asking before removing the records it carries, which is the last point one can be kept.
     Confirming(BTreeSet<String>),
 }
 
 impl ListMode {
-    /// The ids chosen so far, empty while browsing.
-    pub(crate) fn chosen(&self) -> &BTreeSet<String> {
+    /// The ids selected so far, empty while browsing.
+    pub(crate) fn selected(&self) -> &BTreeSet<String> {
         match self {
             Self::Browsing => {
                 static NONE: std::sync::LazyLock<BTreeSet<String>> =
                     std::sync::LazyLock::new(BTreeSet::new);
                 &NONE
             }
-            Self::Choosing(ids) | Self::Confirming(ids) => ids,
+            Self::Selecting(ids) | Self::Confirming(ids) => ids,
         }
     }
 
-    /// Whether a row should answer a press by being chosen rather than opened.
-    pub(crate) fn is_choosing(&self) -> bool {
-        matches!(self, Self::Choosing(_))
+    /// Whether a row should answer a press by being selected rather than opened.
+    pub(crate) fn is_selecting(&self) -> bool {
+        matches!(self, Self::Selecting(_))
     }
 }
 
@@ -556,17 +556,17 @@ pub(crate) enum Message {
     Shell(RunName),
     Rerun(RunId),
     Delete(RunId),
-    /// Start choosing records to remove.
-    Choose,
-    /// Add or remove one record from the choice.
-    ChooseToggle(RunId),
-    /// Choose every ended run, or none of them.
-    ChooseAll(bool),
-    /// Stop choosing and keep everything.
-    ChooseCancelled,
-    /// Ask before removing what was chosen.
-    RemoveChosen,
-    /// Remove what was chosen.
+    /// Start selecting records to remove.
+    Select,
+    /// Add or remove one record from the selection.
+    SelectToggle(RunId),
+    /// Select every ended run, or none of them.
+    SelectAll(bool),
+    /// Stop selecting and keep everything.
+    SelectCancelled,
+    /// Ask before removing what was selected.
+    RemoveSelected,
+    /// Remove what was selected.
     RemoveConfirmed,
     /// Write the run's directory as a tar file where a person can pick it up.
     Export(RunId),
@@ -725,7 +725,7 @@ impl App {
         if self.fullscreen { 0.0 } else { chrome::LIGHTS }
     }
 
-    /// The ids a choice may hold: every run that has ended. A live run is refused a delete, so
+    /// The ids a selection may hold: every run that has ended. A live run is refused a delete, so
     /// offering it would be offering something the press cannot do.
     pub(crate) fn removable(&self) -> impl Iterator<Item = String> + '_ {
         self.runs
@@ -1089,31 +1089,31 @@ impl App {
                 self.refresh();
                 Task::none()
             }
-            Message::Choose => {
-                self.list = ListMode::Choosing(BTreeSet::new());
+            Message::Select => {
+                self.list = ListMode::Selecting(BTreeSet::new());
                 Task::none()
             }
-            Message::ChooseToggle(id) => {
-                if let ListMode::Choosing(ids) = &mut self.list
+            Message::SelectToggle(id) => {
+                if let ListMode::Selecting(ids) = &mut self.list
                     && !ids.remove(id.as_str())
                 {
                     ids.insert(id.as_str().to_string());
                 }
                 Task::none()
             }
-            Message::ChooseAll(all) => {
+            Message::SelectAll(all) => {
                 let every: BTreeSet<String> = self.removable().collect();
-                if let ListMode::Choosing(ids) = &mut self.list {
+                if let ListMode::Selecting(ids) = &mut self.list {
                     *ids = if all { every } else { BTreeSet::new() };
                 }
                 Task::none()
             }
-            Message::ChooseCancelled => {
+            Message::SelectCancelled => {
                 self.list = ListMode::Browsing;
                 Task::none()
             }
-            Message::RemoveChosen => {
-                if let ListMode::Choosing(ids) = &self.list
+            Message::RemoveSelected => {
+                if let ListMode::Selecting(ids) = &self.list
                     && !ids.is_empty()
                 {
                     self.list = ListMode::Confirming(ids.clone());
@@ -1121,13 +1121,13 @@ impl App {
                 Task::none()
             }
             Message::RemoveConfirmed => {
-                let chosen = std::mem::replace(&mut self.list, ListMode::Browsing);
+                let selected = std::mem::replace(&mut self.list, ListMode::Browsing);
                 let mut removed = 0usize;
                 let mut failed: Option<String> = None;
-                for id in chosen.chosen() {
+                for id in selected.selected() {
                     match self.store.remove(id) {
                         Ok(()) => removed += 1,
-                        // The first failure is the one reported, and the rest of the choice is
+                        // The first failure is the one reported, and the rest of the selection is
                         // still attempted: one unreadable record does not strand the others.
                         Err(e) => {
                             failed.get_or_insert_with(|| format!("removing {id}: {e}"));
@@ -1312,7 +1312,7 @@ fn settle_gone(store: &Store, runs: &mut [Record], live: &BTreeSet<RunName>) {
 }
 
 /// `n` runs, spelled with its plural. What a header asks about, where "ended" is already
-/// implied: only an ended run can be chosen.
+/// implied: only an ended run can be selected.
 pub(crate) fn runs(n: usize) -> String {
     format!("{n} run{}", if n == 1 { "" } else { "s" })
 }
@@ -1674,10 +1674,10 @@ mod tests {
         assert!(app.watches().is_empty(), "settings asks for no leases");
     }
 
-    /// A choice removes exactly what was chosen, only behind the confirm, and never a live run;
-    /// a second press unchooses, and leaving the list drops the choice.
+    /// A selection removes exactly what was selected, only behind the confirm, and never a live run;
+    /// a second press unselects, and leaving the list drops the selection.
     #[test]
-    fn a_choice_removes_what_was_chosen_and_only_behind_the_confirm() {
+    fn a_selection_removes_what_was_selected_and_only_behind_the_confirm() {
         let dir = tormoni_test_support::ScratchDir::created("app-clear");
         let store = Store::at(dir.path().join("runs")).expect("a store");
         let name = format!("clear-live-{}", std::process::id());
@@ -1696,16 +1696,20 @@ mod tests {
 
         let sinks = Arc::new(frame::Sinks::open(None, None).expect("sinks"));
         let mut app = App::new(store.clone(), None, None, sinks, false);
-        // A choice offers only what a delete would accept: the live run is not in it.
-        let _ = app.update(Message::Choose);
-        let _ = app.update(Message::ChooseAll(true));
-        assert_eq!(app.list.chosen().len(), 2, "the live run is not choosable");
+        // A selection offers only what a delete would accept: the live run is not in it.
+        let _ = app.update(Message::Select);
+        let _ = app.update(Message::SelectAll(true));
+        assert_eq!(
+            app.list.selected().len(),
+            2,
+            "the live run is not selectable"
+        );
         assert_eq!(
             store.list().expect("listed").len(),
             3,
-            "choosing removes nothing"
+            "selecting removes nothing"
         );
-        let _ = app.update(Message::ChooseCancelled);
+        let _ = app.update(Message::SelectCancelled);
         assert_eq!(app.list, ListMode::Browsing);
         assert_eq!(
             store.list().expect("listed").len(),
@@ -1715,10 +1719,10 @@ mod tests {
 
         // One of the two, which is the whole point: not all, and not one at a time.
         let one = gone.id.clone();
-        let _ = app.update(Message::Choose);
-        let _ = app.update(Message::ChooseToggle(RunId(one.clone())));
-        assert_eq!(app.list.chosen().len(), 1);
-        let _ = app.update(Message::RemoveChosen);
+        let _ = app.update(Message::Select);
+        let _ = app.update(Message::SelectToggle(RunId(one.clone())));
+        assert_eq!(app.list.selected().len(), 1);
+        let _ = app.update(Message::RemoveSelected);
         assert!(
             matches!(app.list, ListMode::Confirming(_)),
             "asking before removing"
@@ -1737,16 +1741,16 @@ mod tests {
             .map(|r| r.name)
             .collect();
         assert_eq!(left.len(), 2, "one went, the other two stayed");
-        assert!(!left.contains(&gone.name), "the chosen one went");
-        assert!(left.contains(&failed.name), "the unchosen one stayed");
+        assert!(!left.contains(&gone.name), "the selected one went");
+        assert!(left.contains(&failed.name), "the unselected one stayed");
         assert_eq!(app.status.as_deref(), Some("removed 1 ended run"));
 
         // Pressing the same row twice takes it back out.
-        let _ = app.update(Message::Choose);
+        let _ = app.update(Message::Select);
         let two = failed.id.clone();
-        let _ = app.update(Message::ChooseToggle(RunId(two.clone())));
-        let _ = app.update(Message::ChooseToggle(RunId(two)));
-        assert!(app.list.chosen().is_empty(), "a second press unchooses");
+        let _ = app.update(Message::SelectToggle(RunId(two.clone())));
+        let _ = app.update(Message::SelectToggle(RunId(two)));
+        assert!(app.list.selected().is_empty(), "a second press unselects");
 
         app.set_screen(Screen::Settings);
         assert_eq!(app.list, ListMode::Browsing, "leaving the list disarms");

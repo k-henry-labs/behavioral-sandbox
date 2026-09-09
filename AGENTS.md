@@ -54,7 +54,7 @@ session on that socket (4.11). Every run leaves a record under the local data di
 output, the guest's `/results`), which `tormoni ls --all`, `show`, `rm` and `export` (one ustar file
 per run) read (4.12), and `tormoni-app` is the notebook of those runs: a sidebar over the
 list, one run's record with its display and output, a start form whose posture sentence is
-confirmed before anything boots, stop, re-run, delete, export, removing a chosen set of ended
+confirmed before anything boots, stop, re-run, delete, export, removing a selected set of ended
 runs behind an inline confirm, a Settings screen whose palette, scale and landing screen persist beside the runs
 directory, and a shell through `tormoni exec --tty` in the operator's terminal (4.13). Frame pacing
 through the app on this panel is measured (4.14). On macOS ARM64 (phase 6) the tree builds, signs
@@ -147,7 +147,7 @@ and the static agent to `tormoni`'s own default root and runs anywhere, because 
 below is the built one.
 
 **The guest image is built on Linux, for either arch.** `apk` installs by fetching and unpacking and
-the install runs `--no-scripts`, so `--arch` chooses the *guest's* architecture independently of the
+the install runs `--no-scripts`, so `--arch` selects the *guest's* architecture independently of the
 builder's; what follows the builder is `apk.static`, which has to execute there. That is also why
 the image cannot be built on macOS at all: `apk.static` is a Linux ELF, and `fakeroot` is a second
 such dependency. The closure differs per arch, so each records its own

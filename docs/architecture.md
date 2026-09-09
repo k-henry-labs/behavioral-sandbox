@@ -22,7 +22,7 @@ its verbs, the run record and its ustar export (`tormoni-record`), the guest ima
 with that window's keyboard and pointer going back as two virtio-input devices, a second guest
 image that boots a Wayland compositor on it, and an opt-in virtio-snd card. `tormoni-app` is the
 notebook of those runs: a sidebar over the list, a live run's display and input in the window, a
-start form that shows the posture before boot, export, a choice of ended runs removed behind a
+start form that shows the posture before boot, export, a selection of ended runs removed behind a
 confirm, and a Settings screen whose palette, scale and landing screen persist. On macOS ARM64 the
 tree signs (`cargo xtask sign`), bundles (`cargo xtask bundle`) and boots the same sandboxes under
 Hypervisor.framework.
@@ -73,7 +73,7 @@ types. `cargo … -p` takes the **package**, a path takes the **directory**.
 | `tormoni-record` | `crates/record` | The run record: posture, captured output and the guest's `/results`, one directory per run under the local data dir, written by the CLI, read by both binaries, and exported as one ustar file. |
 | `tormoni-input` | `crates/input` | The guest's keyboard and pointer: device shapes, reports, and the line grammar the replay file and the control socket's `input` session feed. |
 | `tormoni` | `crates/cli` | The `tormoni` binary and its verbs. Package, binary, and command all share the name. |
-| `tormoni-app` | `crates/app` | The GUI application, on iced: the notebook of runs from `tormoni-record` reached from a sidebar, a run's record with its display (leased over the control socket, uploaded to a wgpu texture) and output, a start form, stop, re-run, delete, export, a choice of ended runs to remove, a persisted palette, scale and landing screen, and a shell in the operator's terminal through `tormoni`. |
+| `tormoni-app` | `crates/app` | The GUI application, on iced: the notebook of runs from `tormoni-record` reached from a sidebar, a run's record with its display (leased over the control socket, uploaded to a wgpu texture) and output, a start form, stop, re-run, delete, export, a selection of ended runs to remove, a persisted palette, scale and landing screen, and a shell in the operator's terminal through `tormoni`. |
 | `tormoni-test-support` | `crates/test-support` | Test fixtures: a self-reclaiming scratch dir, a log sink, and the deterministic generator the in-gate fuzz suites use. |
 | `xtask` | `xtask` | Dev orchestration: the gate, the guest image build, the vendor mirror. Never shipped, and never renamed: `cargo xtask` is a `--package xtask` alias. |
 
