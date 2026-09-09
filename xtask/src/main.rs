@@ -1,9 +1,8 @@
-//! `cargo xtask <cmd>`, dev orchestration for the agent sandbox engine.
+//! `cargo xtask <cmd>`, dev orchestration for the sandbox and its guest images.
 //!
 //! The command list lives on the `Cmd` enum below and renders as `cargo xtask --help`, so this header
 //! keeps no second copy of it. Each module carries its own `//!` header; the gates and the shared
 //! plumbing (paths, `cargo` and tool runners) live here.
-//!
 #![forbid(unsafe_code)]
 
 mod artifacts;
@@ -30,7 +29,7 @@ use clap::{Parser, Subcommand};
 #[command(
     name = "xtask",
     version,
-    about = "dev orchestration for the agent sandbox engine",
+    about = "dev orchestration for the sandbox and its guest images",
     // Bare `cargo xtask` prints the command list instead of a terse "subcommand required" error.
     arg_required_else_help = true
 )]

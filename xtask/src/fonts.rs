@@ -14,12 +14,12 @@
 //!   literals instead of a fixed range.
 
 use std::collections::BTreeSet;
-use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::path::Path;
 
 use anyhow::{Context, Result, bail};
 
-use crate::{artifacts, artifacts_dir, workspace_root};
+use crate::artifacts::unpack_release;
+use crate::workspace_root;
 
 /// The releases these are cut from. Each URL is replaceable; each sha256 is the contract.
 const INTER_VERSION: &str = "4.1";
@@ -66,14 +66,14 @@ pub(crate) fn cut_text_fonts() -> Result<()> {
     let root = workspace_root();
     let wanted = coverage();
 
-    let inter = unpack(
+    let inter = unpack_release(
         &format!(
             "https://github.com/rsms/inter/releases/download/v{INTER_VERSION}/Inter-{INTER_VERSION}.zip"
         ),
         INTER_SHA256,
         &format!("Inter-{INTER_VERSION}"),
     )?;
-    let geist = unpack(
+    let geist = unpack_release(
         &format!(
             "https://github.com/vercel/geist-font/releases/download/v{GEIST_VERSION}/geist-font-v{GEIST_VERSION}.zip"
         ),
@@ -138,33 +138,6 @@ fn coverage() -> BTreeSet<char> {
         .flat_map(|(lo, hi)| (*lo..=*hi).filter_map(char::from_u32))
         .chain(extra)
         .collect()
-}
-
-/// The release at `url`, fetched by its hash and unpacked under `artifacts/`.
-fn unpack(url: &str, sha256: &'static str, stem: &str) -> Result<PathBuf> {
-    let zip = artifacts_dir().join(format!("{stem}.zip"));
-    artifacts::fetch_one(&artifacts::Artifact {
-        url: url.to_string(),
-        sha256,
-        dest: zip.clone(),
-    })?;
-    let unpacked = artifacts_dir().join(stem);
-    let _ = std::fs::remove_dir_all(&unpacked);
-    let out = Command::new("unzip")
-        .args(["-q", "-o"])
-        .arg(&zip)
-        .arg("-d")
-        .arg(&unpacked)
-        .output()
-        .context("running unzip (both releases ship a zip)")?;
-    if !out.status.success() {
-        bail!(
-            "unzip failed on {}: {}",
-            zip.display(),
-            String::from_utf8_lossy(&out.stderr).trim()
-        );
-    }
-    Ok(unpacked)
 }
 
 /// Cuts one face to `wanted` and writes it, reporting what it saved.

@@ -1,5 +1,5 @@
-//! Static musl builds of the in-guest binaries: the guest agent (baked into the rootfs) and the
-//! native-ELF test fixture, each verified actually statically linked before use.
+//! The static musl build of the in-guest binary: the guest agent the rootfs bakes in, verified
+//! actually statically linked before it is used.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -95,7 +95,7 @@ fn ensure_guest_target(arch: GuestArch) -> Result<()> {
 /// Verifies the built binary is statically linked, since a sys-crate can reintroduce a `NEEDED`
 /// dependency and a dynamic binary fails at boot with a loader error. Both no `(NEEDED)` and no
 /// `INTERP`, so a static-PIE is rejected too.
-pub(crate) fn verify_static(bin: &Path, what: &str) -> Result<()> {
+fn verify_static(bin: &Path, what: &str) -> Result<()> {
     // `readelf -d` (dynamic section): a static binary lists no `(NEEDED)` shared objects.
     let Some(dynamic) = readelf(bin, "-d")? else {
         // No `readelf` (binutils) on this host: don't fake a guarantee we couldn't check. (A

@@ -108,7 +108,7 @@ fn info_plist(version: &str) -> String {
 }
 
 /// Where the assembled bundle lands, so a reader and a test name one path.
-pub(crate) fn bundle_path() -> PathBuf {
+fn bundle_path() -> PathBuf {
     artifacts_dir().join(BUNDLE)
 }
 

@@ -9,11 +9,12 @@
 //!   compare against and no amortisation to hide behind: the number here is the number a user waits
 //!   for, every time.
 //!
-//! **What cannot be measured yet.** Nothing in the tree can tell "the guest reached userspace" from
-//! "the VM booted into nothing", because that needs an in-guest signal and the agent is phase 3's.
-//! So the boot bench times what the *host* can see, split at the one boundary it can observe: the
-//! vCPU thread appearing. The guest's own share is inside the second number, not separated from it,
-//! and this file says so rather than implying a precision it does not have.
+//! **What this does not separate.** The boot bench times what the *host* can see, split at the one
+//! boundary it can observe: the vCPU thread appearing. The guest's own share sits inside the second
+//! number, because the workload is `/bin/true`, which reaches userspace and exits without saying
+//! so. An agent guest announces itself (`tormoni_channel::GUEST_READY_MARKER`), so a bench booting
+//! one could split that number; this one does not, and says so rather than implying a precision it
+//! does not have.
 
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -109,8 +110,8 @@ pub(crate) fn bench_boot(runs: usize) -> Result<()> {
     println!(
         "\n\"to vCPU\" is polled at {POLL_MS} ms, so it is a floor carrying that interval as noise.\n\
          \"to exit\" is the whole of a sandbox that runs `/bin/true`: spawn, libkrun setup, guest\n\
-         boot, the workload, and teardown. Nothing here separates the guest's share, because the\n\
-         host cannot see when userspace was reached until the agent exists (phase 3)."
+         boot, the workload, and teardown. Nothing here separates the guest's share: `/bin/true`\n\
+         reaches userspace and exits without announcing it."
     );
     Ok(())
 }

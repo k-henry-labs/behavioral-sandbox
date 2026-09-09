@@ -1,7 +1,8 @@
 //! The reproducible guest image builds: a pinned Alpine base + an image's packages + the static
 //! agent, assembled rootless into a directory tree that two builds reproduce byte-identically.
-//! Two images share the machinery ([`IMAGES`]): the headless one every verb boots by default, and
-//! the desktop one that boots to a Wayland session.
+//! Three images share the machinery: the headless one every verb boots by default, the desktop
+//! one that boots to a Wayland session, and the ML scaffold. [`IMAGES`] is the two with a
+//! committed lockfile, which is what the vendor snapshot and its test are held to.
 
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
@@ -73,7 +74,7 @@ const ML_PACKAGES: &[&str] = &[
 const ML_BUDGET_MIB: u64 = 512;
 
 /// Where the desktop image carries its session program, on the guest's default `PATH`.
-pub(crate) const SESSION_PATH: &str = "/usr/local/bin/tormoni-session";
+const SESSION_PATH: &str = "/usr/local/bin/tormoni-session";
 
 /// One guest image: its name under `artifacts/`, what goes into it beyond the base and the agent,
 /// and the ceiling it is held to.
@@ -147,7 +148,7 @@ pub(crate) const ML: ImageSpec = ImageSpec {
 
 /// Every image with a pinned closure, for the `vendor` snapshot; [`ML`] joins when its lockfile
 /// lands.
-pub(crate) const IMAGES: &[&ImageSpec] = &[&GUEST, &DESKTOP];
+const IMAGES: &[&ImageSpec] = &[&GUEST, &DESKTOP];
 
 /// The architecture of the **guest image**, which is not always the builder's.
 ///

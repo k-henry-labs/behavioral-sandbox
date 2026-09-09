@@ -10,11 +10,10 @@
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;
-use std::process::Command;
 
 use anyhow::{Context, Result, bail};
 
-use crate::{artifacts, artifacts_dir, workspace_root};
+use crate::{artifacts, workspace_root};
 
 /// The release this is cut from. The URL is replaceable; the sha256 is the contract.
 const VERSION: &str = "1.41.0";
@@ -32,31 +31,13 @@ pub(crate) fn cut_icon_font() -> Result<()> {
         bail!("{LICENCE} is missing: the font's licence travels with the font");
     }
 
-    let zip = artifacts_dir().join(format!("lucide-font-{VERSION}.zip"));
-    artifacts::fetch_one(&artifacts::Artifact {
-        url: format!(
+    let unpacked = artifacts::unpack_release(
+        &format!(
             "https://github.com/lucide-icons/lucide/releases/download/{VERSION}/lucide-font-{VERSION}.zip"
         ),
-        sha256: SHA256,
-        dest: zip.clone(),
-    })?;
-
-    let unpacked = artifacts_dir().join(format!("lucide-font-{VERSION}"));
-    let _ = std::fs::remove_dir_all(&unpacked);
-    let out = Command::new("unzip")
-        .args(["-q", "-o"])
-        .arg(&zip)
-        .arg("-d")
-        .arg(&unpacked)
-        .output()
-        .context("running unzip (the release ships a zip)")?;
-    if !out.status.success() {
-        bail!(
-            "unzip failed on {}: {}",
-            zip.display(),
-            String::from_utf8_lossy(&out.stderr).trim()
-        );
-    }
+        SHA256,
+        &format!("lucide-font-{VERSION}"),
+    )?;
     let whole = find_ttf(&unpacked)?;
 
     let source = std::fs::read_to_string(root.join(NAMES))

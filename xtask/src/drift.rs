@@ -366,7 +366,7 @@ fn heading_anchors(text: &str) -> BTreeSet<String> {
             continue;
         }
         // Built from the link text alone. Not `strip_inline_code`, which blanks a span's
-        // contents: only the backticks come out, so `` `require_jail` `` stays in the slug.
+        // contents: only the backticks come out, so `` `tormoni-channel` `` stays in the slug.
         let chars: Vec<char> = title.trim().chars().collect();
         let mut plain = String::new();
         let mut i = 0;
@@ -577,19 +577,19 @@ mod tests {
         assert_eq!(got, vec![(1, "embedding.md".into())], "{got:?}");
     }
 
-    /// Every rule the anchor check depends on, each taken from a heading that exists in `docs/`
-    /// and is linked to by name. Getting one wrong is a false positive on a link that works, so
-    /// these are the cases that decide whether the check can be trusted to block the gate.
+    /// Every rule the anchor check depends on, one heading per rule, shaped like the ones the
+    /// book carries. Getting one wrong is a false positive on a link that works, so these are the
+    /// cases that decide whether the check can be trusted to block the gate.
     #[test]
     fn heading_anchors_match_how_mdbook_slugs_them() {
         let text = "\
 # Configuration of `tormoni`
-## Setting `require_jail`
-## Semver & API stability
+## The `TORMONI_RUNS_DIR` default
+## Boot & memory measurements
 ## Minimum supported `rustc` version (MSRV)
-## Enforcing egress with `--allow`
-## 9. Egress is enabled by the engine, constructed by the hoster
-## See [the recipes](./embedding-recipes.md) first
+## Refusing a boot with `--dry-run`
+## 9. A numbered heading keeps its number
+## See [the architecture](./architecture.md) first
 ```
 ## Inside a fence, not a heading
 ```
@@ -600,14 +600,14 @@ mod tests {
         for want in [
             "configuration-of-tormoni",
             // A code span's *contents* are part of the anchor; only the backticks come out.
-            "setting-require_jail",
+            "the-tormoni_runs_dir-default",
             // `&` drops out and leaves the two spaces around it, so the slug doubles its hyphen.
-            "semver--api-stability",
+            "boot--memory-measurements",
             // A parenthetical is heading text. Only a `](…)` link target is dropped.
             "minimum-supported-rustc-version-msrv",
-            "enforcing-egress-with---allow",
-            "9-egress-is-enabled-by-the-engine-constructed-by-the-hoster",
-            "see-the-recipes-first",
+            "refusing-a-boot-with---dry-run",
+            "9-a-numbered-heading-keeps-its-number",
+            "see-the-architecture-first",
             // A repeat is reachable at `-1`, which is the only way to link the second one.
             "setting-log",
             "setting-log-1",

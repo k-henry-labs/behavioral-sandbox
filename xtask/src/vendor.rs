@@ -23,7 +23,7 @@ use crate::workspace_root;
 
 /// The manifest file the vendor snapshot writes: one `sha256  relpath` line per vendored file, so the
 /// mirror is auditable and can be re-verified offline (`verify`) without re-contacting upstream.
-pub(crate) const MANIFEST_NAME: &str = "vendor-manifest.txt";
+const MANIFEST_NAME: &str = "vendor-manifest.txt";
 
 /// The default vendor directory (`vendor/` under the workspace root) when `--dir` is omitted.
 pub(crate) fn default_vendor_dir() -> PathBuf {
@@ -184,7 +184,7 @@ fn walk_files(root: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
 /// Render the manifest body: a header comment plus one `sha256  relpath` line per entry.
 fn render_manifest(entries: &[(String, String)]) -> String {
     let mut out = String::from(
-        "# agent vendored upstream inputs — `sha256  path` (path relative to this dir).\n\
+        "# tormoni vendored upstream inputs — `sha256  path` (path relative to this dir).\n\
          # Regenerate with `cargo xtask vendor`; re-verify offline with `cargo xtask vendor --verify`.\n\
          # This mirror is not committed (gitignored); the hashes below are the audit trail.\n",
     );

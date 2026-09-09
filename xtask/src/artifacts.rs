@@ -116,6 +116,37 @@ pub(crate) fn download_one(a: &Artifact) -> Result<()> {
     Ok(())
 }
 
+/// Fetches a pinned release zip and unpacks it under `artifacts/<stem>`, returning that directory.
+///
+/// `download_one`, not [`fetch_one`]: the two font cuts are dev steps whose output is committed, so
+/// they are not on the offline build path, and `vendor` has never mirrored their archives. Going
+/// through the mirror would fail them with a message naming a command that cannot help.
+pub(crate) fn unpack_release(url: &str, sha256: &'static str, stem: &str) -> Result<PathBuf> {
+    let zip = crate::artifacts_dir().join(format!("{stem}.zip"));
+    download_one(&Artifact {
+        url: url.to_string(),
+        sha256,
+        dest: zip.clone(),
+    })?;
+    let unpacked = crate::artifacts_dir().join(stem);
+    let _ = std::fs::remove_dir_all(&unpacked);
+    let out = Command::new("unzip")
+        .args(["-q", "-o"])
+        .arg(&zip)
+        .arg("-d")
+        .arg(&unpacked)
+        .output()
+        .context("running unzip (each pinned font release ships a zip)")?;
+    if !out.status.success() {
+        bail!(
+            "unzip failed on {}: {}",
+            zip.display(),
+            String::from_utf8_lossy(&out.stderr).trim()
+        );
+    }
+    Ok(unpacked)
+}
+
 /// `curl -fSL` a URL to `dest` (fail on HTTP error, follow redirects).
 fn curl_download(url: &str, dest: &Path) -> Result<()> {
     crate::run_tool(
