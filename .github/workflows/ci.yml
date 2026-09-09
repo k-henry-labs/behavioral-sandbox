@@ -77,10 +77,23 @@ jobs:
         with:
           persist-credentials: false
 
-      # actionlint is a Go binary that install-action's tool list does not carry, so this uses
-      # upstream's documented CI install (their download script drops the binary in the cwd).
+      # actionlint is a Go binary that install-action's tool list does not carry. Upstream's
+      # install script lives on a moving branch, so piping it to `bash` runs whatever it says
+      # today and installs whatever version it picks. Pinned by sha256 instead, the contract every
+      # other fetched input in this tree is held to (`xtask/src/artifacts.rs`); the URL is
+      # replaceable, the hash is not. Dependabot does not watch this, so the version is bumped by
+      # hand from upstream's `checksums.txt`.
       - name: Install actionlint
-        run: bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+        env:
+          ACTIONLINT_VERSION: 1.7.12
+          ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+        run: |
+          set -euo pipefail
+          tarball="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          curl -fsSL -o "$tarball" \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${tarball}"
+          echo "${ACTIONLINT_SHA256}  ${tarball}" | sha256sum --check --status
+          tar -xzf "$tarball" actionlint
 
       - name: actionlint
         run: ./actionlint -color
@@ -91,7 +104,12 @@ jobs:
     name: CI status
     if: always()
     needs: [gate, lint-workflows]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
+      # Through the environment, not interpolated into the script: `toJson(needs)` carries each
+      # job's outputs as well as its result, so the day one of those is derived from a branch or a
+      # title, it would be shell text rather than data.
       - name: Verify every job passed
-        run: jq --exit-status 'all(.result == "success" or .result == "skipped")' <<< '${{ toJson(needs) }}'
+        env:
+          NEEDS: ${{ toJson(needs) }}
+        run: jq --exit-status 'all(.result == "success" or .result == "skipped")' <<< "$NEEDS"
