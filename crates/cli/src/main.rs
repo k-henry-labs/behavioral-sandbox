@@ -14,6 +14,7 @@ mod agent;
 mod frames;
 mod input;
 mod lifecycle;
+mod posture;
 mod pty;
 mod run;
 mod shell;

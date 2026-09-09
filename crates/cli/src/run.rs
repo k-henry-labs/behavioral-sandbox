@@ -17,51 +17,10 @@ use std::process::ExitCode;
 use clap::Args;
 
 use tormoni_record::{End, Posture, RESULTS_GUEST_PATH, Record, Store, Verb};
-use tormoni_supervisor::{Console, Display, Exit, Net, RootFs, Vm, VmConfig};
+use tormoni_supervisor::{Console, Display, Exit, Vm, VmConfig};
 
 use crate::EXIT_OPERATIONAL;
-
-/// The network posture flag, shared by `run` and `shell`. A CLI-side mirror of
-/// [`tormoni_supervisor::Net`], because clap's `ValueEnum` cannot derive on a type in another crate;
-/// [`into`](NetArg::into) is the single crossing point and the only place the two can drift.
-#[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq, Eq, Default)]
-pub(crate) enum NetArg {
-    /// No network beyond loopback. The default, because libkrun's implicit TSI vsock is not.
-    #[default]
-    None,
-    /// libkrun's transparent socket impersonation: the guest reaches what the host can. Opt-in.
-    Tsi,
-}
-
-impl NetArg {
-    pub(crate) fn into_net(self) -> Net {
-        match self {
-            Self::None => Net::None,
-            Self::Tsi => Net::Tsi,
-        }
-    }
-}
-
-/// The filesystem-posture flag, shared by `run` and `shell`. A CLI-side mirror of
-/// [`tormoni_supervisor::RootFs`], for [`NetArg`]'s reason, with [`into_rootfs`](Self::into_rootfs)
-/// as the single crossing point.
-#[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq, Eq, Default)]
-pub(crate) enum RootFsArg {
-    /// The guest cannot write its root. The default: one image tree boots every sandbox.
-    #[default]
-    ReadOnly,
-    /// The guest writes through to the shared image tree, and its edits outlive the VM.
-    Writable,
-}
-
-impl RootFsArg {
-    pub(crate) fn into_rootfs(self) -> RootFs {
-        match self {
-            Self::ReadOnly => RootFs::ReadOnly,
-            Self::Writable => RootFs::Writable,
-        }
-    }
-}
+use crate::posture::{NetArg, RootFsArg};
 
 /// The `--display` value parser, so a geometry the helper would refuse is refused by the parser
 /// instead, the way `--vcpus 0` already is by [`NonZeroU8`].
@@ -103,10 +62,10 @@ pub(crate) struct RunArgs {
     /// Repeatable; `--mount` is the one that also mounts.
     #[arg(long = "share", value_name = "TAG=HOSTPATH")]
     pub(crate) shares: Vec<String>,
-    /// The network posture: `none` (default) or `tsi`. See [`NetArg`].
+    /// The network posture: `none` (default) or `tsi`.
     #[arg(long, value_name = "POSTURE", default_value = "none")]
     pub(crate) net: NetArg,
-    /// What the guest may do to its root: `read-only` (default) or `writable`. See [`RootFsArg`].
+    /// What the guest may do to its root: `read-only` (default) or `writable`.
     #[arg(long, value_name = "POSTURE", default_value = "read-only")]
     pub(crate) rootfs: RootFsArg,
     /// A `KEY=VALUE` entry for the guest environment. Repeatable.
@@ -686,13 +645,11 @@ mod tests {
         }
     }
 
-    /// The CLI's posture enum maps onto the supervisor's, and the default is `None`: the whole
-    /// point of the task is that "say nothing" means no network, against libkrun's own default.
+    /// `run` with no `--net` asks for no network: the whole point of the task is that "say
+    /// nothing" means no network, against libkrun's own default. The crossing itself is
+    /// `every_posture_defaults_closed_and_crosses_to_its_own_variant`, beside the enum.
     #[test]
-    fn the_net_posture_defaults_to_none_and_maps_across() {
-        assert_eq!(NetArg::default(), NetArg::None);
-        assert_eq!(NetArg::None.into_net(), Net::None);
-        assert_eq!(NetArg::Tsi.into_net(), Net::Tsi);
+    fn the_net_posture_defaults_to_none() {
         let cli = Cli::parse_from(["tormoni", "run", "--", "true"]);
         let Cmd::Run(args) = cli.cmd else {
             panic!("run must parse");
@@ -700,20 +657,17 @@ mod tests {
         assert_eq!(args.net, NetArg::None, "no --net means no network");
     }
 
-    /// The CLI's filesystem posture maps onto the supervisor's, and the default is read-only:
-    /// one image tree boots every sandbox on the host, so "say nothing" must not mean "edit it".
+    /// `run` with no `--rootfs` cannot write the image tree every sandbox on the host boots
+    /// from, and the config it builds carries that posture through.
     #[test]
-    fn the_root_posture_defaults_to_read_only_and_maps_across() {
-        assert_eq!(RootFsArg::default(), RootFsArg::ReadOnly);
-        assert_eq!(RootFsArg::ReadOnly.into_rootfs(), RootFs::ReadOnly);
-        assert_eq!(RootFsArg::Writable.into_rootfs(), RootFs::Writable);
+    fn the_root_posture_defaults_to_read_only() {
         let cli = Cli::parse_from(["tormoni", "run", "--", "true"]);
         let Cmd::Run(args) = cli.cmd else {
             panic!("run must parse");
         };
         assert_eq!(args.rootfs, RootFsArg::ReadOnly);
         let cfg = to_config(&args, PathBuf::from("/r")).expect("a well-formed config");
-        assert_eq!(cfg.rootfs, RootFs::ReadOnly);
+        assert_eq!(cfg.rootfs, tormoni_supervisor::RootFs::ReadOnly);
     }
 
     /// The posture print names every way into and out of the sandbox, each with its direction,

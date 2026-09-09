@@ -35,6 +35,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use clap::Args;
 
+use crate::posture::{NetArg, RootFsArg};
 #[cfg(test)]
 use crate::{Cli, Cmd};
 
@@ -93,12 +94,12 @@ pub(crate) struct VmmArgs {
     /// proxying. Off by default, because libkrun's own default (an implicit vsock with TSI
     /// hijacking) is not.
     #[arg(long, value_name = "POSTURE", default_value = "none")]
-    pub(crate) net: NetPosture,
+    pub(crate) net: NetArg,
     /// What the guest may do to the image tree it boots from: `read-only` (default) or
     /// `writable`. The tree is shared by every sandbox on this host, so a writable root is a
     /// guest editing what the next guest starts from.
     #[arg(long, value_name = "POSTURE", default_value = "read-only")]
-    pub(crate) rootfs: RootFsPosture,
+    pub(crate) rootfs: RootFsArg,
     /// A display as `WIDTHxHEIGHT[@HZ]`, shown in a window this process opens, whose keyboard and
     /// pointer reach the guest as two input devices. Without a display server the display still
     /// runs and the window is skipped.
@@ -121,61 +122,6 @@ pub(crate) struct VmmArgs {
     /// display's pixel path. Refused before boot if this libkrun has no gpu feature.
     #[arg(long)]
     pub(crate) gpu: bool,
-}
-
-/// What the guest may do to its root filesystem, [`ReadOnly`](RootFsPosture::ReadOnly) by default
-/// because one image tree boots every sandbox. Enforced by the virtiofs device, so the guest can
-/// neither undo nor see it: `/proc/mounts` still reports the root `rw`.
-#[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq, Eq, Default)]
-pub(crate) enum RootFsPosture {
-    /// Guest writes to the root fail with `EROFS`. Writable state comes from a `--mount`.
-    #[default]
-    ReadOnly,
-    /// Guest writes go through to the shared image tree and outlive the VM.
-    Writable,
-}
-
-/// What the guest's network reaches. The default is [`None`](NetPosture::None) because libkrun's
-/// default is not: it adds an implicit vsock whose TSI hijacking proxies the guest's sockets onto
-/// the host, so "say nothing" means "the guest can reach the host's network" unless this says no.
-#[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq, Eq, Default)]
-pub(crate) enum NetPosture {
-    /// No network: the implicit vsock is replaced by an explicit one with no TSI hijacking, so
-    /// the guest has loopback and nothing else.
-    #[default]
-    None,
-    /// libkrun's transparent socket impersonation (`KRUN_TSI_HIJACK_INET`): the guest's inet
-    /// socket calls are proxied through the host, so it reaches whatever the host can, including
-    /// host loopback. Opt-in and named, not a silent default.
-    Tsi,
-}
-
-impl NetPosture {
-    /// The supervisor's spelling of this posture, for the control socket's answer.
-    fn into_net(self) -> tormoni_supervisor::Net {
-        match self {
-            Self::None => tormoni_supervisor::Net::None,
-            Self::Tsi => tormoni_supervisor::Net::Tsi,
-        }
-    }
-}
-
-impl RootFsPosture {
-    /// The supervisor's spelling of this posture, for the control socket's answer.
-    fn into_rootfs(self) -> tormoni_supervisor::RootFs {
-        match self {
-            Self::ReadOnly => tormoni_supervisor::RootFs::ReadOnly,
-            Self::Writable => tormoni_supervisor::RootFs::Writable,
-        }
-    }
-
-    /// The virtiofs device flag this posture is.
-    fn into_access(self) -> tormoni_krun::FsAccess {
-        match self {
-            Self::ReadOnly => tormoni_krun::FsAccess::ReadOnly,
-            Self::Writable => tormoni_krun::FsAccess::ReadWrite,
-        }
-    }
 }
 
 /// A `TAG=HOSTPATH` share split at its **first** `=`, so a host path containing `=` survives.
@@ -554,7 +500,7 @@ fn build_and_enter(args: &VmmArgs) -> Result<std::convert::Infallible, HelperErr
         require_dir(Subject::Mount, host)?;
         // `mkdir -p` cannot create a mount point through a read-only root, and a failed mount in
         // the guest is an exit 2 on a console nobody reads.
-        if args.rootfs == RootFsPosture::ReadOnly {
+        if args.rootfs == RootFsArg::ReadOnly {
             let in_image = mount_point_in_image(&args.root, guest);
             if !in_image.is_dir() {
                 return Err(HelperError::MountPointMissing {
@@ -592,11 +538,7 @@ fn build_and_enter(args: &VmmArgs) -> Result<std::convert::Infallible, HelperErr
     }
     // Before any port mapping, which attaches to the vsock device libkrun allows only one of.
     // `None` replaces libkrun's TSI-hijacking implicit device; `Tsi` keeps it but names it.
-    let tsi = match args.net {
-        NetPosture::None => 0,
-        NetPosture::Tsi => tormoni_krun::KRUN_TSI_HIJACK_INET,
-    };
-    machine = machine.vsock(tsi)?;
+    machine = machine.vsock(args.net.tsi_flags())?;
     if let Some((port, path)) = vsock {
         // `listen = true` per the header: the guest listens on the port and connections are
         // initiated from the host side, which is the agent-channel direction.
@@ -1258,7 +1200,7 @@ mod tests {
         let (port, sock) =
             split_vsock(got.vsock.as_deref().expect("the vsock spec parses")).expect("well-formed");
         assert_eq!((port, sock), (1024, Path::new("/run/agent.sock")));
-        assert_eq!(got.rootfs, RootFsPosture::Writable);
+        assert_eq!(got.rootfs, RootFsArg::Writable);
         assert_eq!(got.display.as_deref(), Some("800x600"));
         assert_eq!(got.screenshot.as_deref(), Some(Path::new("/tmp/frame.ppm")));
         assert!(got.sound, "--sound parses as the sound flag");
@@ -1283,7 +1225,7 @@ mod tests {
         let Cmd::Vmm(got) = parsed.cmd else {
             panic!("the helper subcommand parses as itself");
         };
-        assert_eq!(got.rootfs, RootFsPosture::ReadOnly);
+        assert_eq!(got.rootfs, RootFsArg::ReadOnly);
     }
 
     /// A mount point is looked for in the same tree the VM will serve as the guest's root, and a

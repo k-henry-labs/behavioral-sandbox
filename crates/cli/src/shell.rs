@@ -51,10 +51,10 @@ pub(crate) struct ShellArgs {
     pub(crate) env: Vec<String>,
     /// The network posture: `none` (default) or `tsi`.
     #[arg(long, value_name = "POSTURE", default_value = "none")]
-    pub(crate) net: crate::run::NetArg,
+    pub(crate) net: crate::posture::NetArg,
     /// What the guest may do to its root: `read-only` (default) or `writable`.
     #[arg(long, value_name = "POSTURE", default_value = "read-only")]
-    pub(crate) rootfs: crate::run::RootFsArg,
+    pub(crate) rootfs: crate::posture::RootFsArg,
     /// The VM's name while it runs. Defaults to `shell-<pid>`.
     #[arg(long, value_name = "NAME")]
     pub(crate) name: Option<String>,

@@ -45,10 +45,10 @@ pub(crate) struct UpArgs {
     pub(crate) shares: Vec<String>,
     /// The network posture: `none` (default) or `tsi`.
     #[arg(long, value_name = "POSTURE", default_value = "none")]
-    pub(crate) net: crate::run::NetArg,
+    pub(crate) net: crate::posture::NetArg,
     /// What the guest may do to its root: `read-only` (default) or `writable`.
     #[arg(long, value_name = "POSTURE", default_value = "read-only")]
-    pub(crate) rootfs: crate::run::RootFsArg,
+    pub(crate) rootfs: crate::posture::RootFsArg,
     /// Print what this sandbox would share and exit, without booting anything.
     #[arg(long)]
     pub(crate) dry_run: bool,
