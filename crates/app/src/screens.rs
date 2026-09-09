@@ -174,7 +174,7 @@ fn sidebar(app: &App, width: f32) -> Element<'_, Message> {
 fn account_row(app: &App) -> Element<'_, Message> {
     let account = &app.account;
     let mut line = row![
-        icons::glyph(icons::CIRCLE_USER, ICON),
+        icons::glyph(icons::CIRCLE_USER),
         text(account.label())
             .size(TAB)
             .wrapping(text::Wrapping::None),
@@ -203,16 +203,12 @@ fn account_row(app: &App) -> Element<'_, Message> {
 
 /// The button that folds the sidebar and brings it back, wearing the glyph macOS gives it.
 fn sidebar_toggle<'a>() -> Element<'a, Message> {
-    button(
-        icons::glyph(icons::PANEL_LEFT, TOGGLE_ICON)
-            .center()
-            .width(HALO),
-    )
-    .style(round)
-    .padding(0)
-    .height(HALO)
-    .on_press(Message::ToggleSidebar)
-    .into()
+    button(icons::glyph(icons::PANEL_LEFT).center().width(HALO))
+        .style(round)
+        .padding(0)
+        .height(HALO)
+        .on_press(Message::ToggleSidebar)
+        .into()
 }
 
 /// The room the toggle takes in the head's line: what the lights' room and the head's inset
@@ -223,17 +219,6 @@ const TOGGLE: f32 = 28.0;
 /// past it on every side by [`HALO_OVERHANG`], as a toolbar icon's halo is wider than the icon.
 const HALO: f32 = 36.0;
 const HALO_OVERHANG: f32 = (HALO - TOGGLE) / 2.0;
-
-/// The toggle's glyph, drawn larger than a row's: the platform sets this one bigger than the
-/// icons beside a label, and it is the only icon standing on its own.
-const TOGGLE_ICON: f32 = 20.0;
-
-/// The quit glyph's nominal size, smaller than the toggle's because Lucide draws `x` well inside
-/// its box: matching their *ink* would scale the cross up by half again and its strokes with it,
-/// which is a heavier mark on the same line rather than an equal one. Sized so the two are drawn
-/// at one font size, which is what the eye reads as one weight;
-/// `the_quit_is_drawn_at_the_weight_the_toggle_is` holds the pair together.
-const QUIT_ICON: f32 = 14.0;
 
 /// An icon on its own: nothing until the pointer finds it, then the circle a toolbar icon wears,
 /// a step past a row's hover so it reads on the rail as well as on the page.
@@ -266,7 +251,7 @@ const TAB_PAD: [f32; 2] = [9.0, 12.0];
 
 /// Where the toggle stands with the rail out and no window buttons on the line: over the column
 /// the tabs' icons stand in, so the four of them read as one column.
-const TOGGLE_OVER_ICONS: f32 = RAIL_PAD + TAB_PAD[1] + ICON / 2.0 - TOGGLE / 2.0;
+const TOGGLE_OVER_ICONS: f32 = RAIL_PAD + TAB_PAD[1] + icons::SIZE / 2.0 - TOGGLE / 2.0;
 
 /// Where it stands with the rail folded away. There is no icon column left to align to, and the
 /// window's edge is not an alignment, so its hover circle takes the page's own gutter and shares
@@ -306,7 +291,7 @@ fn tab<'a>(
     message: Message,
 ) -> Element<'a, Message> {
     let mut line = row![
-        icons::glyph(icon, ICON),
+        icons::glyph(icon),
         // One line whatever room is left: a label that rewrapped would step down the rail on
         // every frame of a fold.
         text(label).size(TAB).wrapping(text::Wrapping::None),
@@ -497,7 +482,7 @@ fn labelled<'a>(
 ) -> iced::widget::Row<'a, Message> {
     let mut line = row![].spacing(12);
     if let Some(icon) = icon {
-        line = line.push(icons::glyph(icon, ICON));
+        line = line.push(icons::glyph(icon));
     }
     line.push(
         column![text(title).size(TAB), muted_line(what, BODY)]
@@ -853,7 +838,7 @@ fn page_button<'a>(
 /// close button of its own. The sandboxes are their own processes and outlive this window, so
 /// there is nothing to confirm: quitting puts the notebook away, it does not stop a run.
 fn quit_button<'a>() -> Element<'a, Message> {
-    button(icons::glyph(icons::CLOSE, QUIT_ICON).center().width(HALO))
+    button(icons::glyph(icons::CLOSE).center().width(HALO))
         .style(round)
         .padding(0)
         .height(HALO)
@@ -892,9 +877,6 @@ const SIDEBAR: f32 = 200.0;
 
 /// A sidebar row's label, a step up from body text, as a source list sets one.
 const TAB: f32 = 14.0;
-
-/// An icon beside a label, drawn a little larger than the label's text, as macOS sets them.
-const ICON: f32 = 17.0;
 
 /// The one heading style: small, muted and set apart, on a pane and on a section alike.
 fn heading(title: &str) -> Element<'_, Message> {
@@ -1012,13 +994,13 @@ fn run_row<'a>(app: &'a App, record: &'a Record) -> Element<'a, Message> {
         // A live run is refused a delete, so it is shown as something that cannot be selected
         // rather than offered a box that would not answer.
         let box_icon = if live {
-            icons::glyph(icons::SQUARE, ICON).style(|t| text::Style {
+            icons::glyph(icons::SQUARE).style(|t| text::Style {
                 color: Some(muted(t).scale_alpha(0.4)),
             })
         } else if selected {
-            icons::glyph(icons::SQUARE_CHECK, ICON)
+            icons::glyph(icons::SQUARE_CHECK)
         } else {
-            icons::glyph(icons::SQUARE, ICON)
+            icons::glyph(icons::SQUARE)
         };
         body = body.push(box_icon);
     }
@@ -1546,27 +1528,6 @@ fn bytes(n: u64) -> String {
 mod tests {
     use super::*;
 
-    /// The quit and the toggle stand on one line, so they must read as one weight. Lucide draws
-    /// `x` well inside its box, and [`icons::glyph`] scales a glyph to a nominal ink extent, so
-    /// matching their nominal sizes would draw the cross half again as large with strokes to
-    /// match. What has to agree is the font size the two are drawn at.
-    #[test]
-    fn the_quit_is_drawn_at_the_weight_the_toggle_is() {
-        let toggle = icons::drawn_size(&icons::PANEL_LEFT, TOGGLE_ICON);
-        let quit = icons::drawn_size(&icons::CLOSE, QUIT_ICON);
-        assert!(
-            (toggle - quit).abs() < 0.5,
-            "the toggle is drawn at {toggle} and the quit at {quit}: one line, two weights"
-        );
-        // And the correction is real: at one nominal size they would not agree, which is the
-        // mistake this constant exists to avoid.
-        let naive = icons::drawn_size(&icons::CLOSE, TOGGLE_ICON);
-        assert!(
-            naive > toggle + 5.0,
-            "a cross at the toggle's nominal size should be the heavier mark this avoids"
-        );
-    }
-
     /// Every room the window's own buttons can take: none, and the 91 macOS gives them. The
     /// geometry takes the room as an argument, so this covers the other platform's layout too
     /// rather than only the one this build compiles.
@@ -1596,7 +1557,7 @@ mod tests {
     /// is the Linux layout, and macOS's in full screen, where the titlebar auto-hides.
     #[test]
     fn without_lights_the_toggle_runs_between_the_gutter_and_the_icon_column() {
-        let icon_centre = RAIL_PAD + TAB_PAD[1] + ICON / 2.0;
+        let icon_centre = RAIL_PAD + TAB_PAD[1] + icons::SIZE / 2.0;
         let open_centre = toggle_at(1.0, 0.0) + TOGGLE / 2.0;
         assert!(
             (open_centre - icon_centre).abs() < 0.01,

@@ -1,11 +1,12 @@
 //! The icon font: Lucide, from a pinned upstream release, cut down by `cargo xtask icons` to the
 //! glyphs named here, so the tree carries a few kilobytes of a font rather than the whole of one.
 //!
-//! - **A glyph is a `char` in a named font.** [`glyph`] draws one at a text size, in the text
-//!   colour, so an icon scales and themes exactly as a word beside it does.
-//! - **Drawn to one optical size.** Lucide draws a gear taller than a grid, so the same font size
-//!   reads as two sizes in a row. Each icon carries the extent it is drawn to, and [`glyph`]
-//!   corrects for it in a cell of the nominal width, which keeps every label at one left edge.
+//! - **A glyph is a `char` in a named font.** [`glyph`] draws one as text, in the text colour,
+//!   so an icon scales and themes exactly as a word beside it does.
+//! - **Every icon is one size, and [`SIZE`] is it.** [`glyph`] takes no size, so no call site can
+//!   set a second one. Lucide draws a gear taller than a grid, so each icon carries the extent it
+//!   is drawn to and [`glyph`] corrects for it in a cell of [`SIZE`], which puts every icon in the
+//!   window at one apparent size and every label at one left edge.
 //! - **This file is the subset.** `cargo xtask icons` keeps the glyphs of every `\u{…}` literal
 //!   below, and `every_icon_named_here_is_in_the_font` fails when one is named and the font was
 //!   not cut again after.
@@ -27,6 +28,10 @@ pub(crate) struct Icon {
 
 /// The extent most of the set is drawn to, and so the one every icon is corrected to.
 const INK: f32 = 833.0;
+
+/// The apparent size every icon is drawn at, which is the size the sidebar's `Sandboxes` grid has
+/// always been: a step above the label beside it, as macOS sets an icon in a source list.
+pub(crate) const SIZE: f32 = 17.0;
 
 /// Names each icon once, as a const and as an entry of the test's list, so the two agree.
 macro_rules! icons {
@@ -55,23 +60,24 @@ icons! {
     SQUARE_CHECK = '\u{e16a}', 874;
 }
 
-/// The font size [`glyph`] draws `icon` at to reach a nominal `size` of ink.
+/// The font size [`glyph`] draws `icon` at to put [`SIZE`] of its ink on the screen.
 ///
-/// **A glyph's stroke weight travels with this.** The correction assumes the set is drawn to one
-/// extent give or take a tenth; a glyph drawn well inside its box (Lucide's `x` spans half of it)
-/// is scaled up far enough that its strokes read heavier than its neighbours'. Two icons look
-/// like one weight when this agrees for both, not when their nominal sizes do.
-pub(crate) fn drawn_size(icon: &Icon, size: f32) -> f32 {
-    size * INK / f32::from(icon.ink)
+/// **A glyph's stroke weight travels with this.** Most of the set is drawn within an eighth of
+/// [`INK`], and so within an eighth of one weight; a glyph drawn well inside its box is scaled up
+/// far enough that its strokes read heavier than its neighbours'.
+/// `the_set_is_drawn_within_an_eighth_of_one_stroke_weight` is the bound, and names the one glyph
+/// outside it.
+fn drawn_size(icon: &Icon) -> f32 {
+    SIZE * INK / f32::from(icon.ink)
 }
 
-/// One icon at `size`, in the icon grey, drawn to the same optical size as every other and in a
-/// cell of the nominal width, so a row of them shares one left edge.
-pub(crate) fn glyph<'a>(icon: Icon, size: f32) -> iced::widget::Text<'a> {
+/// One icon at [`SIZE`], in the icon grey, drawn to the same apparent size as every other and in
+/// a cell of that width, so a row of them shares one left edge.
+pub(crate) fn glyph<'a>(icon: Icon) -> iced::widget::Text<'a> {
     iced::widget::text(icon.ch.to_string())
         .font(FONT)
-        .size(drawn_size(&icon, size))
-        .width(size)
+        .size(drawn_size(&icon))
+        .width(SIZE)
         .center()
         .style(|theme| iced::widget::text::Style {
             color: Some(crate::theme::icon(theme)),
@@ -95,6 +101,29 @@ mod tests {
                 face.glyph_index(icon.ch).is_some(),
                 "{name} ({:?}) is not in fonts/lucide.ttf: run `cargo xtask icons`",
                 icon.ch
+            );
+        }
+    }
+
+    /// One apparent size for the whole set means the correction moves the variation into stroke
+    /// weight instead: a glyph drawn inside its box is scaled up, and its strokes with it. The set
+    /// holds within an eighth of one weight, which is what lets a row of them read as one set.
+    ///
+    /// [`CLOSE`] is the exception and is named rather than hidden: Lucide draws `x` at 0.7 of the
+    /// box, so it is scaled up by nearly half. On this panel that is 1.50 px of stroke against
+    /// [`GRID`]'s 1.25, which is the price of the two standing on the head's line at one size.
+    #[test]
+    fn the_set_is_drawn_within_an_eighth_of_one_stroke_weight() {
+        let standard = drawn_size(&GRID);
+        for (name, icon) in ALL {
+            if name == "CLOSE" {
+                continue;
+            }
+            let ratio = drawn_size(&icon) / standard;
+            assert!(
+                (0.875..=1.125).contains(&ratio),
+                "{name} is drawn at {ratio:.3} of the standard's font size, so it reads as a \
+                 second weight beside it"
             );
         }
     }
