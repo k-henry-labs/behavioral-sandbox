@@ -10,9 +10,11 @@
 //! - **Full screen has no buttons to place**, and macOS draws a toolbar there as a band of its
 //!   own over the top of the content, so the toolbar is hidden while the window is full screen
 //!   and shown again when it leaves; the head's line is the app's own either way.
-//! - **Where the buttons are not, no room is kept for them.** [`LIGHTS`] is what they take on
-//!   the head's line, and zero on a platform whose compositor draws them outside the content, or
-//!   not at all.
+//! - **Where the buttons are not, no room is kept for them.** [`LIGHTS`] is what they take when
+//!   they are on the head's line: zero on a platform whose compositor draws them outside the
+//!   content or not at all, and zero on macOS in full screen, where the titlebar carrying them
+//!   auto-hides. That last one is a property of the window rather than of the build, which is why
+//!   [`fit_fullscreen`] reports it back rather than a `cfg!` deciding it.
 //! - **Where the platform closes no window, the app draws the control itself.** macOS puts a
 //!   close button on every window; a tiling compositor draws no titlebar at all, so off macOS
 //!   [`DRAWS_ITS_OWN_QUIT`] puts one at the end of the head. This is by platform, not by
@@ -20,7 +22,9 @@
 //! - **AppKit is Objective-C**, which is why this module is the app's one `unsafe`, as libkrun's C
 //!   is `tormoni-krun`'s. Everything read back out is the platform's own.
 
-/// The room the window's own buttons take at the top-left corner, before the first control.
+/// The room the window's own buttons take at the top-left corner, before the first control,
+/// where the platform puts them on that line at all. [`App::lights`](crate::App::lights) is what
+/// a screen asks, since full screen takes them off it.
 pub(crate) const LIGHTS: f32 = if cfg!(target_os = "macos") { 91.0 } else { 0.0 };
 
 /// Whether the head carries a quit control, because the platform puts no close button on the
@@ -40,14 +44,21 @@ pub(crate) fn unify_titlebar<T: Send + 'static>(id: iced::window::Id) -> iced::T
 
 /// Hides the toolbar while the window is full screen and shows it again when it is not, on the
 /// platform that has one; asked after every resize, since that is when the window changes mode.
-pub(crate) fn fit_fullscreen<T: Send + 'static>(id: iced::window::Id) -> iced::Task<T> {
+///
+/// Answers whether the window is full screen, because that is also when its own buttons leave the
+/// head's line and the room kept for them would be a gap.
+pub(crate) fn fit_fullscreen(id: iced::window::Id) -> iced::Task<bool> {
     iced::window::run(id, |window| {
         #[cfg(target_os = "macos")]
-        macos::hide_the_toolbar_in_fullscreen(window);
+        {
+            macos::hide_the_toolbar_in_fullscreen(window)
+        }
         #[cfg(not(target_os = "macos"))]
-        let _ = window;
+        {
+            let _ = window;
+            false
+        }
     })
-    .discard()
 }
 
 #[cfg(target_os = "macos")]
@@ -75,10 +86,12 @@ mod macos {
         }
     }
 
-    /// Shows the window's toolbar exactly when the window is not full screen.
-    pub(super) fn hide_the_toolbar_in_fullscreen(window: &dyn iced::window::Window) {
+    /// Shows the window's toolbar exactly when the window is not full screen, and answers
+    /// whether it is. A window that cannot be reached is not full screen as far as this can tell,
+    /// which keeps the room the buttons take rather than closing a gap that may not be one.
+    pub(super) fn hide_the_toolbar_in_fullscreen(window: &dyn iced::window::Window) -> bool {
         let Some(window) = appkit_window(window) else {
-            return;
+            return false;
         };
         let full = window.styleMask().contains(NSWindowStyleMask::FullScreen);
         // SAFETY: a getter and a setter on a window this thread owns; the toolbar is the one
@@ -91,6 +104,7 @@ mod macos {
                 toolbar.setVisible(!full);
             }
         }
+        full
     }
 
     /// The `NSWindow` behind an iced window, or `None` where the handle is not AppKit's.

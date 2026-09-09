@@ -111,7 +111,7 @@ pub(crate) fn chrome<'a>(app: &'a App, content: Element<'a, Message>) -> Element
             top: TOGGLE_TOP - HALO_OVERHANG,
             right: 0.0,
             bottom: 0.0,
-            left: toggle_at(out) - HALO_OVERHANG,
+            left: toggle_at(out, app.lights()) - HALO_OVERHANG,
         }),
     ]
     // `push_under`, not a first layer: a stack takes its size from the layer it was built on, and
@@ -260,25 +260,26 @@ const TAB_PAD: [f32; 2] = [9.0, 12.0];
 /// Where the toggle stands on a line with no lights: over the column the tabs' icons stand in.
 const TOGGLE_LEAD: f32 = RAIL_PAD + TAB_PAD[1] + ICON / 2.0 - TOGGLE / 2.0;
 
-/// Where the toggle stands. With lights: over the room they leave when the sidebar is folded
-/// away, at the sidebar's own inner edge when it is out, and along that line while it moves.
-/// Without: in one place, the tabs' icon column, since nothing is there for it to make way for.
-fn toggle_at(out: f32) -> f32 {
-    if crate::chrome::LIGHTS <= 0.0 {
+/// Where the toggle stands, given the room `lights` the window's own buttons take. With them:
+/// over the room they leave when the sidebar is folded away, at the sidebar's own inner edge when
+/// it is out, and along that line while it moves. Without: in one place, the tabs' icon column,
+/// since nothing is there for it to make way for.
+fn toggle_at(out: f32, lights: f32) -> f32 {
+    if lights <= 0.0 {
         return TOGGLE_LEAD;
     }
-    crate::chrome::LIGHTS + (SIDEBAR - RAIL_PAD - TOGGLE - crate::chrome::LIGHTS) * out
+    lights + (SIDEBAR - RAIL_PAD - TOGGLE - lights) * out
 }
 
 /// Where a pane's head starts, at this much of the sidebar: at the gutter, out past where the
 /// toggle stands when folded, by as much as the sidebar is folded away.
-fn head_inset_at(out: f32) -> f32 {
-    GUTTER + (toggle_at(0.0) + TOGGLE) * (1.0 - out)
+fn head_inset_at(out: f32, lights: f32) -> f32 {
+    GUTTER + (toggle_at(0.0, lights) + TOGGLE) * (1.0 - out)
 }
 
 /// Where the head of the pane this window is showing starts.
 fn head_inset(app: &App) -> f32 {
-    head_inset_at(app.sidebar_out())
+    head_inset_at(app.sidebar_out(), app.lights())
 }
 
 /// One sidebar tab: its name, an optional count, and the pill it wears while its screen is open.
@@ -1491,35 +1492,67 @@ fn bytes(n: u64) -> String {
 mod tests {
     use super::*;
 
+    /// Every room the window's own buttons can take: none, and the 91 macOS gives them. The
+    /// geometry takes the room as an argument, so this covers the other platform's layout too
+    /// rather than only the one this build compiles.
+    const ROOMS: [f32; 2] = [0.0, 91.0];
+
     /// The toggle and a head cross the window on their own tracks as the sidebar folds. This
-    /// walks the fold and holds the gap between them to the gutter at every step.
+    /// walks the fold and holds the gap between them to the gutter at every step, in both rooms.
     #[test]
     fn the_toggle_keeps_its_room_from_a_head_across_the_whole_fold() {
-        for step in 0u8..=100 {
-            let out = f32::from(step) / 100.0;
-            let toggle_ends = toggle_at(out) + TOGGLE;
-            let head_starts = SIDEBAR * out + head_inset_at(out);
-            assert!(
-                head_starts - toggle_ends >= GUTTER,
-                "at {out} out, the head starts at {head_starts} and the toggle ends at {toggle_ends}"
-            );
+        for lights in ROOMS {
+            for step in 0u8..=100 {
+                let out = f32::from(step) / 100.0;
+                let toggle_ends = toggle_at(out, lights) + TOGGLE;
+                let head_starts = SIDEBAR * out + head_inset_at(out, lights);
+                assert!(
+                    head_starts - toggle_ends >= GUTTER,
+                    "at {out} out with {lights} of lights, the head starts at {head_starts} and \
+                     the toggle ends at {toggle_ends}"
+                );
+            }
         }
     }
 
     /// With no lights on the line, the toggle has nothing to make way for: it stands over the
     /// tabs' icon column at every step of the fold, so folding moves the head and not the button.
-    #[cfg(not(target_os = "macos"))]
+    /// This is the Linux layout, and macOS's in full screen, where the titlebar auto-hides.
     #[test]
     fn without_lights_the_toggle_stands_over_the_icon_column_and_stays_put() {
         let icon_centre = RAIL_PAD + TAB_PAD[1] + ICON / 2.0;
         for step in 0u8..=100 {
             let out = f32::from(step) / 100.0;
-            let toggle_centre = toggle_at(out) + TOGGLE / 2.0;
+            let toggle_centre = toggle_at(out, 0.0) + TOGGLE / 2.0;
             assert!(
                 (toggle_centre - icon_centre).abs() < 0.01,
                 "at {out} out, the toggle is centred at {toggle_centre}, the icons at {icon_centre}"
             );
         }
+    }
+
+    /// Full screen takes the buttons off the head's line, so the room kept for them closes: the
+    /// layout there is the one a platform that never drew them gets. Without this the head on a
+    /// full-screen Mac begins 119 in, past a band holding nothing.
+    #[test]
+    fn full_screen_leaves_no_room_for_buttons_that_are_not_on_the_line() {
+        for step in 0u8..=100 {
+            let out = f32::from(step) / 100.0;
+            assert_eq!(
+                toggle_at(out, 0.0),
+                TOGGLE_LEAD,
+                "the toggle moved at {out} out with no lights"
+            );
+        }
+        // And the room is real when they are on it: the two layouts are not the same function.
+        assert!(
+            toggle_at(0.0, 91.0) > toggle_at(0.0, 0.0),
+            "91 of lights should push the toggle past the icon column"
+        );
+        assert!(
+            head_inset_at(0.0, 91.0) > head_inset_at(0.0, 0.0),
+            "and push a folded head with it"
+        );
     }
 
     /// A path under home is spelled with `~`; anything else is left whole.

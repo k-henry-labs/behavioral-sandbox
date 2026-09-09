@@ -491,6 +491,9 @@ pub(crate) enum Message {
     ZoomWindow,
     /// The head's quit control was pressed, where the platform draws no close button of its own.
     Quit,
+    /// Whether the window is full screen, answered after a resize: the one thing that takes the
+    /// platform's own buttons off the head's line while still drawing them elsewhere.
+    Fullscreen(bool),
     Open(RunId),
     Back,
     List,
@@ -594,6 +597,10 @@ pub(crate) struct App {
     now: std::time::Instant,
     /// The window this is drawing in, once it is open: what a zoom is asked of.
     window: Option<iced::window::Id>,
+    /// Whether the window is full screen. Only macOS moves its buttons off the head's line for
+    /// it, but the field is not `cfg`-gated: a screen asks [`lights`](Self::lights), and one
+    /// answer for every platform is one layout to reason about.
+    fullscreen: bool,
 }
 
 /// One leased display: what was mapped for it, the presents it has reported, and where its input
@@ -637,6 +644,8 @@ impl App {
             sidebar: Animation::new(true).quick().easing(Easing::EaseInOut),
             now: std::time::Instant::now(),
             window: None,
+            // A window opens windowed; the first resize answers for the rest.
+            fullscreen: false,
         };
         app.refresh();
         if let Some(key) = opening {
@@ -664,6 +673,13 @@ impl App {
                 self.record(id).map_or(id.as_str(), |r| r.name.as_str())
             ),
         }
+    }
+
+    /// The room the window's own buttons take on the head's line, right now: none in full
+    /// screen, where macOS hides the titlebar carrying them, and none where the platform never
+    /// drew them on that line.
+    pub(crate) fn lights(&self) -> f32 {
+        if self.fullscreen { 0.0 } else { chrome::LIGHTS }
     }
 
     /// How far the sidebar is out: 0 folded away, 1 all the way, and between while it moves.
@@ -869,7 +885,11 @@ impl App {
                 self.window = Some(id);
                 chrome::unify_titlebar(id)
             }
-            Message::Resized(id) => chrome::fit_fullscreen(id),
+            Message::Resized(id) => chrome::fit_fullscreen(id).map(Message::Fullscreen),
+            Message::Fullscreen(full) => {
+                self.fullscreen = full;
+                Task::none()
+            }
             Message::ZoomWindow => self
                 .window
                 .map_or_else(Task::none, iced::window::toggle_maximize),
