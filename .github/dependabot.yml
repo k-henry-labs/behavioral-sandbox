@@ -1,22 +1,31 @@
-# Dependabot keeps the GitHub Actions current. Each `uses:` names a full commit SHA with its
-# version in a trailing comment, which is OpenSSF's hardening guidance: a tag is mutable, so
-# whoever controls an action's repo can repoint `v2` at other code, and a SHA cannot be moved.
-# Dependabot reads the comment, so it still proposes a bump and rewrites both. The cost is that
-# every patch now needs a commit here; the grouping keeps that to one review a week.
+# Dependabot watches the GitHub Actions so nobody here has to. Each `uses:` names a **major** tag,
+# which is the low-attention setting on purpose: a patch or minor release lands with no commit here
+# and no PR to read, and Dependabot opens one only when a major moves, which is the bump that can
+# actually break a workflow. SHA pinning is the stricter posture (OpenSSF advises it, and a tag is
+# mutable), and it was measured against the peers before this choice: Firecracker, libkrun and
+# Ollama all pin by tag too. The cost there is a commit per patch, which is attention this project
+# does not have to spend; revisit at a release.
 #
-# Not covered: actionlint, fetched by sha256 in `ci.yml` rather than as an action. Bump it by hand
-# from upstream's `checksums.txt`.
+# One grouped PR, so a routine bump is a single review rather than one per action.
 #
 # Actions only, on purpose: the Rust dependency lock is hand-pinned and mirrored offline (the
 # vendored mirror plus audit.yml's daily RustSec check), so Cargo bumps stay a manual, reviewed
 # step, never an automated PR. Nothing here lands without a human merge either; Dependabot only
 # proposes.
+#
+# Not covered: actionlint, which `ci.yml` fetches as a sha256-pinned release rather than as an
+# action, so Dependabot cannot see it. A stale linter is harmless; bump it by hand when convenient.
+
 version: 2
 updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
+    # `ci: bump ...` rather than Dependabot's default `Bump ...`, so its PR lands as a Conventional
+    # Commit like every other commit in this tree, with nothing to reword at merge.
+    commit-message:
+      prefix: "ci"
     groups:
       github-actions:
         patterns:
