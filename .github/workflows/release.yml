@@ -1,0 +1,154 @@
+# Release: a human pushes a `v*` tag, this builds `cargo xtask dist` on the two hosts the project
+# targets, and publishes the assets `install.sh` fetches from `releases/latest/download/`.
+# Nothing here decides to release: the tag is the decision, and a person makes it (AGENTS.md).
+# Every action floats on its major, as ci.yml's do, and Dependabot carries them.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  # The tag names the workspace version, or the plist and the assets would disagree with the
+  # release; and it is annotated, since the release notes are its annotation.
+  check-version:
+    name: the tag matches the workspace
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Check the tag
+        run: |
+          set -euo pipefail
+          want="${GITHUB_REF_NAME#v}"
+          grep -q "^version = \"${want%%-*}\"" Cargo.toml \
+            || { echo "::error::Cargo.toml's workspace version is not ${want%%-*}; bump it before tagging"; exit 1; }
+          [ "$(git cat-file -t "$GITHUB_REF_NAME")" = tag ] \
+            || { echo "::error::$GITHUB_REF_NAME is a lightweight tag; the notes come from the annotation (git tag -a)"; exit 1; }
+
+  dist-macos:
+    name: dist (macos-aarch64)
+    needs: check-version
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # The lines ci.yml runs: libkrun and libkrunfw from the tap, under /opt/homebrew, which is
+      # the prefix the binary bakes in for libkrunfw and the install name it links libkrun by.
+      - name: Install libkrun dependencies
+        run: |
+          brew tap slp/krun
+          brew trust slp/krun
+          brew install libkrun libkrunfw
+          echo "PKG_CONFIG_PATH=/opt/homebrew/lib/pkgconfig:/usr/local/lib/pkgconfig:${PKG_CONFIG_PATH:-}" >> "$GITHUB_ENV"
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      # The guest of an ARM64 host is aarch64: the static agent in rootfs.tar.gz is built for it.
+      - name: Install the guest target
+        run: rustup target add aarch64-unknown-linux-musl
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build the release artifacts
+        run: cargo xtask dist
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist-macos-aarch64
+          path: |
+            dist/Tormoni-macos-aarch64.zip
+            dist/SHA256SUMS
+          if-no-files-found: error
+
+  # Fedora, because no Ubuntu package carries libkrun and a binary linked without it is the stub
+  # that can never boot (crates/krun/build.rs). The oldest supported Fedora, for the lowest glibc
+  # floor a dynamic binary inherits: 43 is glibc 2.42, end of life 2026-12-09, then 44 (2.43).
+  dist-linux:
+    name: dist (linux-x86_64)
+    needs: check-version
+    runs-on: ubuntu-24.04
+    container: fedora:43
+    timeout-minutes: 45
+    steps:
+      # Before the checkout: the action needs git in the container.
+      - name: Install the build dependencies
+        run: dnf install -y gcc pkgconf-pkg-config libkrun-devel libkrunfw git tar gzip curl rustup
+
+      # Fedora's rustup, not a piped installer; rust-toolchain.toml then picks the compiler.
+      - name: Install the toolchain
+        run: |
+          rustup-init -y --no-modify-path --default-toolchain none --profile minimal
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Install the guest target
+        run: rustup target add x86_64-unknown-linux-musl
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build the release artifacts
+        run: cargo xtask dist
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist-linux-x86_64
+          path: |
+            dist/tormoni-linux-x86_64.tgz
+            dist/SHA256SUMS
+          if-no-files-found: error
+
+  release:
+    name: publish
+    needs: [dist-macos, dist-linux]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@v8
+        with:
+          path: built
+          pattern: dist-*
+
+      # Each runner wrote its own SHA256SUMS; the release carries one, checked here against the
+      # assets so a bad merge fails before anything is published.
+      - name: Assemble the release directory
+        run: |
+          set -euo pipefail
+          mkdir release
+          cp built/dist-macos-aarch64/Tormoni-macos-aarch64.zip built/dist-linux-x86_64/tormoni-linux-x86_64.tgz release/
+          cat built/dist-macos-aarch64/SHA256SUMS built/dist-linux-x86_64/SHA256SUMS > release/SHA256SUMS
+          cp install.sh release/
+          (cd release && sha256sum install.sh >> SHA256SUMS && sha256sum -c SHA256SUMS)
+
+      # A `-` in the tag marks a prerelease, which `releases/latest` skips: a `v0.0.5-rc1` runs
+      # the whole pipeline without moving what install.sh fetches.
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          prerelease=
+          case "$GITHUB_REF_NAME" in *-*) prerelease=--prerelease ;; esac
+          gh release create "$GITHUB_REF_NAME" --verify-tag --notes-from-tag $prerelease \
+            release/Tormoni-macos-aarch64.zip release/tormoni-linux-x86_64.tgz release/SHA256SUMS release/install.sh
