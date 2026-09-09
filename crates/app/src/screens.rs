@@ -228,6 +228,13 @@ const HALO_OVERHANG: f32 = (HALO - TOGGLE) / 2.0;
 /// icons beside a label, and it is the only icon standing on its own.
 const TOGGLE_ICON: f32 = 20.0;
 
+/// The quit glyph's nominal size, smaller than the toggle's because Lucide draws `x` well inside
+/// its box: matching their *ink* would scale the cross up by half again and its strokes with it,
+/// which is a heavier mark on the same line rather than an equal one. Sized so the two are drawn
+/// at one font size, which is what the eye reads as one weight;
+/// `the_quit_is_drawn_at_the_weight_the_toggle_is` holds the pair together.
+const QUIT_ICON: f32 = 14.0;
+
 /// An icon on its own: nothing until the pointer finds it, then the circle a toolbar icon wears,
 /// a step past a row's hover so it reads on the rail as well as on the page.
 fn round(theme: &iced::Theme, status: button::Status) -> button::Style {
@@ -824,7 +831,7 @@ fn page_button<'a>(
 /// close button of its own. The sandboxes are their own processes and outlive this window, so
 /// there is nothing to confirm: quitting puts the notebook away, it does not stop a run.
 fn quit_button<'a>() -> Element<'a, Message> {
-    button(icons::glyph(icons::CLOSE, TOGGLE_ICON).center().width(HALO))
+    button(icons::glyph(icons::CLOSE, QUIT_ICON).center().width(HALO))
         .style(round)
         .padding(0)
         .height(HALO)
@@ -1491,6 +1498,27 @@ fn bytes(n: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The quit and the toggle stand on one line, so they must read as one weight. Lucide draws
+    /// `x` well inside its box, and [`icons::glyph`] scales a glyph to a nominal ink extent, so
+    /// matching their nominal sizes would draw the cross half again as large with strokes to
+    /// match. What has to agree is the font size the two are drawn at.
+    #[test]
+    fn the_quit_is_drawn_at_the_weight_the_toggle_is() {
+        let toggle = icons::drawn_size(&icons::PANEL_LEFT, TOGGLE_ICON);
+        let quit = icons::drawn_size(&icons::CLOSE, QUIT_ICON);
+        assert!(
+            (toggle - quit).abs() < 0.5,
+            "the toggle is drawn at {toggle} and the quit at {quit}: one line, two weights"
+        );
+        // And the correction is real: at one nominal size they would not agree, which is the
+        // mistake this constant exists to avoid.
+        let naive = icons::drawn_size(&icons::CLOSE, TOGGLE_ICON);
+        assert!(
+            naive > toggle + 5.0,
+            "a cross at the toggle's nominal size should be the heavier mark this avoids"
+        );
+    }
 
     /// Every room the window's own buttons can take: none, and the 91 macOS gives them. The
     /// geometry takes the room as an argument, so this covers the other platform's layout too

@@ -53,12 +53,22 @@ icons! {
     CLOSE = '\u{e1b2}', 582;
 }
 
+/// The font size [`glyph`] draws `icon` at to reach a nominal `size` of ink.
+///
+/// **A glyph's stroke weight travels with this.** The correction assumes the set is drawn to one
+/// extent give or take a tenth; a glyph drawn well inside its box (Lucide's `x` spans half of it)
+/// is scaled up far enough that its strokes read heavier than its neighbours'. Two icons look
+/// like one weight when this agrees for both, not when their nominal sizes do.
+pub(crate) fn drawn_size(icon: &Icon, size: f32) -> f32 {
+    size * INK / f32::from(icon.ink)
+}
+
 /// One icon at `size`, in the icon grey, drawn to the same optical size as every other and in a
 /// cell of the nominal width, so a row of them shares one left edge.
 pub(crate) fn glyph<'a>(icon: Icon, size: f32) -> iced::widget::Text<'a> {
     iced::widget::text(icon.ch.to_string())
         .font(FONT)
-        .size(size * INK / f32::from(icon.ink))
+        .size(drawn_size(&icon, size))
         .width(size)
         .center()
         .style(|theme| iced::widget::text::Style {
