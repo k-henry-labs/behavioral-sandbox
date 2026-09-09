@@ -10,6 +10,7 @@ mod artifacts;
 mod bench;
 mod bundle;
 mod drift;
+mod fonts;
 mod guest_bins;
 mod icons;
 mod init;
@@ -58,6 +59,10 @@ enum Cmd {
     /// `crates/app/fonts/lucide.ttf`. A dev step: the cut font is committed, since the app
     /// compiles it in and the gate builds with no network.
     Icons,
+    /// Cut the pinned Inter and Geist Mono releases to the characters the app draws, writing the
+    /// four static faces `crates/app/src/fonts.rs` compiles in. The same families the web app
+    /// serves, so a window and a page read as one product. A dev step, like `Icons`.
+    Fonts,
     /// Assemble `artifacts/Tormoni.app` from the built binaries, so the window runs as
     /// `Tormoni` rather than as the file name `tormoni-app` (macOS). `tormoni` is copied in
     /// beside it and signed there. Elsewhere it says there is nothing to bundle and exits.
@@ -193,6 +198,7 @@ fn main() -> Result<()> {
         Cmd::Setup => setup(),
         Cmd::Sign { release } => sign::sign_for_hypervisor(release),
         Cmd::Icons => icons::cut_icon_font(),
+        Cmd::Fonts => fonts::cut_text_fonts(),
         Cmd::Init { root, arch, force } => init::init(root, arch, force),
         Cmd::Bundle { release } => bundle::bundle_app(release),
         Cmd::Vendor { dir, verify } => {

@@ -17,6 +17,7 @@
 mod account;
 mod chrome;
 mod cli;
+mod fonts;
 mod frame;
 mod icons;
 mod lease;
@@ -249,9 +250,14 @@ fn main() -> ExitCode {
         // Before `.font`: `settings` replaces the whole set, fonts included.
         .settings(iced::Settings {
             default_text_size: iced::Pixels(screens::BODY),
+            default_font: fonts::SANS,
             ..iced::Settings::default()
         })
         .font(icons::BYTES)
+        .font(fonts::FACES[0])
+        .font(fonts::FACES[1])
+        .font(fonts::FACES[2])
+        .font(fonts::FACES[3])
         .scale_factor(|app: &App| f32::from(app.scale) / 100.0)
         .window(window_settings())
         .run();

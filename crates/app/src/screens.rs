@@ -16,14 +16,14 @@ use tormoni_record::{Record, Verb};
 
 use crate::{App, Field, Form, Message, Stream, Switch, cli, icons};
 
-/// Identifiers, and only identifiers: a name, a command, a path, an id. Prose is the system's
-/// own sans, so a row reads as a sentence rather than a terminal dump.
-const MONO: Font = Font::MONOSPACE;
+/// Identifiers, and only identifiers: a name, a command, a path, an id. Prose is the sans, so a
+/// row reads as a sentence rather than a terminal dump.
+const MONO: Font = crate::fonts::MONO;
 
 /// The name of a run: the one thing a reader is scanning for down a column.
 const NAME: Font = Font {
     weight: iced::font::Weight::Semibold,
-    ..Font::MONOSPACE
+    ..crate::fonts::MONO
 };
 
 /// A pane's own name, at the head of the screen the sidebar opened.
@@ -32,7 +32,7 @@ const HEAD: f32 = 17.0;
 /// The system's sans in the weight a name is set in.
 const HEADING: Font = Font {
     weight: iced::font::Weight::Semibold,
-    ..Font::DEFAULT
+    ..crate::fonts::SANS
 };
 
 /// The type scale. Three sizes, so a card has a first, second and third thing to read.
