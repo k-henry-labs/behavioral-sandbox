@@ -12,7 +12,7 @@ Hypervisor.framework on macOS. It is a GUI application with a CLI beside it, bot
 
 ### What the tree does today
 
-Tormoni runs on [libkrun](https://github.com/containers/libkrun), a library that makes the calling
+Tormoni runs on [libkrun](https://github.com/libkrun/libkrun), a library that makes the calling
 process the virtual machine monitor.
 
 In the tree: the host/guest wire framing (`tormoni-channel`), the in-guest agent (`tormoni-guest-agent`),

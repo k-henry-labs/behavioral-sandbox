@@ -40,6 +40,15 @@ sandbox grants; `--gpu` is the named grant of the wider path.
 The posture that follows from it: a sandbox with no explicit configuration shares no host directory
 and reaches no network, and what is shared **is** the policy, settled before the VM starts.
 
+Signing in pairs a device key with the console, which is a different product from this one and is
+not trusted with the key. The private half never leaves this machine: what crosses is a signature
+over a claim, and what comes back is a `tor_` token. Both are files at `0600` in a `0700` directory
+under the data dir (`device.key` and `token`, with the public half `device.pub` beside them), not a
+keychain, because this build has no credential store to put one in. No sandbox and no screen needs
+either. The token is a secret of the class the next section names: `a_token_prints_as_nothing`
+keeps it out of `Debug`, and `the_request_carries_the_token_on_stdin_and_never_in_argv` keeps it
+out of the process list.
+
 ## What counts as a security bug
 
 Once there is something to run, these are the reports worth making:
@@ -47,8 +56,8 @@ Once there is something to run, these are the reports worth making:
 - A guest reaching the host filesystem, network, or another sandbox outside what was configured.
 - A hostile guest causing a host panic, hang, or resource leak through the supervisor. The host path
   is written against a no-panic rule; a case that breaks it is a bug, not an expected limitation.
-- Injected secrets (environment values, injected file contents) appearing in logs, errors, or the
-  console.
+- Injected secrets (environment values, injected file contents, the device token) appearing in
+  logs, errors, a record, or the terminal.
 
 Because this is an **application, not a platform**, multi-tenant concerns it deliberately does not
 own are not bugs here.

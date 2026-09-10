@@ -23,14 +23,22 @@ The socket directory acts as the VM registry:
 - **Sidecar paths**: The agent socket sits at `<name>.agent` and the detached log file sits at
   `<name>.log`.
 
-### Control protocol commands
+### Control protocol
 
-The control socket speaks line-delimited JSON for management requests:
-- `LEASE_DISPLAY`: Leases a virtio-gpu display scanout from a running VM. The helper passes a sealed
-  shared memory file descriptor (`memfd_create`) over the Unix socket via `SCM_RIGHTS`.
-- `INPUT_SESSION`: Opens an input stream to feed keyboard and pointer events directly into the
-  helper's virtio-input devices using the `kbd|ptr TYPE CODE VALUE` line protocol.
-- `STOP`: Sends a termination request to the VMM helper process.
+A request is one word on one line, and the answer begins `ok` or `err <why>`; a caller reads a reply
+to 4096 bytes at most. A word the VM does not know is answered with the words it does speak rather
+than a closed connection (`an_unknown_request_is_answered_with_what_this_vm_speaks`).
+
+- `info`: `ok`, then the machine's shape and posture as `key value` lines (`proto`, `pid`, `vcpus`,
+  `mem_mib`, `net`, `rootfs`, `channel`), which is what `tormoni ls` prints a row from.
+- `stop`: `ok` first, and the process exits after, so a caller learns the request was accepted
+  rather than inferring it from a closed connection.
+- `display`: leases the scanout. The answer carries the sealed memfd holding the frame slots and
+  their layout over `SCM_RIGHTS`, and the connection then streams one record per present until the
+  caller closes it. Refused by a VM with no display.
+- `input`: after `ok`, the connection carries `kbd|ptr TYPE CODE VALUE` lines, one event each,
+  until the caller closes it, and whatever those lines left pressed is released then. Refused by a
+  VM with no display, which has no devices.
 
 ## Host↔guest wire framing (`tormoni-channel`)
 

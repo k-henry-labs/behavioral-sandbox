@@ -7,11 +7,12 @@ sandbox can reach is settled before it starts, on the host side of that boundary
 
 It exists for the usual suspects: a third-party binary, a dependency's install script, an
 AI-generated snippet, a sample under analysis. Everything stays on your own machine: no telemetry,
-no control plane, and nothing that stops working with the network off.
+no daemon, and a sandbox that needs no network. Signing in to the console is the one thing that
+does, and no sandbox needs it.
 
 ## What it does today
 
-Tormoni runs on [libkrun](https://github.com/containers/libkrun), a library that makes the calling
+Tormoni runs on [libkrun](https://github.com/libkrun/libkrun), a library that makes the calling
 process the virtual machine monitor. `krun_start_enter` never returns, so a VM **is** a process:
 every sandbox is a helper this project spawned, tracked and reaped.
 
@@ -20,7 +21,8 @@ every sandbox is a helper this project spawned, tracked and reaped.
   outlives the command that started it, reached afterwards by name with `ls`, `exec` and `stop`.
 - **See it.** `--display WIDTHxHEIGHT` gives the guest a virtio-gpu scanout shown in a window, and
   that window's keyboard and pointer reach the guest as two virtio-input devices. The desktop image
-  boots to a terminal in a Wayland session under it, and `--sound` adds a virtio-snd card.
+  boots to a terminal in a Wayland session under it, and `--sound` asks for a virtio-snd card where
+  libkrun was built with one, which no measured host has been.
 - **Keep it.** Every run leaves a record: the posture as settled, the captured output, and the
   directory the guest saw as `/results`. `tormoni ls --all`, `show`, `rm` and `export` read, remove and
   package them, one ustar file per run.

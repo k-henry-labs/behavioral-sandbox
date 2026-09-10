@@ -6,11 +6,11 @@ into on the command line, and the posture is printed (`--dry-run` shows it witho
 what is shared **is** the policy.
 
 ```console
-tormoni run --root ~/.local/share/tormoni/rootfs -- uname -a
+tormoni run -- uname -a
 ```
 
-The guest root falls back to `$TORMONI_GUEST_ROOT`, then `~/.local/share/tormoni/rootfs`, so after one
-`export` the `--root` flag can be dropped.
+The guest root is `--root`, else `$TORMONI_GUEST_ROOT`, else `~/.local/share/tormoni/rootfs`, which
+is where `cargo xtask init` puts one. The flag and the variable are for a tree somewhere else.
 
 ## Installing
 
@@ -117,26 +117,35 @@ readable.
 
 ## The notebook
 
-`Tormoni` opens on the notebook, with a sidebar reaching its three screens:
+`Tormoni` opens on the notebook, with a sidebar reaching four tabs:
 
 - **The list**: every run, newest first, live ones with a thumbnail of their display. `Select`
   turns each ended row into a tick box, `All` takes every one of them, and `Remove` asks about what
   was selected. A live run has no box: it is refused a delete until it stops.
 - **One run**: its posture, output and results beside its live display (keyboard and pointer go
   to the guest), with Stop and Shell while it runs, Re-run and Delete after, and Export always.
-
-Every delete asks first, in a modal naming the run or the count it would remove, with Cancel and
-Delete. Escape and a press outside answer it the same way Cancel does, and cancelling a selection's
-question gives the selection back rather than dropping it. `deleting_one_run_asks_first_and_never_asks_about_a_live_one`
-and `a_selection_removes_what_was_selected_and_only_behind_the_confirm` hold both paths to it.
 - **The start form**: every posture flag as a field, summarised in the record's own posture
   sentence ("This sandbox will: ..."), confirmed before anything boots.
+- **The cookbook**: runs worth trying, on five shelves, each one press from a filled form. A press
+  fills the form and stops there, so its posture is read before it boots, and the `tormoni` line a
+  card shows is built from the same fields the form takes
+  (`the_line_an_entry_shows_is_the_posture_it_fills_in`). [Examples](./examples.md) has the same
+  runs with their output.
 - **Settings** (the platform's command with `,`, from any screen): the account first, then light,
   dark or the desktop's own mode, and the interface scale, both applied live, the screen a plain
   launch opens on, and what this machine has to run a sandbox with (the `tormoni` binary and guest
   root it found). The picks are kept across launches in a file beside the runs directory.
   `--theme` and `$TORMONI_THEME` outrank the saved palette, and `--open` the saved screen, for one
   launch.
+
+Every delete asks first, in a modal naming the run or the count it would remove, with Cancel and
+Delete. Escape and a press outside answer it the same way Cancel does, and cancelling a selection's
+question gives the selection back rather than dropping it.
+`deleting_one_run_asks_first_and_never_asks_about_a_live_one` and
+`a_selection_removes_what_was_selected_and_only_behind_the_confirm` hold both paths to it.
+
+**The account is the console's, and the console is a different product.** The app holds a device
+key; no sandbox and no screen needs the key or the account, and the run path never reads either.
 
 **Signing in pairs this device, and needs the console.** Sign in makes an ed25519 key and opens the
 console's connect page on its public half. The block then shows the key's fingerprint, in the

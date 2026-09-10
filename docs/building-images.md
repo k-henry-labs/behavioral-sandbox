@@ -1,8 +1,8 @@
 # Building guest images
 
 Tormoni uses minimal Alpine Linux guest images containing only the components
-required to run workloads and the static guest agent. Guest rootfs trees are built reproducibly
-without root privileges.
+required to run workloads and the static guest agent. Guest rootfs trees are built without root
+privileges, and `--verify` builds one twice and compares the two trees byte for byte.
 
 ## A tree to boot right away (`cargo xtask init`)
 
@@ -59,7 +59,7 @@ Guest rootfs trees are constructed on Linux without requiring `root` or Docker:
 
 The default sandbox image includes:
 - Alpine Linux base packages (musl libc, busybox, standard POSIX utilities).
-- Python 3 runtime for script execution.
+- The runtimes `GUEST_PACKAGES` names in `xtask/src/rootfs.rs`: `python3` and `nodejs`.
 - `guest-agent`: The static musl Rust binary baked at `/usr/local/bin/guest-agent`.
 
 ### Desktop guest closure (`artifacts/rootfs-desktop`)
@@ -67,9 +67,11 @@ The default sandbox image includes:
 The desktop sandbox image adds graphical and terminal session support for `--display` runs:
 - **`cage`**: A minimal Wayland kiosk compositor based on wlroots.
 - **`foot`**: A fast, lightweight Wayland terminal emulator.
-- **`seatd` & `udev`**: Seat management and device node creation inside the guest.
-- **`tormoni-session`**: A helper session supervisor that launches `seatd`, starts `cage`, and runs
-  `foot` in a Wayland kiosk session.
+- **`seatd` and `eudev`**: Seat management and device node creation inside the guest.
+- **`xkeyboard-config` and `font-dejavu`**: The keymaps xkbcommon reads, and one font. No Mesa
+  driver: the session renders with pixman.
+- **`tormoni-session`**: Not a package but a program the build writes to
+  `/usr/local/bin/tormoni-session`, which launches `seatd`, starts `cage`, and runs `foot` in it.
 
 ### ML guest closure (`artifacts/rootfs-ml`)
 
