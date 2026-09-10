@@ -160,16 +160,16 @@ stopping go through the `tormoni` binary beside the app, or under its bundle's `
 
 On macOS ARM64 the same verbs work, but this platform's libkrun builds no `--sound` and no guest
 input backend, and a display is viewed in `Tormoni` rather than a window of the helper's own; sign
-the binary again after any build (`cargo xtask sign`). macOS names the menu bar, the About, Hide
-and Quit items under it, and the Dock from the executable's file name (measured on this host,
-macOS 26.6.2, 2026-09-09), and the packaged executable is `Tormoni`. Cargo builds it as
-`tormoni-app`, because one target directory holds every binary and this filesystem folds case, so
-a `Tormoni` built beside `tormoni` would be one file; `cargo xtask bundle` is what renames it, and
-adds what a file name cannot carry: the identifier `ai.tormoni.app`, the icon, and the `tormoni`
-under `Contents/Resources`, entitled for the hypervisor before the bundle is sealed over it. So a
-bare `target/debug/tormoni-app` is named for the build, not the product: `cargo xtask app` builds
-the pair, assembles the bundle and starts the copy inside it, with its output still on the
-terminal. `--gpu` boots here and the
+the binary again after any build (`cargo xtask sign`). **A bundle is named by its `Info.plist`,
+not by the file inside it**, so the executable stays `tormoni-app`, the name cargo writes, and
+`CFBundleName` is what the menu bar and the Dock read (measured on this host, macOS 26.6.2,
+2026-09-09: a bundle whose executable was `tormoni-app` and whose `CFBundleName` was `Zephyr` read
+`Zephyr` in both). The items under that title are the exception, since the toolkit builds them
+from the process name, which the app sets at startup. `cargo xtask bundle` adds what a bare binary
+carries none of: that plist, the identifier `ai.tormoni.app`, the icon, and the `tormoni` under
+`Contents/Resources`, entitled for the hypervisor before the bundle is sealed over it. A bare
+`target/debug/tormoni-app` has no plist, so it is named for the build: `cargo xtask app` builds the
+pair, assembles the bundle and starts the copy inside it, with its output still on the terminal. `--gpu` boots here and the
 guest sees `card0` and `renderD128`; this host's virglrenderer carries no Venus, so the offer ends
 at the device. The [Architecture](./architecture.md) page carries the fuller status and the
 measurements.

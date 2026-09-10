@@ -236,6 +236,7 @@ fn landing(flag: Option<OpenScreen>, saved: Option<OpenScreen>) -> OpenScreen {
 }
 
 fn main() -> ExitCode {
+    chrome::name_the_application();
     let cli = Cli::parse();
     // Before the adapter probe: a name this cannot resolve is a typo in an argument, and
     // answering it should not cost a GPU handle first.

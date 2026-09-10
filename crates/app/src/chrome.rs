@@ -19,8 +19,24 @@
 //!   close button on every window; a tiling compositor draws no titlebar at all, so off macOS
 //!   [`DRAWS_ITS_OWN_QUIT`] puts one at the end of the head. This is by platform, not by
 //!   compositor: a Linux desktop with server-side decorations shows both.
+//! - **A bundle names the window, but not the items under it.** `CFBundleName` is what the menu
+//!   bar's title and the Dock read, so the executable inside a bundle can be called anything.
+//!   The About, Hide and Quit items are not from the plist: the toolkit builds them from
+//!   `NSProcessInfo`, which defaults to the executable's file name, so
+//!   [`name_the_application`] sets that to [`crate::NAME`] before the event loop.
 //! - **AppKit is Objective-C**, which is why this module is the app's one `unsafe`, as libkrun's C
 //!   is `tormoni-krun`'s. Everything read back out is the platform's own.
+
+/// Names this process [`crate::NAME`], which is what the toolkit builds the About, Hide and Quit
+/// items from.
+///
+/// **Before the event loop**: those items are built as the application finishes launching, from
+/// the name as it reads then, so a later call renames nothing already drawn. This does not touch
+/// the menu bar's title or the Dock, which a bundle's `CFBundleName` names.
+pub(crate) fn name_the_application() {
+    #[cfg(target_os = "macos")]
+    macos::name_the_process(crate::NAME);
+}
 
 /// The room the window's own buttons take at the top-left corner, before the first control,
 /// where the platform puts them on that line at all. [`App::lights`](crate::App::lights) is what
@@ -66,7 +82,7 @@ mod macos {
     use iced::window::raw_window_handle::RawWindowHandle;
     use objc2::rc::Retained;
     use objc2_app_kit::{NSToolbar, NSView, NSWindow, NSWindowStyleMask, NSWindowToolbarStyle};
-    use objc2_foundation::MainThreadMarker;
+    use objc2_foundation::{MainThreadMarker, NSProcessInfo, NSString};
 
     /// Gives the window an empty toolbar in the unified style, the shape that makes AppKit lay the
     /// titlebar out at a head's height. A window that cannot be reached is left as it is.
@@ -105,6 +121,17 @@ mod macos {
             }
         }
         full
+    }
+
+    /// Sets what `NSProcessInfo` answers with, which is the executable's file name until
+    /// something does, and so what the items under the bar's title are built from.
+    pub(super) fn name_the_process(name: &str) {
+        // SAFETY: a setter on this process's own `NSProcessInfo`, handed a string it copies.
+        // Called before the event loop, so nothing is reading the name while it is written.
+        #[allow(unsafe_code)]
+        unsafe {
+            NSProcessInfo::processInfo().setProcessName(&NSString::from_str(name));
+        }
     }
 
     /// The `NSWindow` behind an iced window, or `None` where the handle is not AppKit's.

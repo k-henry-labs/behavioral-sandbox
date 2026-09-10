@@ -120,9 +120,9 @@ list of packages. Therefore a stale `-p` fails the gate, not the terminal of a r
 
 **Two binaries ship**, from one workspace, in the shape Ollama ships its own: `tormoni` (the CLI,
 which also carries the hidden helper subcommand that becomes a VM) and `Tormoni` (the GUI, package
-`tormoni-app`, the notebook, built under that name and shipped as `Tormoni`: cargo writes every
-binary into one directory and macOS folds case, so the two cannot differ by case alone). `cargo
-xtask dist` packages them: on macOS as `Tormoni.app`, with
+`tormoni-app`, the notebook; its two names cannot differ by case alone, since cargo writes every
+binary into one directory and macOS folds case, and the bundle's `Info.plist` is what calls it
+`Tormoni`). `cargo xtask dist` packages them: on macOS as `Tormoni.app`, with
 `Contents/MacOS/Tormoni`, `Contents/Resources/tormoni` and the guest tree beside it, which
 `install.sh` puts in `/Applications` and symlinks onto `/usr/local/bin/tormoni`; on Linux as a
 tarball of `bin/`, a desktop entry, the icon and the tree under `share/`. Neither is a daemon. A VM

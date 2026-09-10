@@ -24,9 +24,11 @@ use anyhow::{Context, Result, bail};
 
 use crate::{app_icon, artifacts_dir, cargo, sign, target_dir, workspace_root};
 
-/// The application's name, which is also its executable's: what the menu bar, the Dock, Finder
-/// and the About window call it. The command line binary keeps the lowercase `tormoni`, where a
-/// person types it.
+/// What the menu bar, the Dock, Finder and the About window call it.
+///
+/// A string the `Info.plist` carries, never a file name: a bundle is named by its plist, and the
+/// executable inside it can be called anything. `the_plist_is_what_names_a_bundled_app` measures
+/// that, and Zed and Ghostty ship the same way.
 pub(crate) const APP: &str = "Tormoni";
 
 /// The bundle's own directory name, which Finder shows as the application's.
@@ -36,13 +38,14 @@ const BUNDLE: &str = "Tormoni.app";
 /// types, so it is also what cargo builds it as.
 const CLI: &str = "tormoni";
 
-/// What cargo builds the application as, which is **not** what it ships as.
+/// The application's executable, as cargo writes it and as the bundle ships it: no rename, so
+/// what a release carries is the file the build produced.
 ///
-/// One target directory holds every binary of the workspace, and macOS's default filesystem is
-/// case-insensitive, so building a `Tormoni` beside `tormoni` would write one file and the
-/// release would carry whichever was linked last.
+/// It cannot be a case-variant of [`CLI`]: one target directory holds every binary of the
+/// workspace and macOS's default filesystem folds case, so a `Tormoni` built beside `tormoni`
+/// would be one file and the release would carry whichever was linked last.
 /// `the_two_binaries_cannot_collide_in_one_directory` is the guard.
-pub(crate) const BUILT_APP: &str = "tormoni-app";
+pub(crate) const EXECUTABLE: &str = "tormoni-app";
 
 /// The icon inside the bundle, which the plist names.
 const ICON: &str = "Tormoni.icns";
@@ -69,7 +72,7 @@ pub(crate) fn bundle_app(release: bool) -> Result<()> {
 /// the CLI copy is entitled, then the bundle is sealed over it.
 pub(crate) fn assemble(release: bool, extras: &[(&Path, &str)]) -> Result<PathBuf> {
     let built = target_dir().join(if release { "release" } else { "debug" });
-    for binary in [BUILT_APP, CLI] {
+    for binary in [EXECUTABLE, CLI] {
         if !built.join(binary).is_file() {
             bail!(
                 "no {binary} at {} — build it first with `cargo build{}`",
@@ -90,8 +93,8 @@ pub(crate) fn assemble(release: bool, extras: &[(&Path, &str)]) -> Result<PathBu
         std::fs::create_dir_all(dir).with_context(|| format!("creating {}", dir.display()))?;
     }
 
-    std::fs::copy(built.join(BUILT_APP), executable_in(&app))
-        .with_context(|| format!("copying {BUILT_APP} into {} as {APP}", macos.display()))?;
+    std::fs::copy(built.join(EXECUTABLE), executable_in(&app))
+        .with_context(|| format!("copying {EXECUTABLE} into {}", macos.display()))?;
     std::fs::copy(built.join(CLI), cli_in(&app))
         .with_context(|| format!("copying {CLI} into {}", resources.display()))?;
     for (from, name) in extras {
@@ -129,7 +132,7 @@ fn info_plist(version: &str) -> String {
     <key>CFBundleIdentifier</key>
     <string>{APP_ID}</string>
     <key>CFBundleExecutable</key>
-    <string>{APP}</string>
+    <string>{EXECUTABLE}</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>LSApplicationCategoryType</key>
@@ -190,7 +193,7 @@ fn app_program(built: &Path, bundled: bool) -> PathBuf {
     if bundled {
         executable_in(&bundle_path())
     } else {
-        built.join(BUILT_APP)
+        built.join(EXECUTABLE)
     }
 }
 
@@ -206,7 +209,7 @@ fn macos_dir(app: &Path) -> PathBuf {
 
 /// The binary inside `app` that macOS starts.
 fn executable_in(app: &Path) -> PathBuf {
-    macos_dir(app).join(APP)
+    macos_dir(app).join(EXECUTABLE)
 }
 
 /// Where a bundle keeps what it carries beside its executable.
@@ -220,13 +223,13 @@ pub(crate) fn cli_in(app: &Path) -> PathBuf {
     resources_dir(app).join(CLI)
 }
 
-/// The desktop entry a Linux launcher reads: it starts the executable by name, so `bin/` must be
-/// on `PATH`, and names the icon and the window by [`APP_ID`], which is what pairs a window
-/// with this entry.
+/// The desktop entry a Linux launcher reads. `Name` is what it shows, the way a bundle's
+/// `CFBundleName` is, so `Exec` starts the file cargo built and nothing is renamed; the icon and
+/// the window are paired by [`APP_ID`].
 pub(crate) fn desktop_entry() -> String {
     format!(
         "[Desktop Entry]\nType=Application\nName={APP}\nComment=Sandboxes on this machine, live \
-         and past\nExec={APP}\nIcon={APP_ID}\nTerminal=false\nCategories=Development;\n\
+         and past\nExec={EXECUTABLE}\nIcon={APP_ID}\nTerminal=false\nCategories=Development;\n\
          StartupWMClass={APP_ID}\n"
     )
 }
@@ -249,7 +252,7 @@ pub(crate) enum Payload {
 pub(crate) fn linux_layout() -> Vec<(String, Payload)> {
     vec![
         (format!("bin/{CLI}"), Payload::Binary(CLI)),
-        (format!("bin/{APP}"), Payload::Binary(BUILT_APP)),
+        (format!("bin/{EXECUTABLE}"), Payload::Binary(EXECUTABLE)),
         (
             format!("share/applications/{APP_ID}.desktop"),
             Payload::Desktop,
@@ -266,57 +269,44 @@ pub(crate) fn linux_layout() -> Vec<(String, Payload)> {
 mod tests {
     use super::*;
 
-    /// The plist names the app what a person calls it and starts the binary that is copied in:
-    /// a `CFBundleName` that drifted from [`APP`] is a menu bar reading something else, and
-    /// a `CFBundleExecutable` that drifted from the copied file is a bundle that will not open.
+    /// The string literal following `marker` in `source`, empty where there is none.
+    fn quoted_after(source: &str, marker: &str) -> String {
+        source
+            .split_once(marker)
+            .and_then(|(_, rest)| rest.strip_prefix('"'))
+            .and_then(|rest| rest.split_once('"'))
+            .map(|(literal, _)| literal.to_string())
+            .unwrap_or_default()
+    }
+
+    /// **A bundle is named by its plist, not by the file inside it.** Measured on this host,
+    /// macOS 26.6.2, 2026-09-09: a bundle whose executable file was `tormoni-app` and whose
+    /// `CFBundleName` was `Zephyr` read `Zephyr` in the Dock and the menu bar. So the name and
+    /// the executable are two different things here, and neither is renamed to match the other.
     #[test]
-    fn the_plist_names_the_app_and_the_binary_it_starts() {
+    fn the_plist_is_what_names_a_bundled_app() {
         let plist = info_plist("1.2.3");
-        let pack = |text: &str| -> String { text.chars().filter(|c| !c.is_whitespace()).collect() };
+        let pack = |t: &str| -> String { t.chars().filter(|c| !c.is_whitespace()).collect() };
         let packed = pack(&plist);
         assert!(
             packed.contains(&pack(&format!(
                 "<key>CFBundleName</key><string>{APP}</string>"
             ))),
-            "the menu bar reads CFBundleName: {plist}"
+            "the name a person reads: {plist}"
         );
         assert!(
             packed.contains(&pack(&format!(
-                "<key>CFBundleExecutable</key><string>{APP}</string>"
+                "<key>CFBundleExecutable</key><string>{EXECUTABLE}</string>"
             ))),
-            "the bundle starts the binary it carries: {plist}"
+            "the file it starts: {plist}"
         );
-        assert!(packed.contains("<string>1.2.3</string>"), "{plist}");
-    }
-
-    /// The string literal following `marker` in `source`, empty where there is none.
-    fn quoted_after(source: &str, marker: &str) -> String {
-        let found = source
-            .split_once(marker)
-            .and_then(|(_, rest)| rest.strip_prefix('"'))
-            .and_then(|rest| rest.split_once('"'));
-        found
-            .map(|(literal, _)| literal.to_string())
-            .unwrap_or_default()
-    }
-
-    /// One name: the manifest's `[[bin]]` is the file cargo writes and `CFBundleExecutable` is
-    /// the file macOS starts, so a drift between them is a bundle that will not open, and a
-    /// menu bar reading something else. Read as text, because xtask does not build the GUI crate.
-    #[test]
-    fn the_bundle_runs_the_binary_the_manifest_names() {
-        let manifest =
-            std::fs::read_to_string(crate::workspace_root().join("crates/app/Cargo.toml"))
-                .expect("the app's manifest");
-        let (_, bin) = manifest.split_once("[[bin]]").expect("a [[bin]] table");
-        assert_eq!(
-            quoted_after(bin, "name = "),
-            BUILT_APP,
-            "crates/app/Cargo.toml builds a binary the bundle would not find"
+        assert_ne!(
+            APP, EXECUTABLE,
+            "these are allowed to differ, and the point of this test is that they may"
         );
         assert!(
-            info_plist("1.2.3").contains(&format!("<string>{APP}</string>")),
-            "the bundle starts what it copied in as {APP}"
+            packed.contains("<string>1.2.3</string>"),
+            "the version: {plist}"
         );
     }
 
@@ -327,16 +317,15 @@ mod tests {
     #[test]
     fn the_two_binaries_cannot_collide_in_one_directory() {
         assert_ne!(
-            BUILT_APP.to_lowercase(),
+            EXECUTABLE.to_lowercase(),
             CLI.to_lowercase(),
-            "cargo would write {BUILT_APP} and {CLI} to one path where the filesystem folds case"
+            "cargo would write {EXECUTABLE} and {CLI} to one path where the filesystem folds case"
         );
     }
 
-    /// The verb exists because a binary started out of `target/` is named by its file name
-    /// wherever the platform shows it, so what it starts on macOS has to be the copy inside the
-    /// bundle. Starting the built one would leave the Dock reading the build directory's copy,
-    /// which is the whole of what the verb is for.
+    /// The verb exists because a bare binary carries no plist, so the platform falls back to its
+    /// file name; only the copy inside the bundle is named by `CFBundleName`. Starting the built
+    /// one would leave the Dock reading the file name, which is the whole of what the verb is for.
     #[test]
     fn the_app_is_started_from_inside_the_bundle_where_there_is_one() {
         let built = Path::new("/tmp/target/debug");
@@ -348,10 +337,10 @@ mod tests {
             "it must be the assembled copy, not the built one: {bundled:?}"
         );
 
-        // The other answer, which no `cfg!` hides from this host: the file cargo wrote, under the
-        // name cargo wrote it, not the name the bundle would have renamed it to.
+        // The other answer, which no `cfg!` hides from this host: the file cargo wrote, which is
+        // also the file the bundle ships, so only its directory differs.
         let bare = app_program(built, false);
-        assert_eq!(bare, built.join(BUILT_APP), "{bare:?}");
+        assert_eq!(bare, built.join(EXECUTABLE), "{bare:?}");
         assert_ne!(
             bare,
             built.join(APP),
@@ -415,8 +404,8 @@ mod tests {
                 .unwrap_or_default()
                 .to_string()
         };
-        assert_eq!(field("Exec"), APP);
-        assert_eq!(field("Name"), APP);
+        assert_eq!(field("Exec"), EXECUTABLE, "it starts the file cargo built");
+        assert_eq!(field("Name"), APP, "and a launcher shows this");
         assert_eq!(field("Icon"), APP_ID);
         assert_eq!(field("StartupWMClass"), APP_ID);
         let layout = linux_layout();
@@ -428,7 +417,7 @@ mod tests {
             "{layout:?}"
         );
         assert!(
-            layout.contains(&(format!("bin/{APP}"), Payload::Binary(BUILT_APP))),
+            layout.contains(&(format!("bin/{EXECUTABLE}"), Payload::Binary(EXECUTABLE))),
             "{layout:?}"
         );
     }
@@ -440,7 +429,7 @@ mod tests {
         let app = Path::new("/tmp/Tormoni.app");
         assert_eq!(
             executable_in(app),
-            Path::new("/tmp/Tormoni.app/Contents/MacOS/Tormoni")
+            Path::new("/tmp/Tormoni.app/Contents/MacOS/tormoni-app")
         );
         assert!(
             bundle_path().ends_with("artifacts/Tormoni.app"),

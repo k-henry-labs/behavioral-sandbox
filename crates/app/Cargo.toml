@@ -7,7 +7,7 @@ rust-version.workspace = true
 repository.workspace = true
 authors.workspace = true
 publish = false
-description = "The tormoni GUI application (`Tormoni`): the notebook."
+description = "The Tormoni GUI application (`Tormoni`): the notebook."
 
 [[bin]]
 name = "tormoni-app"
@@ -39,7 +39,7 @@ rustix = { workspace = true, features = ["time"] }
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.5"
 objc2-app-kit = { version = "0.2", features = ["NSResponder", "NSToolbar", "NSView", "NSWindow"] }
-objc2-foundation = "0.2"
+objc2-foundation = { version = "0.2", features = ["NSProcessInfo", "NSString"] }
 
 [dev-dependencies]
 tormoni-test-support = { path = "../test-support" }
