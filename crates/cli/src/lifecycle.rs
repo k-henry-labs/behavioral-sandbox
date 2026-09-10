@@ -299,7 +299,7 @@ fn settle_gone_with(
 ///
 /// The three verbs that take an `ID|NAME` share it, so a run that `show` finds is one `export`
 /// and `rm` find, and the refusal is one sentence rather than three that can drift apart.
-fn find_run(key: &str) -> Result<(Store, tormoni_record::Record), String> {
+pub(crate) fn find_run(key: &str) -> Result<(Store, tormoni_record::Record), String> {
     let store = Store::open().map_err(|e| e.to_string())?;
     let record = store.find(key).map_err(|e| e.to_string())?.ok_or_else(|| {
         format!("no run named or numbered {key:?} (`tormoni ls --all` lists them)")

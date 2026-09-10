@@ -25,6 +25,8 @@ tormoni-input = { path = "../input" }
 tormoni-record = { path = "../record" }
 tormoni-supervisor = { path = "../supervisor" }
 clap = { workspace = true }
+# The cloud's answers and its RFC 9457 refusals. The lanes are JSON; nothing else here parses any.
+serde_json = { workspace = true }
 # Raw mode and window size for the interactive shell, the self-signal a VM stops itself with, and
 # the readiness wait on a non-blocking stdin. Safe wrappers only.
 rustix = { workspace = true, features = ["event", "pipe", "process", "termios", "time"] }

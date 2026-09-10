@@ -11,6 +11,7 @@
 #![forbid(unsafe_code)]
 
 mod agent;
+mod cloud;
 mod frames;
 mod input;
 mod lifecycle;
@@ -76,6 +77,12 @@ enum Cmd {
     Export(lifecycle::ExportArgs),
     /// Remove one run's record and everything it captured.
     Rm(lifecycle::RmArgs),
+    /// Send runs to the console and read back what it holds.
+    ///
+    /// A namespace rather than more verbs: `ls`, `show` and `rm` above name what THIS machine
+    /// holds, and the same words under `cloud` name what the console does.
+    #[command(subcommand_required = true, arg_required_else_help = true)]
+    Cloud(cloud::CloudArgs),
     /// Become a virtual machine. Not a verb: the supervisor re-executes this binary with it.
     ///
     /// Hidden rather than removed from the parser, so a boot that fails can be reproduced by hand
@@ -100,6 +107,7 @@ fn main() -> ExitCode {
         Cmd::Show(args) => lifecycle::show(&args),
         Cmd::Export(args) => lifecycle::export(&args),
         Cmd::Rm(args) => lifecycle::rm(&args),
+        Cmd::Cloud(args) => cloud::run(&args),
         Cmd::Vmm(args) => vmm::run(&args),
         Cmd::Frames(args) => frames::run(&args),
     }

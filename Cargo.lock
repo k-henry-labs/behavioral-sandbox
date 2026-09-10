@@ -2964,6 +2964,7 @@ version = "0.0.1"
 dependencies = [
  "clap",
  "rustix 1.1.4",
+ "serde_json",
  "softbuffer",
  "tormoni-channel",
  "tormoni-input",
