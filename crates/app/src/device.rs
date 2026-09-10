@@ -203,10 +203,28 @@ pub(crate) fn save_token(dir: &Path, token: &str) -> Result<(), String> {
     write(&dir.join(TOKEN_FILE), token.as_bytes(), 0o600)
 }
 
+/// Takes the token off this disk and hands it back, so a caller can give it up on the console
+/// after the file it was in has stopped being one.
+///
+/// Removed BEFORE it is returned: the caller's next act is a new key, and a token left beside
+/// one it was not minted for is a credential nothing on this machine can account for.
+pub(crate) fn take_token(dir: &Path) -> Option<String> {
+    let path = kept(dir, TOKEN_FILE)?;
+    let mut held = std::fs::read_to_string(&path).ok()?;
+    let _ = std::fs::remove_file(&path);
+    let token = held.trim().to_string();
+    // The read's own buffer is a second copy of the credential, and trimming made a third.
+    // `load` wipes its own the same way.
+    held.zeroize();
+    (!token.is_empty()).then_some(token)
+}
+
 /// Destroys everything this device was signed in with: the token and the key that claimed it.
 pub(crate) fn forget(dir: &Path) -> Result<(), String> {
     for name in [TOKEN_FILE, KEY_FILE, PUB_FILE] {
-        let path = dir.join(name);
+        let Some(path) = kept(dir, name) else {
+            return Ok(());
+        };
         match std::fs::remove_file(&path) {
             Ok(()) => {}
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
@@ -214,6 +232,14 @@ pub(crate) fn forget(dir: &Path) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// Where `name` sits inside `dir`, and nothing where there is no directory to name.
+///
+/// An empty path is a machine with nowhere to keep a key, and joining onto one names a file in
+/// the directory the app was started from, which is not this app's to read or to remove.
+fn kept(dir: &Path, name: &str) -> Option<PathBuf> {
+    (!dir.as_os_str().is_empty()).then(|| dir.join(name))
 }
 
 /// Creates `dir` at `0700`: what is under it is this person's key.
@@ -431,6 +457,44 @@ mod tests {
             assert!(!dir.join(name).exists(), "{name} survived a sign-out");
         }
         forget(&dir).expect("forgetting twice is not an error");
+    }
+
+    /// A token is taken off the disk before it is handed back, so a sign-in that makes a new
+    /// key never leaves the old key's token beside it.
+    #[test]
+    fn a_taken_token_leaves_the_disk_with_it() {
+        let scratch = ScratchDir::created("device-take-token");
+        let dir = scratch.path().join("device");
+        create(&dir).expect("a key");
+        assert_eq!(take_token(&dir), None, "nothing was claimed yet");
+
+        save_token(&dir, "tor_example\n").expect("saved");
+        assert_eq!(take_token(&dir).as_deref(), Some("tor_example"));
+        assert!(
+            !dir.join(TOKEN_FILE).exists(),
+            "the token outlived the take"
+        );
+        assert_eq!(take_token(&dir), None, "and there is only ever one");
+        assert!(
+            dir.join(KEY_FILE).exists(),
+            "the key is not the token's to remove"
+        );
+    }
+
+    /// A machine with no HOME keeps its key nowhere, and `Path::new("").join("token")` is
+    /// `token` in whatever directory the app was started from. Neither the take nor the wipe
+    /// may name one of those.
+    #[test]
+    fn nowhere_to_keep_a_key_names_nothing_in_the_current_directory() {
+        for name in [KEY_FILE, PUB_FILE, TOKEN_FILE] {
+            assert_eq!(kept(Path::new(""), name), None, "{name}");
+            assert_eq!(
+                kept(Path::new("/x/device"), name),
+                Some(PathBuf::from(format!("/x/device/{name}")))
+            );
+        }
+        assert_eq!(take_token(Path::new("")), None);
+        forget(Path::new("")).expect("there is nothing to forget");
     }
 
     /// The bytes behind a hex string, for the published vectors above.

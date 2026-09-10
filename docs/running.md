@@ -153,8 +153,19 @@ console's connect page on its public half. The block then shows the key's finger
 `/connect` link somebody else sent would fail. Press Connect there and the app collects a `tor_`
 token by signing for the key it holds, spends it on the console's `/v1/account`, and shows the
 person over the address the account is named by. Upgrade, Manage and Devices open the console's
-plans, account and keys pages; Devices is where this device is revoked. Sign out destroys the token
-and the key together.
+plans, account and keys pages; Devices is where a device this app never signed out of is revoked.
+
+**Sign out takes the key and the token off this disk, and then hands the token back.** The
+console's `DELETE /v1/device` revokes the device that token was minted for, so the row leaves the
+Devices list rather than staying live for an app that signed out. The wipe comes first and does
+not depend on the answer: a console that cannot be reached leaves a row for a key nobody holds,
+and the window says which. Both halves of the wipe finish before the press returns, because Sign
+in is on the screen from that moment and writes a new key into the same directory, so a wipe still
+queued behind that press would delete the key the sign-in had just made
+(`signing_out_empties_the_key_directory_before_it_asks_the_console_anything`). Each Sign in pairs
+a new key, so a token a launch that never signed out left behind is handed back the same way
+(`a_taken_token_leaves_the_disk_with_it`), and the console lists this machine once rather than once
+per sign-in.
 
 There is no token to type and no offline path: with the console unreachable the block says that and
 nothing else. A key collects a token once, so each Sign in makes a new one, and a device nobody

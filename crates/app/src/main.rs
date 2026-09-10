@@ -962,6 +962,10 @@ pub(crate) enum Message {
     SignedIn(Result<account::Identity, String>),
     /// Give up the account this window holds.
     SignOut,
+    /// The token a sign-out gave up was handed back to the console, or was not.
+    SignedOut(Result<(), String>),
+    /// A token an earlier launch left behind was handed back, or was not.
+    Retired(Result<(), String>),
     /// Open one of the console's pages in the browser: Manage and Upgrade.
     Console(account::Page),
     /// Something the operator should see in the window rather than on a stderr they may not have.
@@ -1284,7 +1288,25 @@ impl App {
         let url = account::connect_url(&self.console, &device_name, &pairing.line);
         self.account = account::Account::Pairing(pairing);
         account::open_url(&url)?;
-        Ok(self.ask_again(0))
+        // Last, after every step that can fail: `?` above would drop this task, and the token
+        // it took is off the disk by then, so a leftover would be neither held nor given back.
+        Ok(Task::batch([self.retire_leftover(), self.ask_again(0)]))
+    }
+
+    /// Hands back a token a launch that never signed out left behind, so signing in again makes
+    /// this machine one device on the console rather than one more.
+    ///
+    /// Nothing about the sign-in waits on it, and nothing it does reaches the key directory
+    /// again: the token is off the disk before the task exists.
+    fn retire_leftover(&self) -> Task<Message> {
+        let Some(token) = device::take_token(&self.device_dir) else {
+            return Task::none();
+        };
+        let console = self.console.clone();
+        Task::perform(
+            async move { account::retire(&console, token) },
+            Message::Retired,
+        )
     }
 
     /// Asks the console again in `after` seconds, from the second the last claim signed at.
@@ -1550,11 +1572,46 @@ impl App {
                 Task::none()
             }
             Message::SignOut => {
-                self.status = match device::forget(&self.device_dir) {
-                    Ok(()) => Some("signed out, and this device's key is gone".to_string()),
-                    Err(why) => Some(why),
-                };
+                // Both halves of the wipe happen HERE, before this returns, and not in the task
+                // below: Sign in is on the screen the moment the account goes, and it writes a
+                // new key into this same directory. A wipe still queued behind that press would
+                // delete the key the sign-in had just made.
+                let held = device::take_token(&self.device_dir);
+                // A `Some` here means the token file is already gone, so a wipe that fails past
+                // this leaves a SPENT key and never a credential: its one claim is used, and no
+                // token names it any more. The token is handed back either way.
+                let wiped = device::forget(&self.device_dir);
                 self.account = account::Account::SignedOut;
+                self.status = match (wiped, &held) {
+                    (Err(why), _) => Some(why),
+                    (Ok(()), None) => Some("signed out, and this device's key is gone".to_string()),
+                    (Ok(()), Some(_)) => None,
+                };
+                let Some(token) = held else {
+                    return Task::none();
+                };
+                let console = self.console.clone();
+                Task::perform(
+                    async move { account::retire(&console, token) },
+                    Message::SignedOut,
+                )
+            }
+            Message::SignedOut(Ok(())) => {
+                self.status =
+                    Some("signed out, and the console no longer lists this device".to_string());
+                Task::none()
+            }
+            Message::SignedOut(Err(why)) => {
+                self.status = Some(format!(
+                    "signed out on this machine, but the console still lists this device: {why}"
+                ));
+                Task::none()
+            }
+            Message::Retired(Ok(())) => Task::none(),
+            Message::Retired(Err(why)) => {
+                self.status = Some(format!(
+                    "the device an earlier sign-in left is still listed on the console: {why}"
+                ));
                 Task::none()
             }
             Message::Console(page) => self.visit(page),
@@ -2067,11 +2124,63 @@ mod tests {
             Some("signed in as someone@example.com")
         );
 
+        // Pressing Sign out gives up this window's account there and then; what the console
+        // says about the device arrives afterwards, as its own message.
         let _ = app.update(Message::SignOut);
         assert_eq!(app.account, account::Account::SignedOut);
+
+        let _ = app.update(Message::SignedOut(Ok(())));
         assert_eq!(
             app.status.as_deref(),
-            Some("signed out, and this device's key is gone")
+            Some("signed out, and the console no longer lists this device")
+        );
+    }
+
+    /// **The wipe is done before Sign out returns, not by the task it starts.** Sign in is on
+    /// the screen from that moment and writes a new key into this same directory, so a wipe
+    /// still queued behind that press would delete the key the sign-in had just made.
+    #[test]
+    fn signing_out_empties_the_key_directory_before_it_asks_the_console_anything() {
+        let scratch = tormoni_test_support::ScratchDir::created("app-sign-out");
+        let mut app = app_with(vec![], &[]);
+        app.device_dir = scratch.path().join("device");
+        device::create(&app.device_dir).expect("a key");
+        device::save_token(&app.device_dir, "tor_secret").expect("a token");
+        let _ = app.update(Message::SignedIn(Ok(account::Identity {
+            email: "someone@example.com".to_string(),
+            display_name: None,
+        })));
+
+        // The task the press returns is dropped unrun, which is what a Sign in landing first
+        // would do to it.
+        drop(app.update(Message::SignOut));
+        assert_eq!(app.account, account::Account::SignedOut);
+        for name in ["token", "device.key", "device.pub"] {
+            assert!(
+                !app.device_dir.join(name).exists(),
+                "{name} outlived the press"
+            );
+        }
+    }
+
+    /// A sign-out the console never heard still signs this window out, and says what is left
+    /// listed rather than reading as a failure to sign out.
+    #[test]
+    fn a_sign_out_the_console_refused_still_leaves_the_window_signed_out() {
+        let mut app = app_with(vec![], &[]);
+        let _ = app.update(Message::SignedIn(Ok(account::Identity {
+            email: "someone@example.com".to_string(),
+            display_name: None,
+        })));
+        let _ = app.update(Message::SignOut);
+        let _ = app.update(Message::SignedOut(Err("it answered 503".to_string())));
+        assert_eq!(app.account, account::Account::SignedOut);
+        assert!(
+            app.status
+                .as_deref()
+                .is_some_and(|s| s.contains("still lists this device")),
+            "{:?}",
+            app.status
         );
     }
 

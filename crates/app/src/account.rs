@@ -246,6 +246,10 @@ fn browser(url: &str) -> Command {
 /// The console's lane that says whose a token is.
 const ACCOUNT_LANE: &str = "/v1/account";
 
+/// The lane a device gives its token up on. It names no device and carries no body: the bearer
+/// IS the device, so signing out is one request with nothing in it.
+const SIGN_OUT_LANE: &str = "/v1/device";
+
 /// The lane a paired device collects its token from, which takes no bearer because the caller
 /// has none yet. `contract/wire-contract.json` names it `device_claim.lane`.
 const CLAIM_LANE: &str = "/v1/device/claim";
@@ -284,7 +288,36 @@ const PATIENCE: &str = "10";
 
 /// Signs in to `console` with `token`: asks its account lane whose it is.
 pub(crate) fn begin(console: &str, token: &Token) -> Result<Identity, String> {
-    let (mut cmd, config) = request(console, token)?;
+    let (cmd, config) = request(console, ACCOUNT_LANE, "GET", token)?;
+    answer(&spoken(cmd, config)?)
+}
+
+/// Gives `token` back to `console`, which revokes it and the device it was minted for.
+///
+/// The caller has already taken it off this disk, and that order is the point: nothing here
+/// decides whether this machine keeps a credential, so a console that cannot be reached leaves
+/// a row for a key nobody holds rather than a key nobody revoked.
+pub(crate) fn retire(console: &str, token: String) -> Result<(), String> {
+    let token = Token::from(token);
+    let (cmd, config) = request(console, SIGN_OUT_LANE, "DELETE", &token)?;
+    handed_back(&spoken(cmd, config)?)
+}
+
+/// What the sign-out lane answered, by status.
+fn handed_back(out: &str) -> Result<(), String> {
+    let (body, status) = out
+        .rsplit_once('\n')
+        .ok_or_else(|| "curl wrote no status".to_string())?;
+    match status.trim() {
+        // A token the console has already stopped honouring is the state a sign-out asks for,
+        // so 401 is this request's own answer arriving a second time, not a failure.
+        "204" | "401" => Ok(()),
+        other => Err(format!("it answered {other}{}", said(body))),
+    }
+}
+
+/// Runs `cmd`, feeding `config` to its stdin, and hands back what it wrote.
+fn spoken(mut cmd: Command, config: String) -> Result<String, String> {
     let mut child = cmd
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -302,7 +335,7 @@ pub(crate) fn begin(console: &str, token: &Token) -> Result<Identity, String> {
     if !out.status.success() {
         return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
     }
-    answer(&String::from_utf8_lossy(&out.stdout))
+    Ok(String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
 /// How a claim went.
@@ -447,9 +480,14 @@ fn now_seconds() -> i64 {
         .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(0))
 }
 
-/// The `curl` that asks `console` whose `token` is, and the config it reads from its stdin,
-/// which is where the bearer travels: nothing in the command's own arguments is secret.
-fn request(console: &str, token: &Token) -> Result<(Command, String), String> {
+/// The `curl` that reaches `lane` as `token`, and the config it reads from its stdin, which is
+/// where the bearer travels: nothing in the command's own arguments is secret.
+fn request(
+    console: &str,
+    lane: &str,
+    method: &str,
+    token: &Token,
+) -> Result<(Command, String), String> {
     let token = token.checked()?;
     let mut cmd = Command::new("curl");
     cmd.args([
@@ -457,6 +495,8 @@ fn request(console: &str, token: &Token) -> Result<(Command, String), String> {
         "--show-error",
         "--max-time",
         PATIENCE,
+        "--request",
+        method,
         "--config",
         "-",
         "--header",
@@ -464,7 +504,7 @@ fn request(console: &str, token: &Token) -> Result<(Command, String), String> {
         "--write-out",
         "\n%{http_code}",
     ])
-    .arg(format!("{console}{ACCOUNT_LANE}"));
+    .arg(format!("{console}{lane}"));
     Ok((cmd, format!("header = \"Authorization: Bearer {token}\"\n")))
 }
 
@@ -797,17 +837,80 @@ mod tests {
     #[test]
     fn the_request_carries_the_token_on_stdin_and_never_in_argv() {
         let token = Token::from("tor_secret".to_string());
-        let (cmd, config) = request("http://localhost:3000", &token).expect("a request");
+        let (cmd, config) =
+            request("http://localhost:3000", ACCOUNT_LANE, "GET", &token).expect("a request");
         assert_eq!(cmd.get_program(), "curl");
-        let argv = cmd
-            .get_args()
+        assert!(!argv(&cmd).contains("tor_secret"), "{}", argv(&cmd));
+        assert!(argv(&cmd).contains("--config -"), "{}", argv(&cmd));
+        assert!(
+            argv(&cmd).ends_with("http://localhost:3000/v1/account"),
+            "{}",
+            argv(&cmd)
+        );
+        assert_eq!(config, "header = \"Authorization: Bearer tor_secret\"\n");
+    }
+
+    /// A curl with no `--data` sends a GET whatever the method is meant to be, so the sign-out
+    /// carries `--request DELETE` or it reaches the lane as a read the lane refuses.
+    #[test]
+    fn the_sign_out_asks_the_device_lane_to_delete_and_names_no_device() {
+        let token = Token::from("tor_secret".to_string());
+        let (cmd, config) =
+            request("http://localhost:3000", SIGN_OUT_LANE, "DELETE", &token).expect("a request");
+        assert!(argv(&cmd).contains("--request DELETE"), "{}", argv(&cmd));
+        assert!(
+            argv(&cmd).ends_with("http://localhost:3000/v1/device"),
+            "{}",
+            argv(&cmd)
+        );
+        assert!(!argv(&cmd).contains("tor_secret"), "{}", argv(&cmd));
+        assert_eq!(config, "header = \"Authorization: Bearer tor_secret\"\n");
+    }
+
+    /// What curl wrote, as one line for an assertion to read.
+    fn argv(cmd: &Command) -> String {
+        cmd.get_args()
             .map(|a| a.to_string_lossy().into_owned())
             .collect::<Vec<_>>()
-            .join(" ");
-        assert!(!argv.contains("tor_secret"), "{argv}");
-        assert!(argv.contains("--config -"), "{argv}");
-        assert!(argv.ends_with("http://localhost:3000/v1/account"), "{argv}");
-        assert_eq!(config, "header = \"Authorization: Bearer tor_secret\"\n");
+            .join(" ")
+    }
+
+    /// The sign-out's two answers that mean the token is finished with, and the ones that do
+    /// not: a console that refuses the token has already done what was asked, and a console
+    /// that says something else is carried through in the operator's own words.
+    #[test]
+    fn a_token_the_console_no_longer_honours_is_a_sign_out_that_worked() {
+        handed_back("\n204").expect("signed out");
+        handed_back("{\"error\":\"a live tor_ API token is required\"}\n401")
+            .expect("already gone");
+
+        let stranger =
+            handed_back("{\"detail\":\"this token was not minted by a paired device\"}\n404")
+                .expect_err("not a device");
+        assert_eq!(
+            stranger,
+            "it answered 404: this token was not minted by a paired device"
+        );
+        let down = handed_back("{\"error\":\"database unavailable\"}\n503").expect_err("down");
+        assert_eq!(down, "it answered 503: database unavailable");
+    }
+
+    /// A console that cannot be reached is a row left listed, and the window is told in curl's
+    /// own words rather than in a status this could not have known.
+    ///
+    /// That it is only ever a row, never a credential left on this disk, is the SIGNATURE and
+    /// not this test: [`retire`] takes a token and no directory, so there is no file it could
+    /// keep. The window wipes before it calls this, and
+    /// `signing_out_empties_the_key_directory_before_it_asks_the_console_anything` is what
+    /// holds it to that order.
+    #[test]
+    fn a_console_that_never_answers_is_a_sign_out_the_window_can_report() {
+        // Nothing answers on the discard port, so the DELETE fails before it is written.
+        let why = retire("http://127.0.0.1:9", "tor_secret".to_string()).expect_err("no console");
+        assert!(
+            why.contains("127.0.0.1") || why.contains("onnect"),
+            "a refusal says what could not be reached: {why}"
+        );
     }
 
     /// A token is never printed: the state it sits in is `Debug`, and a log line of that state
