@@ -1,6 +1,12 @@
 <svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- The product's mark, drawn to the 824 px extent macOS draws an icon to on a 1024 canvas. -->
-  <rect x="100" y="100" width="824" height="824" rx="181" fill="#0A0A0A"/>
-  <rect x="306" y="306" width="412" height="412" rx="77" stroke="#FAFAFA" stroke-width="51.5"/>
-  <rect x="434.75" y="434.75" width="154.5" height="154.5" rx="38.6" fill="#FAFAFA"/>
+  <title>Tormoni</title>
+  <!-- The tile is inset to 824, because a shipped icon draws to 835..856 px of 1024 and a
+       full-bleed one stands taller than its neighbours (Maps, Notes and Ollama, macOS 26.6.2). -->
+  <rect x="100" y="100" width="824" height="824" rx="190" fill="#09090b"/>
+  <g transform="translate(270.5 270.5) scale(4.83)">
+    <path d="M10 44 V90 H90 V44" fill="none" stroke="#fafafa" stroke-width="8"/>
+    <rect x="38" y="58" width="24" height="24" fill="#fafafa"/>
+    <rect x="44" y="8" width="12" height="12" fill="#fafafa"/>
+    <rect x="44" y="26" width="12" height="12" fill="#fafafa"/>
+  </g>
 </svg>
