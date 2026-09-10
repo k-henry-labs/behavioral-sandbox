@@ -1540,7 +1540,7 @@ impl App {
                 Task::none()
             }
             Message::SignedIn(Ok(identity)) => {
-                self.status = Some(format!("signed in as @{}", identity.handle));
+                self.status = Some(format!("signed in as {}", identity.email));
                 self.account = account::Account::SignedIn(identity);
                 Task::none()
             }
@@ -2055,7 +2055,6 @@ mod tests {
     fn a_signed_in_window_shows_the_account_and_can_sign_out() {
         let mut app = app_with(vec![], &[]);
         let identity = account::Identity {
-            handle: "someone".to_string(),
             email: "someone@example.com".to_string(),
             display_name: Some("Someone Else".to_string()),
         };
@@ -2063,7 +2062,10 @@ mod tests {
         assert_eq!(app.account, account::Account::SignedIn(identity));
         assert_eq!(app.account.title(), "Someone Else");
         assert_eq!(app.account.line(&app.console), "someone@example.com");
-        assert_eq!(app.status.as_deref(), Some("signed in as @someone"));
+        assert_eq!(
+            app.status.as_deref(),
+            Some("signed in as someone@example.com")
+        );
 
         let _ = app.update(Message::SignOut);
         assert_eq!(app.account, account::Account::SignedOut);

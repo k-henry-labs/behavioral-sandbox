@@ -98,28 +98,28 @@ impl Drop for Token {
     }
 }
 
-/// What `/v1/account` answers with: the handle the account is reached by, the address it is
-/// named by, and what the identity provider calls the person, when it says.
+/// What `/v1/account` answers with: the address the account is named by, and what the identity
+/// provider calls the person, when it says.
+///
+/// **The address is the identity here.** The console has no handle: its own `account_id` is an
+/// opaque provider id (`user_01M0T…`), which names nobody on a screen.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Identity {
-    pub(crate) handle: String,
     pub(crate) email: String,
     pub(crate) display_name: Option<String>,
 }
 
 impl Account {
-    /// What the block is headed by: the person's name, else the handle, else the product's name
+    /// What the block is headed by: the person's name, else the address, else the product's name
     /// for the account there is not yet.
     pub(crate) fn title(&self) -> &str {
         match self {
             Self::SignedOut | Self::Pairing(_) => "Tormoni account",
-            Self::SignedIn(identity) => {
-                identity.display_name.as_deref().unwrap_or(&identity.handle)
-            }
+            Self::SignedIn(identity) => identity.display_name.as_deref().unwrap_or(&identity.email),
         }
     }
 
-    /// The quieter line under the title: the handle, or where the sign-in stands and what it
+    /// The quieter line under the title: the address, or where the sign-in stands and what it
     /// wants from `console`.
     pub(crate) fn line(&self, console: &str) -> String {
         match self {
@@ -488,22 +488,16 @@ fn answer(out: &str) -> Result<Identity, String> {
 fn identity(body: &str) -> Result<Identity, String> {
     let json: serde_json::Value =
         serde_json::from_str(body).map_err(|e| format!("the account is not JSON: {e}"))?;
-    let handle = json
-        .get("handle")
-        .and_then(serde_json::Value::as_str)
-        .ok_or_else(|| "the account names no handle".to_string())?
-        .to_string();
     let email = json
         .get("email")
         .and_then(serde_json::Value::as_str)
-        .unwrap_or_default()
+        .ok_or_else(|| "the account names no address".to_string())?
         .to_string();
     let display_name = json
         .get("display_name")
         .and_then(serde_json::Value::as_str)
         .map(str::to_string);
     Ok(Identity {
-        handle,
         email,
         display_name,
     })
@@ -564,8 +558,8 @@ mod tests {
         };
         let identity = finish(&console, scratch.path(), token).expect("the token reads an account");
         println!(
-            "SIGNED-IN handle={} email={}",
-            identity.handle, identity.email
+            "SIGNED-IN email={} name={:?}",
+            identity.email, identity.display_name
         );
     }
 
@@ -606,18 +600,18 @@ mod tests {
         );
 
         let named = Account::SignedIn(Identity {
-            handle: "someone".to_string(),
             email: "someone@example.com".to_string(),
             display_name: Some("Someone Else".to_string()),
         });
         assert_eq!(named.title(), "Someone Else");
         assert_eq!(named.line(console), "someone@example.com");
         let unnamed = Account::SignedIn(Identity {
-            handle: "someone".to_string(),
             email: "someone@example.com".to_string(),
             display_name: None,
         });
-        assert_eq!(unnamed.title(), "someone");
+        // With no name from the provider, the address heads the block: it is the only thing the
+        // console gave that names a person.
+        assert_eq!(unnamed.title(), "someone@example.com");
     }
 
     /// A device nobody approves is given up on, so the block does not wait for a page whose
@@ -740,16 +734,26 @@ mod tests {
         assert_eq!(Page::Plans.url(DEFAULT), "https://tormoni.ai/plans");
     }
 
-    /// The identity carries the address the block's second line shows, which is new on this lane.
+    /// The address is what the block shows, and what the lane must carry: the console's own
+    /// `account_id` is a provider id that names nobody, and an answer without an address is one
+    /// this cannot draw a person from.
     #[test]
     fn the_account_lane_answers_with_the_address_it_is_named_by() {
+        // The shape the console actually serves, `account_id` and all.
         let read = identity(
-            "{\"account_id\":\"acc_1\",\"handle\":\"kendrick\",\"email\":\"k@example.com\",\"display_name\":null}",
+            "{\"account_id\":\"user_01M0T\",\"display_name\":\"Kendrick Lawton\",\"email\":\"k@example.com\"}",
         )
         .expect("an identity");
-        assert_eq!(read.handle, "kendrick");
         assert_eq!(read.email, "k@example.com");
-        assert_eq!(read.display_name, None);
+        assert_eq!(read.display_name.as_deref(), Some("Kendrick Lawton"));
+
+        let unnamed = identity("{\"account_id\":\"user_01M0T\",\"email\":\"k@example.com\"}")
+            .expect("an identity");
+        assert_eq!(unnamed.display_name, None);
+
+        // An id alone is not an identity: nothing on the screen could be drawn from it.
+        let why = identity("{\"account_id\":\"user_01M0T\"}").expect_err("no address");
+        assert_eq!(why, "the account names no address");
     }
 
     /// The opener is the platform's own, handed the address and nothing else: a flag before it
@@ -822,14 +826,12 @@ mod tests {
     /// words are carried along.
     #[test]
     fn the_answer_becomes_an_identity_or_a_reason() {
-        let named = answer(
-            "{\"handle\":\"kendrick\",\"email\":\"k@example.com\",\"display_name\":\"Kendrick L\"}\n200",
-        )
-        .expect("signed in");
-        assert_eq!(named.handle, "kendrick");
+        let named = answer("{\"email\":\"k@example.com\",\"display_name\":\"Kendrick L\"}\n200")
+            .expect("signed in");
+        assert_eq!(named.email, "k@example.com");
         assert_eq!(named.display_name.as_deref(), Some("Kendrick L"));
         let unnamed =
-            answer("{\"handle\":\"kendrick\",\"display_name\":null}\n200").expect("signed in");
+            answer("{\"email\":\"k@example.com\",\"display_name\":null}\n200").expect("signed in");
         assert_eq!(unnamed.display_name, None);
 
         let refused =
@@ -854,11 +856,11 @@ mod tests {
         }
         let console = FakeConsole::answering(
             200,
-            "{\"account_id\":\"acc_1\",\"handle\":\"kendrick\",\"display_name\":null}",
+            "{\"account_id\":\"user_01M0T\",\"email\":\"k@example.com\",\"display_name\":null}",
         );
         let identity =
             begin(&console.origin(), &Token::from("tor_test".to_string())).expect("signed in");
-        assert_eq!(identity.handle, "kendrick");
+        assert_eq!(identity.email, "k@example.com");
         let seen = console.request();
         assert!(seen.starts_with("GET /v1/account HTTP/1.1"), "{seen}");
         assert!(seen.contains("Authorization: Bearer tor_test"), "{seen}");

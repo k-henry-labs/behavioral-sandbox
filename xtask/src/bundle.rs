@@ -55,6 +55,15 @@ const ICON: &str = "Tormoni.icns";
 /// holds it to the app's own copy.
 pub(crate) const APP_ID: &str = "ai.tormoni.app";
 
+/// The URL scheme this app answers to, which the console's connect page hands back to when a
+/// device is approved.
+///
+/// **Nothing reads the URL.** The app is already polling the claim lane, so the only work a
+/// `tormoni://` link does is bring the window forward; the sign-in finishes on its own either
+/// way. Registering a scheme lets any page launch the app with any path, and ignoring the payload
+/// is what keeps that from being an input this app parses.
+pub(crate) const SCHEME: &str = "tormoni";
+
 /// Assembles `artifacts/Tormoni.app` from the built binaries, or explains why there is
 /// nothing to do.
 pub(crate) fn bundle_app(release: bool) -> Result<()> {
@@ -149,6 +158,17 @@ fn info_plist(version: &str) -> String {
     <true/>
     <key>LSMinimumSystemVersion</key>
     <string>11.0</string>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>{APP_ID}</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>{SCHEME}</string>
+            </array>
+        </dict>
+    </array>
 </dict>
 </plist>
 "#
@@ -230,7 +250,7 @@ pub(crate) fn desktop_entry() -> String {
     format!(
         "[Desktop Entry]\nType=Application\nName={APP}\nComment=Sandboxes on this machine, live \
          and past\nExec={EXECUTABLE}\nIcon={APP_ID}\nTerminal=false\nCategories=Development;\n\
-         StartupWMClass={APP_ID}\n"
+         MimeType=x-scheme-handler/{SCHEME};\nStartupWMClass={APP_ID}\n"
     )
 }
 
@@ -348,6 +368,31 @@ mod tests {
         );
     }
 
+    /// The bundle claims the scheme the console's connect page hands a device back through, under
+    /// the identifier that owns it. Without this the platform resolves `tormoni://` to nothing and
+    /// an approved device leaves the person on a web page.
+    #[test]
+    fn the_bundle_claims_the_scheme_the_console_hands_back_to() {
+        let plist = info_plist("1.2.3");
+        assert!(plist.contains("<key>CFBundleURLTypes</key>"), "{plist}");
+        assert!(
+            plist.contains(&format!("<string>{SCHEME}</string>")),
+            "the plist claims no {SCHEME} scheme"
+        );
+        assert!(
+            plist.contains(&format!(
+                "<key>CFBundleURLName</key>\n            <string>{APP_ID}</string>"
+            )),
+            "the claim is not named by the bundle identifier"
+        );
+        // The scheme is the app's own name, so a link reads as the product rather than as an id.
+        assert_eq!(
+            SCHEME,
+            APP.to_lowercase(),
+            "the scheme is not the app's name"
+        );
+    }
+
     /// The plist names an icon the tree holds, as an `.icns`; a renamed or missing file would
     /// be a bundle with the generic icon and nothing saying so.
     #[test]
@@ -408,6 +453,11 @@ mod tests {
         assert_eq!(field("Name"), APP, "and a launcher shows this");
         assert_eq!(field("Icon"), APP_ID);
         assert_eq!(field("StartupWMClass"), APP_ID);
+        assert_eq!(
+            field("MimeType"),
+            format!("x-scheme-handler/{SCHEME};"),
+            "a launcher would not hand a {SCHEME}:// link back to the app"
+        );
         let layout = linux_layout();
         assert!(
             layout.contains(&(
