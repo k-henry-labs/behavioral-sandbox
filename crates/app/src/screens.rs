@@ -77,7 +77,7 @@ fn scroll(theme: &iced::Theme, status: scrollable::Status) -> scrollable::Style 
         rail.border = iced::Border::default();
         rail.scroller.background = iced::Background::Color(pill);
         rail.scroller.border = iced::Border {
-            radius: 3.0.into(),
+            radius: CORNER.into(),
             ..iced::Border::default()
         };
     }
@@ -169,7 +169,7 @@ fn sidebar(app: &App, width: f32) -> Element<'_, Message> {
 /// The button that folds the sidebar and brings it back, wearing the glyph macOS gives it.
 fn sidebar_toggle<'a>() -> Element<'a, Message> {
     button(icons::glyph(icons::PANEL_LEFT).center().width(HALO))
-        .style(round)
+        .style(halo)
         .padding(0)
         .height(HALO)
         .on_press(Message::ToggleSidebar)
@@ -180,21 +180,24 @@ fn sidebar_toggle<'a>() -> Element<'a, Message> {
 /// are measured against.
 const TOGGLE: f32 = 28.0;
 
-/// The circle the toggle wears under the pointer, drawn on the same centre as its room and
-/// past it on every side by [`HALO_OVERHANG`], as a toolbar icon's halo is wider than the icon.
+/// The mark the toggle wears under the pointer, drawn on the same centre as its room and past it
+/// on every side by [`HALO_OVERHANG`], as a toolbar icon's halo is wider than the icon.
 const HALO: f32 = 36.0;
 const HALO_OVERHANG: f32 = (HALO - TOGGLE) / 2.0;
 
-/// An icon on its own: nothing until the pointer finds it, then the circle a toolbar icon wears,
+/// An icon on its own: nothing until the pointer finds it, then the mark a toolbar icon wears,
 /// a step past a row's hover so it reads on the rail as well as on the page.
-fn round(theme: &iced::Theme, status: button::Status) -> button::Style {
+///
+/// Its corner is [`CORNER`], the one every other control takes, so the window has one corner and
+/// not two. `the_icons_mark_takes_the_windows_own_corner` holds it there.
+fn halo(theme: &iced::Theme, status: button::Status) -> button::Style {
     let palette = theme.extended_palette();
     let surface = match status {
         button::Status::Hovered | button::Status::Pressed => crate::theme::selected(theme),
         button::Status::Active | button::Status::Disabled => iced::Color::TRANSPARENT,
     };
     let mut style = role(surface, palette.background.base.text, None, status);
-    style.border.radius = (HALO / 2.0).into();
+    style.border.radius = CORNER.into();
     style
 }
 
@@ -560,7 +563,10 @@ fn segment(theme: &iced::Theme) -> button::Style {
     style
 }
 
-/// A slider as macOS draws one on a settings page: a grey rail, a white knob held by a hairline.
+/// How wide the slider's handle is drawn, which is the diameter the round one had.
+const HANDLE: u16 = 18;
+
+/// A slider as macOS draws one on a settings page: a grey rail, a white handle held by a hairline.
 fn rail_of(theme: &iced::Theme, status: slider::Status) -> slider::Style {
     let palette = theme.extended_palette();
     let mut style = slider::default(theme, status);
@@ -568,7 +574,10 @@ fn rail_of(theme: &iced::Theme, status: slider::Status) -> slider::Style {
     style.rail.backgrounds = (rail, rail);
     style.rail.width = 4.0;
     style.handle = slider::Handle {
-        shape: slider::HandleShape::Circle { radius: 9.0 },
+        shape: slider::HandleShape::Rectangle {
+            width: HANDLE,
+            border_radius: CORNER.into(),
+        },
         background: iced::Background::Color(palette.background.base.color),
         border_width: 1.0,
         border_color: hairline(theme),
@@ -591,13 +600,19 @@ fn switch(theme: &iced::Theme, status: toggler::Status) -> toggler::Style {
         crate::theme::selected(theme)
     });
     style.foreground = iced::Background::Color(iced::Color::WHITE);
+    // `None` here is a switch drawn as two circles, which is the one shape [`CORNER`] would not
+    // otherwise reach.
+    style.border_radius = Some(CORNER.into());
     style
 }
 
-/// The corner an action takes; a surface takes [`CARD_RADIUS`], a field [`FIELD_RADIUS`].
-const RADIUS: f32 = 8.0;
-const CARD_RADIUS: f32 = 12.0;
-const FIELD_RADIUS: f32 = 8.0;
+/// The corner every control takes: a button, a card, a field, the mark under a lone icon, the
+/// switch and the slider's handle.
+///
+/// **One value, so the window cannot end up with two corners.** Square as of 2026-09-09; one
+/// number here is what rounds the whole window again.
+/// `every_control_takes_the_windows_own_corner` holds each of them to it.
+const CORNER: f32 = 0.0;
 
 /// The hairline every surface is held by: the palette's own text at a tenth, so it reads as an
 /// edge catching light on any theme.
@@ -694,7 +709,7 @@ fn role(
         border: iced::Border {
             color: edge.map_or(iced::Color::TRANSPARENT, dim),
             width: f32::from(u8::from(edge.is_some())),
-            radius: RADIUS.into(),
+            radius: CORNER.into(),
         },
         ..button::Style::default()
     }
@@ -705,7 +720,7 @@ fn card(theme: &iced::Theme) -> container::Style {
     container::Style {
         background: Some(iced::Background::Color(crate::theme::raised(theme))),
         border: iced::Border {
-            radius: CARD_RADIUS.into(),
+            radius: CORNER.into(),
             ..iced::Border::default()
         },
         ..container::Style::default()
@@ -716,7 +731,7 @@ fn card(theme: &iced::Theme) -> container::Style {
 fn entry(theme: &iced::Theme, status: text_input::Status) -> text_input::Style {
     let mut style = text_input::default(theme, status);
     style.background = iced::Background::Color(crate::theme::raised(theme));
-    style.border.radius = FIELD_RADIUS.into();
+    style.border.radius = CORNER.into();
     style
 }
 
@@ -869,7 +884,7 @@ fn page_button<'a>(
 /// there is nothing to confirm: quitting puts the notebook away, it does not stop a run.
 fn quit_button<'a>() -> Element<'a, Message> {
     button(icons::glyph(icons::CLOSE).center().width(HALO))
-        .style(round)
+        .style(halo)
         .padding(0)
         .height(HALO)
         .on_press(Message::Quit)
@@ -1070,7 +1085,7 @@ fn row_card(theme: &iced::Theme, status: button::Status) -> button::Style {
         None,
         status,
     );
-    style.border.radius = CARD_RADIUS.into();
+    style.border.radius = CORNER.into();
     style
 }
 
@@ -1625,6 +1640,45 @@ mod tests {
         assert!(
             head_inset_at(0.0, 91.0) > head_inset_at(0.0, 0.0),
             "and push a folded head with it"
+        );
+    }
+
+    /// Every control takes [`CORNER`], so the window has one corner and not a handful that drift
+    /// apart. The switch and the slider's handle are here because each would otherwise draw a
+    /// circle of its own: the toolkit rounds a `None` radius and a `Circle` handle by itself.
+    #[test]
+    fn every_control_takes_the_windows_own_corner() {
+        let theme = crate::theme::theme(crate::theme::Mode::Light, iced::theme::Mode::Light);
+        let corner: iced::border::Radius = CORNER.into();
+        for (what, style) in [
+            ("a push button", push(&theme, button::Status::Active)),
+            (
+                "the default action",
+                primary(&theme, button::Status::Active),
+            ),
+            ("a lone icon's mark", halo(&theme, button::Status::Hovered)),
+            ("a picked segment", segment(&theme)),
+        ] {
+            assert_eq!(style.border.radius, corner, "{what}");
+        }
+        assert_eq!(
+            entry(&theme, text_input::Status::Active).border.radius,
+            corner,
+            "a field"
+        );
+        assert_eq!(card(&theme).border.radius, corner, "a card");
+        assert_eq!(
+            switch(&theme, toggler::Status::Active { is_toggled: true }).border_radius,
+            Some(corner),
+            "the switch, which the toolkit draws round when this is None"
+        );
+        let handle = rail_of(&theme, slider::Status::Active).handle.shape;
+        assert!(
+            matches!(
+                handle,
+                slider::HandleShape::Rectangle { border_radius, .. } if border_radius == corner
+            ),
+            "the slider's handle, which the toolkit draws round as a Circle: {handle:?}"
         );
     }
 
