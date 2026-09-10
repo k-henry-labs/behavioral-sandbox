@@ -1492,6 +1492,10 @@ fn posture_lines(record: &Record, home: Option<&str>) -> Vec<(String, String)> {
     if p.mounts.is_empty() && p.shares.is_empty() {
         lines.push(("share".to_string(), "none".to_string()));
     }
+    // The names the record kept; a value was never written, so there is none to show.
+    if !p.env.is_empty() {
+        lines.push(("env".to_string(), p.env.join(", ")));
+    }
     lines.push(("network".to_string(), p.network.as_word().to_string()));
     lines.push((
         "display".to_string(),

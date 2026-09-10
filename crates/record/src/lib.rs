@@ -300,6 +300,12 @@ pub struct Posture {
     pub gpu: bool,
     /// Whether the run's results directory was mounted at [`RESULTS_GUEST_PATH`].
     pub results: bool,
+    /// The NAMES of the guest's environment entries, and never what they are set to.
+    ///
+    /// A value is a secret often enough that a record must not be the place one is kept: it is
+    /// dropped where the posture is built, and [`Record::to_text`] cuts at the first `=` again,
+    /// so a value cannot reach the file even from a caller that put one here.
+    pub env: Vec<String>,
     /// vCPUs. Non-zero by type, as `tormoni_supervisor::VmConfig`'s is: a record of a machine with
     /// no cpu describes one that never booted.
     pub vcpus: NonZeroU8,
@@ -321,6 +327,7 @@ impl Default for Posture {
             sound: false,
             gpu: false,
             results: false,
+            env: Vec::new(),
             vcpus: NonZeroU8::MIN,
             mem_mib: match NonZeroU32::new(512) {
                 Some(mib) => mib,
@@ -486,6 +493,9 @@ impl Record {
         for s in &p.shares {
             line("share", &format!("{} <- {}", s.tag, s.host.display()));
         }
+        for entry in &p.env {
+            line("env", &env_key(entry));
+        }
         line("network", &p.network.as_word());
         if let Some(display) = p.display {
             line("display", &display.as_spec());
@@ -563,6 +573,7 @@ impl Record {
                         .shares
                         .push(Share::new(tag.to_string(), PathBuf::from(host)));
                 }
+                "env" => record.posture.env.push(env_key(value).to_string()),
                 "network" => record.posture.network = Network::from_word(value).ok_or_else(bad)?,
                 "display" => {
                     record.posture.display = Some(DisplayMode::parse(value).ok_or_else(bad)?)
@@ -651,6 +662,17 @@ fn unescape(line: &str) -> Option<String> {
 }
 
 /// The lines every writer puts, in the order it puts them; a record without one is refused.
+/// The name in a `KEY=VALUE` entry: everything before the first `=`, or the whole of an entry
+/// that carries no `=` and so sets nothing.
+///
+/// The one place the rule lives, and both directions go through it: a value that reached a
+/// `Posture` some other way is still cut off on the way to the file, and one already in a file
+/// is cut off on the way back.
+#[must_use]
+pub fn env_key(entry: &str) -> &str {
+    entry.split_once('=').map_or(entry, |(key, _)| key)
+}
+
 const REQUIRED: [&str; 11] = [
     "record", "id", "name", "verb", "root", "network", "sound", "gpu", "results", "limits",
     "started",
@@ -1369,6 +1391,44 @@ mod tests {
         assert_eq!(ended.end, Some(End::Exit(3)));
         assert!(ended.ended_ms.is_some());
         assert!(record.id.ends_with("-fetch-42"));
+    }
+
+    /// **A record keeps the names of the guest's environment and none of its values.** A value
+    /// is where a token or a password goes, and a record is a file the export puts on a wire.
+    ///
+    /// Driven through a `Posture` holding whole `KEY=VALUE` entries, which is what a caller that
+    /// skipped [`env_key`] would leave: the cut in [`Record::to_text`] is what makes the value
+    /// unreachable rather than the caller's care.
+    #[test]
+    fn a_records_environment_is_names_and_never_values() {
+        let mut given = posture();
+        given.env = vec![
+            "AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI".to_string(),
+            "PATH=/usr/bin:/bin".to_string(),
+            "CI".to_string(),
+            "ODD=a=b=c".to_string(),
+        ];
+        let record = Record::begin("envy", Verb::Run, vec!["sh".into()], given);
+
+        let text = record.to_text();
+        for secret in ["wJalrXUtnFEMI", "/usr/bin", "a=b=c", "=b", "b=c"] {
+            assert!(!text.contains(secret), "a value reached the record: {text}");
+        }
+        assert!(text.contains("env AWS_SECRET_ACCESS_KEY\n"), "{text}");
+        // No `=` at all is a name that sets nothing, and it is kept whole.
+        assert!(text.contains("env CI\n"), "{text}");
+        assert!(text.contains("env ODD\n"), "{text}");
+
+        let read = Record::parse(&text).expect("parses");
+        assert_eq!(
+            read.posture.env,
+            ["AWS_SECRET_ACCESS_KEY", "PATH", "CI", "ODD"]
+        );
+        // A record written before this build knew the key has no `env` line, and reads as a run
+        // that was given nothing.
+        let bare = Record::parse(&Record::begin("bare", Verb::Run, vec![], posture()).to_text())
+            .expect("parses");
+        assert!(bare.posture.env.is_empty());
     }
 
     /// A record from another format, without its format line, or with a line this build cannot

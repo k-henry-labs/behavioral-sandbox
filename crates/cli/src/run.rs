@@ -255,6 +255,14 @@ pub(crate) fn posture_of(cfg: &VmConfig, results: bool) -> Posture {
     p.sound = cfg.sound;
     p.gpu = cfg.gpu;
     p.results = results;
+    // The names, never what they are set to: a value is the caller's secret often enough that
+    // the record is not the place for one. `tormoni_record::env_key` is the same cut the record
+    // writer makes.
+    p.env = cfg
+        .env
+        .iter()
+        .map(|entry| tormoni_record::env_key(&entry.to_string_lossy()).to_string())
+        .collect();
     p
 }
 
@@ -294,6 +302,13 @@ pub(crate) fn print_posture(
     }
     if let Some((port, path)) = &cfg.vsock {
         writeln!(out, "channel  guest vsock {port} <- {}", path.display())?;
+    }
+    for entry in &cfg.env {
+        writeln!(
+            out,
+            "env      {} is set in the guest",
+            tormoni_record::env_key(&entry.to_string_lossy())
+        )?;
     }
     if let Some(display) = cfg.display {
         writeln!(out, "display  {} in a window", display.as_spec())?;
@@ -709,6 +724,58 @@ mod tests {
         ] {
             assert!(text.contains(line), "{line:?} missing from:\n{text}");
         }
+    }
+
+    /// **`--env` reaches the guest whole and the record by name only.** The VM is given
+    /// `KEY=VALUE`, because that is what it is for; what a person may later export, push or paste
+    /// gets the name and nothing else.
+    #[test]
+    fn an_env_value_reaches_the_guest_and_never_the_record_or_the_posture_print() {
+        let cli = Cli::parse_from([
+            "tormoni",
+            "run",
+            "--env",
+            "AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI",
+            "--env",
+            "CI=1",
+            "--",
+            "true",
+        ]);
+        let Cmd::Run(args) = cli.cmd else {
+            panic!("run must parse");
+        };
+        let cfg = to_config(&args, PathBuf::from("/root-tree")).expect("a well-formed config");
+        assert_eq!(
+            cfg.env,
+            [
+                OsString::from("AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI"),
+                OsString::from("CI=1")
+            ],
+            "the guest is given the whole entry"
+        );
+
+        let posture = posture_of(&cfg, false);
+        assert_eq!(posture.env, ["AWS_SECRET_ACCESS_KEY", "CI"]);
+        let record = tormoni_record::Record::begin(
+            "vm-under-test",
+            tormoni_record::Verb::Run,
+            vec!["true".to_string()],
+            posture,
+        );
+        assert!(
+            !record.to_text().contains("wJalrXUtnFEMI"),
+            "{}",
+            record.to_text()
+        );
+
+        let mut out = Vec::new();
+        print_posture("vm-under-test", &cfg, false, &mut out).expect("a Vec never fails to write");
+        let text = String::from_utf8(out).expect("the printer writes UTF-8");
+        assert!(
+            text.contains("env      AWS_SECRET_ACCESS_KEY is set in the guest"),
+            "{text}"
+        );
+        assert!(!text.contains("wJalrXUtnFEMI"), "{text}");
     }
 
     /// A display lands in the config as two non-zero numbers, a screenshot needs one, and the

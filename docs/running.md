@@ -90,7 +90,7 @@ so a sandbox started by the CLI is visible to the app and the other way round.
 | `--display WIDTHxHEIGHT[@HZ]` | A virtio-gpu display in a window; closing the window stops the sandbox. | none |
 | `--sound` | A virtio-snd card on the host's audio server: playback **and** capture. | off |
 | `--gpu` | A 3D virtio-gpu into the host renderer (virgl + Venus offered); the guest brings its own driver. | off |
-| `--env KEY=VALUE` | One guest environment entry. Repeatable. | nothing |
+| `--env KEY=VALUE` | One guest environment entry. Repeatable. The record keeps the name, never the value. | nothing |
 | `--vcpus N`, `--mem MIB` | Sizing; also `$TORMONI_VCPUS` and `$TORMONI_MEM_MIB`. | 1 vCPU, 512 MiB |
 | `--no-results` | Drops the default `/results` mount. | mounted |
 
@@ -108,6 +108,12 @@ Every run leaves one directory under `$TORMONI_RUNS_DIR`, else `$XDG_DATA_HOME/t
 captured output (capped at `$TORMONI_OUTPUT_CAP_KIB`, 4 MiB by default, with a `.truncated` sidecar when
 cut), and `results/`, the directory the guest saw as `/results`. Ended runs beyond `$TORMONI_RUNS_KEEP`
 (200 by default) are pruned oldest-first when a new run starts.
+
+**An environment entry reaches the guest whole and the record by name.** The VM is given
+`KEY=VALUE`, because that is what `--env` is for; what the record, `tormoni show` and the export
+carry is `KEY` alone. `an_env_value_reaches_the_guest_and_never_the_record_or_the_posture_print`
+drives the pair, and `tormoni_record::env_key` cuts again as the file is written, so a value
+cannot reach it even from a caller that skipped the first cut.
 
 `tormoni export` packages that directory as one ustar file a stock `tar` extracts. A symlink a guest
 planted inside `results/` is archived as a link entry, never opened:
