@@ -105,7 +105,7 @@ pub(crate) fn chrome<'a>(app: &'a App, content: Element<'a, Message>) -> Element
     }
     // The toggle rides over both panes rather than inside either, so that one glyph crosses the
     // window as the sidebar folds instead of two swapping places.
-    iced::widget::stack![
+    let mut window = iced::widget::stack![
         panes.push(content),
         container(sidebar_toggle()).padding(iced::Padding {
             top: TOGGLE_TOP - HALO_OVERHANG,
@@ -119,8 +119,65 @@ pub(crate) fn chrome<'a>(app: &'a App, content: Element<'a, Message>) -> Element
     // only what nothing else wanted reaches the window's own line, which a double click zooms.
     .push_under(
         mouse_area(space().width(Fill).height(HEAD_BAR)).on_double_click(Message::ZoomWindow),
+    );
+    // Over every layer, including the window's own line: while a question is up it is the only
+    // thing that answers a press.
+    if let Some(confirm) = &app.confirm {
+        window = window.push(asking(app, confirm));
+    }
+    window.into()
+}
+
+/// The question a destructive press waits behind: what would go, and the two ways out.
+///
+/// **The scrim is `opaque`, so nothing under it answers a press.** A press on it cancels, as does
+/// Escape, which is the way out a person reaches for first.
+fn asking<'a>(app: &'a App, confirm: &'a crate::Confirm) -> Element<'a, Message> {
+    let subject = match confirm {
+        crate::Confirm::One(id) => app
+            .record(id)
+            .map_or_else(|| "this run".to_string(), |record| record.name.clone()),
+        crate::Confirm::Selected(_) => crate::runs(confirm.len()),
+    };
+    let card = container(
+        column![
+            text(format!("Delete {subject}?")).size(TITLE).font(HEADING),
+            // What a delete does, not what it costs: the directory is the mechanism, and naming it
+            // is the whole warning.
+            text(if confirm.len() == 1 {
+                "Its record, captured output and results are removed from the runs directory."
+            } else {
+                "Their records, captured output and results are removed from the runs directory."
+            })
+            .size(BODY),
+            row![
+                space().width(Fill),
+                small_button("Cancel", push).on_press(Message::DeleteCancelled),
+                small_button("Delete", destructive).on_press(Message::DeleteConfirmed),
+            ]
+            .spacing(8),
+        ]
+        .spacing(14),
     )
-    .into()
+    .padding(20)
+    .width(Length::Fixed(340.0))
+    .style(card);
+
+    iced::widget::opaque(
+        mouse_area(iced::widget::center(iced::widget::opaque(card)).style(scrim))
+            .on_press(Message::DeleteCancelled),
+    )
+}
+
+/// The wash over the window while a question is up: dark enough to put the page behind it, sheer
+/// enough to leave the run being deleted readable under it.
+fn scrim(_theme: &iced::Theme) -> container::Style {
+    container::Style {
+        background: Some(iced::Background::Color(iced::Color::from_rgba(
+            0.0, 0.0, 0.0, 0.45,
+        ))),
+        ..container::Style::default()
+    }
 }
 
 /// The sidebar at `width`: where this machine's sandboxes are reached, clipped to what the fold
@@ -142,6 +199,13 @@ fn sidebar(app: &App, width: f32) -> Element<'_, Message> {
             None,
             app.screen == crate::Screen::New,
             Message::NewRun
+        ),
+        tab(
+            icons::BOOK_OPEN,
+            "Cookbook",
+            None,
+            app.screen == crate::Screen::Cookbook,
+            Message::Cookbook,
         ),
         tab(
             icons::SETTINGS,
@@ -226,13 +290,21 @@ const TOGGLE_OVER_ICONS: f32 = RAIL_PAD + TAB_PAD[1] + icons::SIZE / 2.0 - TOGGL
 /// the margin everything below it has.
 const TOGGLE_FOLDED: f32 = GUTTER + HALO_OVERHANG;
 
+/// Where it stands with the window's buttons on the line and the rail out: its mark's right edge
+/// on the rail's own padding, which is the edge every tab pill under it ends at.
+const TOGGLE_BESIDE_RAIL: f32 = SIDEBAR - RAIL_PAD - TOGGLE - HALO_OVERHANG;
+
 /// Where the toggle stands, given the room `lights` the window's own buttons take. Each platform
-/// slides it between a folded place and an open one along the fold. With lights: over the room
-/// they leave when folded, at the sidebar's own inner edge when out. Without: on the page's
-/// gutter when folded, over the tabs' icon column when out.
+/// slides it between a folded place and an open one along the fold. With lights: its mark begins
+/// where their room ends when folded, and ends on the rail's own padding when out. Without: on the
+/// page's gutter when folded, over the tabs' icon column when out.
+///
+/// **What lines up is the hover mark, never the glyph's box inside it**, because the mark is what
+/// a reader sees against the tab pills and the buttons: hence [`HALO_OVERHANG`] in three of the
+/// four places, and a centre in the fourth.
 fn toggle_at(out: f32, lights: f32) -> f32 {
     let (folded, open) = if lights > 0.0 {
-        (lights, SIDEBAR - RAIL_PAD - TOGGLE)
+        (lights + HALO_OVERHANG, TOGGLE_BESIDE_RAIL)
     } else {
         (TOGGLE_FOLDED, TOGGLE_OVER_ICONS)
     };
@@ -727,6 +799,67 @@ fn card(theme: &iced::Theme) -> container::Style {
     }
 }
 
+/// The cookbook: runs worth trying, on shelves, each one press from a filled form.
+///
+/// **A press fills the form and stops there.** Starting is the form's own button, so an entry from
+/// here is read before it boots like every other run. Each entry shows the `tormoni` line it is,
+/// built by [`crate::Example::cli`] from the same fields the form takes.
+pub(crate) fn cookbook(app: &App) -> Element<'_, Message> {
+    let mut body = column![].spacing(18);
+    for shelf in crate::Shelf::ALL {
+        let mut entries =
+            column![section(shelf.title(), crate::Example::on(shelf).count())].spacing(8);
+        for example in crate::Example::on(shelf) {
+            entries = entries.push(
+                button(
+                    column![
+                        text(example.title).size(BODY).font(HEADING),
+                        text(example.shows).size(SMALL).style(|t| text::Style {
+                            color: Some(muted(t)),
+                        }),
+                        text(example.cli())
+                            .size(SMALL)
+                            .font(MONO)
+                            .style(|t| text::Style {
+                                color: Some(muted(t)),
+                            }),
+                    ]
+                    .spacing(4),
+                )
+                .width(Fill)
+                .padding(12)
+                .style(row_card)
+                .on_press(Message::Example(*example)),
+            );
+        }
+        body = body.push(entries);
+    }
+    framed(
+        app,
+        head_title("Cookbook"),
+        column![
+            muted_line(
+                "Each one fills the start form and stops there, so its posture is read before it \
+                 boots. They run against the tree `cargo xtask init` writes.",
+                BODY,
+            ),
+            scrollable(body)
+                .direction(lane())
+                .style(scroll)
+                .height(Fill),
+        ]
+        .spacing(14),
+    )
+}
+
+/// A tick box on the window's own corner. Like the switch and the slider's handle, the toolkit
+/// rounds its own unless a style says not to.
+fn check(theme: &iced::Theme, status: checkbox::Status) -> checkbox::Style {
+    let mut style = checkbox::primary(theme, status);
+    style.border.radius = CORNER.into();
+    style
+}
+
 /// A text entry as macOS draws one: the default look on a rounded corner.
 fn entry(theme: &iced::Theme, status: text_input::Status) -> text_input::Style {
     let mut style = text_input::default(theme, status);
@@ -741,14 +874,6 @@ pub(crate) fn list(app: &App) -> Element<'_, Message> {
     let past: Vec<&Record> = app.runs.iter().filter(|r| !app.is_live(r)).collect();
     let start = row![head_title("Sandboxes"), space().width(Fill)];
     let header = match &app.list {
-        // The last point a selection can be kept, and it says how many rather than "these": the
-        // count is the thing a reader checks before pressing a destructive button.
-        crate::ListMode::Confirming(ids) => row![
-            head_title(format!("Remove {}?", crate::runs(ids.len()))),
-            space().width(Fill),
-            small_button("Remove", destructive).on_press(Message::RemoveConfirmed),
-            small_button("Keep", push).on_press(Message::SelectCancelled),
-        ],
         crate::ListMode::Selecting(ids) => {
             let every = past.len();
             let all = ids.len() == every && every > 0;
@@ -790,11 +915,18 @@ pub(crate) fn list(app: &App) -> Element<'_, Message> {
     }
     if app.runs.is_empty() {
         rows = rows.push(
-            text("No runs yet. Start one here, or with `tormoni run`, `tormoni shell` or `tormoni up`.")
+            column![
+                text(
+                    "No runs yet. Start one here, or with `tormoni run`, `tormoni shell` or \
+                     `tormoni up`."
+                )
                 .size(BODY)
                 .style(|t| text::Style {
                     color: Some(muted(t)),
                 }),
+                small_button("Open the cookbook", push).on_press(Message::Cookbook),
+            ]
+            .spacing(12),
         );
     }
     // A card is read left to right, so it stops where reading does: a row stretched across a wide
@@ -1447,6 +1579,7 @@ pub(crate) fn new_run<'a>(app: &'a App, form: &'a Form) -> Element<'a, Message> 
         checkbox(on)
             .label(label)
             .size(CHECK)
+            .style(check)
             .on_toggle(move |v| Message::Switch(which, v))
     };
     let mut posture = tormoni_record::Posture::new(
@@ -1626,6 +1759,26 @@ mod tests {
         }
     }
 
+    /// With the window's buttons on the line, the toggle aligns the same thing the other layout
+    /// aligns: its hover mark's own edge. Out, that edge is the one every tab pill under it ends
+    /// at; folded, the mark begins where the buttons' room ends. Both were out by
+    /// [`HALO_OVERHANG`], in opposite directions, until 2026-09-10.
+    #[test]
+    fn with_lights_the_toggles_mark_lines_up_with_the_rail_and_the_buttons() {
+        const ON_THE_LINE: f32 = 91.0;
+        let pill_right = SIDEBAR - RAIL_PAD;
+        let open_mark_right = toggle_at(1.0, ON_THE_LINE) + TOGGLE + HALO_OVERHANG;
+        assert!(
+            (open_mark_right - pill_right).abs() < 0.01,
+            "out, the mark ends at {open_mark_right} and every tab pill at {pill_right}"
+        );
+        let folded_mark_left = toggle_at(0.0, ON_THE_LINE) - HALO_OVERHANG;
+        assert!(
+            (folded_mark_left - ON_THE_LINE).abs() < 0.01,
+            "folded, the mark starts at {folded_mark_left} and the buttons end at {ON_THE_LINE}"
+        );
+    }
+
     /// Full screen takes the buttons off the head's line, so the room kept for them closes: the
     /// layout there is the one a platform that never drew them gets. Without this the head on a
     /// full-screen Mac begins 119 in, past a band holding nothing.
@@ -1644,8 +1797,8 @@ mod tests {
     }
 
     /// Every control takes [`CORNER`], so the window has one corner and not a handful that drift
-    /// apart. The switch and the slider's handle are here because each would otherwise draw a
-    /// circle of its own: the toolkit rounds a `None` radius and a `Circle` handle by itself.
+    /// apart. The tick box, the switch and the slider's handle are here because each would
+    /// otherwise round itself: the toolkit's own default, a `None` radius and a `Circle` handle.
     #[test]
     fn every_control_takes_the_windows_own_corner() {
         let theme = crate::theme::theme(crate::theme::Mode::Light, iced::theme::Mode::Light);
@@ -1667,6 +1820,13 @@ mod tests {
             "a field"
         );
         assert_eq!(card(&theme).border.radius, corner, "a card");
+        assert_eq!(
+            check(&theme, checkbox::Status::Active { is_checked: true })
+                .border
+                .radius,
+            corner,
+            "a tick box, which the toolkit draws round by default"
+        );
         assert_eq!(
             switch(&theme, toggler::Status::Active { is_toggled: true }).border_radius,
             Some(corner),

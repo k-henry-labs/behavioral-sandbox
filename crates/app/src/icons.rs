@@ -58,6 +58,7 @@ icons! {
     CLOSE = '\u{e1b2}', 582;
     SQUARE = '\u{e167}', 832;
     SQUARE_CHECK = '\u{e16a}', 874;
+    BOOK_OPEN = '\u{e05f}', 918;
 }
 
 /// The font size [`glyph`] draws `icon` at to put [`SIZE`] of its ink on the screen.

@@ -120,10 +120,15 @@ readable.
 `Tormoni` opens on the notebook, with a sidebar reaching its three screens:
 
 - **The list**: every run, newest first, live ones with a thumbnail of their display. `Select`
-  turns each ended row into a tick box, `All` takes every one of them, and `Remove` takes what was
-  selected behind an inline confirm. A live run has no box: it is refused a delete until it stops.
+  turns each ended row into a tick box, `All` takes every one of them, and `Remove` asks about what
+  was selected. A live run has no box: it is refused a delete until it stops.
 - **One run**: its posture, output and results beside its live display (keyboard and pointer go
   to the guest), with Stop and Shell while it runs, Re-run and Delete after, and Export always.
+
+Every delete asks first, in a modal naming the run or the count it would remove, with Cancel and
+Delete. Escape and a press outside answer it the same way Cancel does, and cancelling a selection's
+question gives the selection back rather than dropping it. `deleting_one_run_asks_first_and_never_asks_about_a_live_one`
+and `a_selection_removes_what_was_selected_and_only_behind_the_confirm` hold both paths to it.
 - **The start form**: every posture flag as a field, summarised in the record's own posture
   sentence ("This sandbox will: ..."), confirmed before anything boots.
 - **Settings** (the platform's command with `,`, from any screen): the account first, then light,

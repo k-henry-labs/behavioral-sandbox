@@ -171,8 +171,28 @@ pub(crate) enum ListMode {
     Browsing,
     /// Selecting records to remove; pressing a row adds or removes it instead of opening it.
     Selecting(BTreeSet<String>),
-    /// Asking before removing the records it carries, which is the last point one can be kept.
-    Confirming(BTreeSet<String>),
+}
+
+/// What a destructive press is waiting on, and the only thing that draws the modal.
+///
+/// **Nothing is removed until [`Message::DeleteConfirmed`] answers one of these.** One value for
+/// both paths, so a window cannot end up asking two questions at once.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Confirm {
+    /// One run, pressed on its own pane or in its row.
+    One(RunId),
+    /// The list's selection, which a cancel leaves selected.
+    Selected(BTreeSet<String>),
+}
+
+impl Confirm {
+    /// How many records answering yes would remove.
+    pub(crate) fn len(&self) -> usize {
+        match self {
+            Self::One(_) => 1,
+            Self::Selected(ids) => ids.len(),
+        }
+    }
 }
 
 impl ListMode {
@@ -184,7 +204,7 @@ impl ListMode {
                     std::sync::LazyLock::new(BTreeSet::new);
                 &NONE
             }
-            Self::Selecting(ids) | Self::Confirming(ids) => ids,
+            Self::Selecting(ids) => ids,
         }
     }
 
@@ -397,6 +417,8 @@ enum Screen {
     Run(RunId),
     /// The form for a new run.
     New,
+    /// Runs worth trying, each one press from a filled form.
+    Cookbook,
     /// The notebook's own knobs.
     Settings,
 }
@@ -469,6 +491,229 @@ pub(crate) struct Form {
     pub(crate) results: bool,
     pub(crate) vcpus: String,
     pub(crate) mem_mib: String,
+}
+
+/// What a cookbook entry is filed under.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Shelf {
+    /// Prove it runs at all.
+    FirstSteps,
+    /// Rule 2 on a screen: what a sandbox cannot reach until it is granted.
+    Isolation,
+    /// Getting work back out of one.
+    Results,
+    /// What the guest is given.
+    Resources,
+    /// What a run looks like when it goes wrong.
+    Failure,
+}
+
+impl Shelf {
+    /// Every shelf, in the order the cookbook lists them.
+    pub(crate) const ALL: [Self; 5] = [
+        Self::FirstSteps,
+        Self::Isolation,
+        Self::Results,
+        Self::Resources,
+        Self::Failure,
+    ];
+
+    /// The heading over its entries.
+    pub(crate) fn title(self) -> &'static str {
+        match self {
+            Self::FirstSteps => "FIRST STEPS",
+            Self::Isolation => "WHAT IT CANNOT REACH",
+            Self::Results => "GETTING WORK BACK",
+            Self::Resources => "WHAT IT IS GIVEN",
+            Self::Failure => "WHEN IT GOES WRONG",
+        }
+    }
+}
+
+/// One cookbook entry: a run worth trying, and the one thing trying it shows.
+///
+/// **The posture is the data; every rendering is derived from it.** [`Example::cli`] builds the
+/// `tormoni` line from these fields rather than storing a string, so a second rendering (a
+/// `tormoni-js` or `tormoni-python` snippet) is a second function over the same table and cannot
+/// drift from the form a press fills.
+///
+/// `command` is plain argv: [`cli::start`] splits the form's field on whitespace and does no
+/// quoting, and the helper refuses an argument mixing a double quote with a space.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Example {
+    pub(crate) shelf: Shelf,
+    pub(crate) title: &'static str,
+    pub(crate) shows: &'static str,
+    pub(crate) command: &'static str,
+    pub(crate) network: bool,
+    pub(crate) vcpus: Option<&'static str>,
+    pub(crate) mem_mib: Option<&'static str>,
+}
+
+/// An entry with the default posture, which most of them have.
+const fn plain(
+    shelf: Shelf,
+    title: &'static str,
+    shows: &'static str,
+    command: &'static str,
+) -> Example {
+    Example {
+        shelf,
+        title,
+        shows,
+        command,
+        network: false,
+        vcpus: None,
+        mem_mib: None,
+    }
+}
+
+impl Example {
+    /// Every entry, in the order its shelf lists them. Each was run against the tree
+    /// `cargo xtask init` writes before it was written down.
+    pub(crate) const ALL: [Self; 16] = [
+        plain(
+            Shelf::FirstSteps,
+            "Hello from a virtual machine",
+            "The guest answers Linux, whatever this host is.",
+            "uname -a",
+        ),
+        plain(
+            Shelf::FirstSteps,
+            "Look around the guest",
+            "Its root is the guest tree, not this machine's.",
+            "ls -la /",
+        ),
+        plain(
+            Shelf::FirstSteps,
+            "Who the guest thinks you are",
+            "Root inside the VM, which is nobody out here.",
+            "id",
+        ),
+        plain(
+            Shelf::FirstSteps,
+            "What it was given",
+            "One vCPU and 512 MiB, until a posture says otherwise.",
+            "free -m",
+        ),
+        plain(
+            Shelf::Isolation,
+            "No network, by default",
+            "There is no resolver and no route, so this fails.",
+            "wget -T5 -qO- http://example.com",
+        ),
+        Example {
+            network: true,
+            ..plain(
+                Shelf::Isolation,
+                "A network, once granted",
+                "The same command with --net tsi reaches what this host reaches.",
+                "wget -T5 -qO- http://example.com",
+            )
+        },
+        plain(
+            Shelf::Isolation,
+            "The root is read-only",
+            "A write outside the run's own places is refused by the mount.",
+            "touch /proof",
+        ),
+        plain(
+            Shelf::Isolation,
+            "No host directory is shared",
+            "Nothing of yours is here until a --mount names it.",
+            "ls -la /mnt",
+        ),
+        plain(
+            Shelf::Results,
+            "Write where the run can write",
+            "/results is the one place a run is expected to put things.",
+            "touch /results/proof",
+        ),
+        plain(
+            Shelf::Results,
+            "Bring a file back",
+            "What lands in /results is collected into the record.",
+            "cp /etc/hostname /results/hostname",
+        ),
+        plain(
+            Shelf::Results,
+            "Bring a directory back",
+            "One archive in /results, listed by the record with its size.",
+            "tar -cf /results/etc.tar /etc",
+        ),
+        plain(
+            Shelf::Results,
+            "Everything it prints is kept",
+            "stdout and stderr are captured, capped, and shown beside the run.",
+            "dmesg",
+        ),
+        Example {
+            vcpus: Some("4"),
+            ..plain(
+                Shelf::Resources,
+                "Give it four vCPUs",
+                "The guest counts what the posture gave it, not this host's cores.",
+                "nproc",
+            )
+        },
+        Example {
+            mem_mib: Some("2048"),
+            ..plain(
+                Shelf::Resources,
+                "Give it two gigabytes",
+                "Guest RAM is what the posture says, and the record keeps the number.",
+                "free -m",
+            )
+        },
+        plain(
+            Shelf::Failure,
+            "A command that fails",
+            "The run's end is the command's status, so a pipeline can read it.",
+            "false",
+        ),
+        plain(
+            Shelf::Failure,
+            "A command that is not there",
+            "The guest resolves the first word on its own PATH, never this host's.",
+            "does-not-exist",
+        ),
+    ];
+
+    /// The entries on one shelf, in order.
+    pub(crate) fn on(shelf: Shelf) -> impl Iterator<Item = &'static Self> {
+        Self::ALL.iter().filter(move |e| e.shelf == shelf)
+    }
+
+    /// The `tormoni` line this entry is, built from its posture rather than stored beside it.
+    pub(crate) fn cli(&self) -> String {
+        let mut line = String::from("tormoni run");
+        if self.network {
+            line.push_str(" --net tsi");
+        }
+        if let Some(vcpus) = self.vcpus {
+            line.push_str(&format!(" --vcpus {vcpus}"));
+        }
+        if let Some(mem) = self.mem_mib {
+            line.push_str(&format!(" --mem {mem}"));
+        }
+        format!("{line} -- {}", self.command)
+    }
+
+    /// The form a press leaves on the New run screen. What the entry does not name it leaves at
+    /// the blank form's own default, so a cookbook press and a hand-filled form differ in nothing
+    /// but the fields the entry is about.
+    pub(crate) fn form(&self) -> Form {
+        let mut form = Form::blank();
+        form.command = self.command.to_string();
+        form.network = self.network;
+        if let Some(vcpus) = self.vcpus {
+            form.vcpus = vcpus.to_string();
+        }
+        if let Some(mem) = self.mem_mib {
+            form.mem_mib = mem.to_string();
+        }
+        form
+    }
 }
 
 impl Form {
@@ -580,6 +825,10 @@ pub(crate) enum Message {
     /// Fold the sidebar away, or bring it back.
     ToggleSidebar,
     NewRun,
+    /// Open the cookbook.
+    Cookbook,
+    /// Fill the start form from a cookbook entry, and show it rather than start it.
+    Example(Example),
     Field(Field, String),
     Switch(Switch, bool),
     Start,
@@ -599,8 +848,10 @@ pub(crate) enum Message {
     SelectCancelled,
     /// Ask before removing what was selected.
     RemoveSelected,
-    /// Remove what was selected.
-    RemoveConfirmed,
+    /// Remove what the modal is asking about.
+    DeleteConfirmed,
+    /// Put the modal away and remove nothing.
+    DeleteCancelled,
     /// Write the run's directory as a tar file where a person can pick it up.
     Export(RunId),
     Show(Stream),
@@ -680,6 +931,9 @@ pub(crate) struct App {
     opens_on: OpenScreen,
     /// Whether the list is asking "really clear the history?". Leaving the list disarms it.
     list: ListMode,
+    /// The question a destructive press is waiting on. `None` is a window with nothing to answer,
+    /// and is the only state in which anything can be removed.
+    confirm: Option<Confirm>,
     /// Whether the sidebar is out, and where it stands while that is changing.
     sidebar: Animation<bool>,
     /// The instant the last frame was drawn at, which every animation is read at.
@@ -732,6 +986,7 @@ impl App {
             scale: 100,
             opens_on: OpenScreen::List,
             list: ListMode::Browsing,
+            confirm: None,
             sidebar: Animation::new(true).quick().easing(Easing::EaseInOut),
             now: std::time::Instant::now(),
             window: None,
@@ -759,6 +1014,7 @@ impl App {
             Screen::Settings => format!("{NAME} › settings"),
             Screen::List => format!("{NAME} › sandboxes"),
             Screen::New => format!("{NAME} › new run"),
+            Screen::Cookbook => format!("{NAME} › cookbook"),
             Screen::Run(id) => format!(
                 "{NAME} › {}",
                 self.record(id).map_or(id.as_str(), |r| r.name.as_str())
@@ -875,7 +1131,7 @@ impl App {
     fn watches(&self) -> Vec<lease::Watch> {
         let open = match &self.screen {
             Screen::Run(id) => self.record(id).map(RunName::of),
-            Screen::Settings => return Vec::new(),
+            Screen::Settings | Screen::Cookbook => return Vec::new(),
             Screen::List | Screen::New => None,
         };
         let mut watches = Vec::new();
@@ -1117,6 +1373,15 @@ impl App {
                 }
                 Task::none()
             }
+            Message::Cookbook => {
+                self.set_screen(Screen::Cookbook);
+                Task::none()
+            }
+            Message::Example(example) => {
+                self.form = example.form();
+                self.set_screen(Screen::New);
+                Task::none()
+            }
             Message::Start => {
                 let form = self.form.clone();
                 Task::perform(
@@ -1242,13 +1507,7 @@ impl App {
                     self.status = Some("stop the run before deleting its record".to_string());
                     return Task::none();
                 }
-                self.leave();
-                self.status = match self.store.remove(id.as_str()) {
-                    Ok(()) => Some(format!("removed {id}")),
-                    Err(e) => Some(format!("removing {id}: {e}")),
-                };
-                self.set_screen(Screen::List);
-                self.refresh();
+                self.confirm = Some(Confirm::One(id));
                 Task::none()
             }
             Message::Select => {
@@ -1278,28 +1537,46 @@ impl App {
                 if let ListMode::Selecting(ids) = &self.list
                     && !ids.is_empty()
                 {
-                    self.list = ListMode::Confirming(ids.clone());
+                    self.confirm = Some(Confirm::Selected(ids.clone()));
                 }
                 Task::none()
             }
-            Message::RemoveConfirmed => {
-                let selected = std::mem::replace(&mut self.list, ListMode::Browsing);
-                let mut removed = 0usize;
-                let mut failed: Option<String> = None;
-                for id in selected.selected() {
-                    match self.store.remove(id) {
-                        Ok(()) => removed += 1,
-                        // The first failure is the one reported, and the rest of the selection is
-                        // still attempted: one unreadable record does not strand the others.
-                        Err(e) => {
-                            failed.get_or_insert_with(|| format!("removing {id}: {e}"));
+            Message::DeleteCancelled => {
+                self.confirm = None;
+                Task::none()
+            }
+            Message::DeleteConfirmed => {
+                match self.confirm.take() {
+                    None => return Task::none(),
+                    Some(Confirm::One(id)) => {
+                        self.leave();
+                        self.status = match self.store.remove(id.as_str()) {
+                            Ok(()) => Some(format!("removed {id}")),
+                            Err(e) => Some(format!("removing {id}: {e}")),
+                        };
+                        self.set_screen(Screen::List);
+                    }
+                    Some(Confirm::Selected(ids)) => {
+                        self.list = ListMode::Browsing;
+                        let mut removed = 0usize;
+                        let mut failed: Option<String> = None;
+                        for id in &ids {
+                            match self.store.remove(id) {
+                                Ok(()) => removed += 1,
+                                // The first failure is the one reported, and the rest of the
+                                // selection is still attempted: one unreadable record does not
+                                // strand the others.
+                                Err(e) => {
+                                    failed.get_or_insert_with(|| format!("removing {id}: {e}"));
+                                }
+                            }
                         }
+                        self.status = Some(match failed {
+                            Some(why) => format!("removed {}, then {why}", ended_runs(removed)),
+                            None => format!("removed {}", ended_runs(removed)),
+                        });
                     }
                 }
-                self.status = Some(match failed {
-                    Some(why) => format!("removed {}, then {why}", ended_runs(removed)),
-                    None => format!("removed {}", ended_runs(removed)),
-                });
                 self.refresh();
                 Task::none()
             }
@@ -1400,6 +1677,7 @@ impl App {
             Screen::Settings => screens::settings(self),
             Screen::List => screens::list(self),
             Screen::New => screens::new_run(self, &self.form),
+            Screen::Cookbook => screens::cookbook(self),
             Screen::Run(id) => screens::run(self, id),
         };
         screens::chrome(self, content)
@@ -1449,6 +1727,9 @@ fn hotkey(key: &iced::keyboard::Key, modifiers: iced::keyboard::Modifiers) -> Op
     match key {
         iced::keyboard::Key::Character(c) if c == "," && modifiers.command() => {
             Some(Message::Settings)
+        }
+        iced::keyboard::Key::Named(iced::keyboard::key::Named::Escape) => {
+            Some(Message::DeleteCancelled)
         }
         _ => None,
     }
@@ -1905,6 +2186,193 @@ mod tests {
         assert!(app.watches().is_empty(), "settings asks for no leases");
     }
 
+    /// A cookbook entry fills the form and stops there: the posture sentence is read before
+    /// anything boots, so a press starts no VM and writes no record.
+    #[test]
+    fn a_cookbook_entry_fills_the_form_and_starts_nothing() {
+        let dir = tormoni_test_support::ScratchDir::created("app-cookbook");
+        let store = Store::at(dir.path().join("runs")).expect("a store");
+        let sinks = Arc::new(frame::Sinks::open(None, None).expect("sinks"));
+        let mut app = App::new(store.clone(), None, None, sinks, false);
+
+        let networked = Example::ALL
+            .iter()
+            .find(|e| e.network)
+            .expect("an entry that grants a network");
+        let _ = app.update(Message::Example(*networked));
+        assert_eq!(app.screen, Screen::New, "an entry shows the form");
+        assert_eq!(app.form.command, networked.command);
+        assert!(app.form.network, "the one that grants a network says so");
+        assert!(
+            store.list().expect("listed").is_empty(),
+            "filling a form records nothing"
+        );
+
+        // An entry that says nothing about a field leaves the blank form's own default there.
+        let plain = Example::ALL
+            .iter()
+            .find(|e| !e.network && e.vcpus.is_none() && e.mem_mib.is_none())
+            .expect("a default-posture entry");
+        let _ = app.update(Message::Example(*plain));
+        assert!(!app.form.network, "and the default posture");
+        assert_eq!(app.form.vcpus, Form::blank().vcpus);
+        assert_eq!(app.form.mem_mib, Form::blank().mem_mib);
+    }
+
+    /// Every entry is plain argv. `cli::start` splits the command field on whitespace and does no
+    /// quoting, and the helper refuses an argument mixing a double quote with a space, so an entry
+    /// carrying either would be a button that cannot run.
+    #[test]
+    fn every_cookbook_entry_is_argv_the_form_can_split() {
+        for example in &Example::ALL {
+            let (title, command) = (example.title, example.command);
+            assert!(
+                !command.contains('"') && !command.contains('\''),
+                "{title}: {command} carries a quote the form does not honour"
+            );
+            assert!(
+                !command
+                    .split_whitespace()
+                    .next()
+                    .unwrap_or_default()
+                    .is_empty(),
+                "{title}: no command at all"
+            );
+            assert_eq!(
+                example.form().command,
+                command,
+                "{title}: the form carries the command the card shows"
+            );
+        }
+    }
+
+    /// The line an entry shows is the posture it fills in, so what a reader copies into a terminal
+    /// and what the form starts cannot say different things. The same table renders a `tormoni-js`
+    /// or `tormoni-python` snippet later, and this is what holds every rendering to the fields.
+    #[test]
+    fn the_line_an_entry_shows_is_the_posture_it_fills_in() {
+        for example in &Example::ALL {
+            let line = example.cli();
+            let form = example.form();
+            assert!(
+                line.starts_with("tormoni run "),
+                "{}: {line} is not a run",
+                example.title
+            );
+            assert!(
+                line.ends_with(&format!(" -- {}", example.command)),
+                "{}: {line} does not end in its command",
+                example.title
+            );
+            assert_eq!(
+                line.contains("--net tsi"),
+                form.network,
+                "{}: the line and the form disagree about the network",
+                example.title
+            );
+            assert_eq!(
+                line.contains("--vcpus"),
+                example.vcpus.is_some(),
+                "{}: the line and the entry disagree about vcpus",
+                example.title
+            );
+            assert_eq!(
+                line.contains("--mem"),
+                example.mem_mib.is_some(),
+                "{}: the line and the entry disagree about memory",
+                example.title
+            );
+        }
+    }
+
+    /// Every shelf carries entries, and every entry is on a shelf the cookbook lists: a shelf
+    /// added without entries draws an empty heading, and an entry on no listed shelf is
+    /// unreachable from the screen.
+    #[test]
+    fn every_shelf_is_filled_and_every_entry_is_shelved() {
+        let mut counted = 0;
+        for shelf in Shelf::ALL {
+            let on = Example::on(shelf).count();
+            assert!(on > 0, "{:?} has no entries", shelf);
+            counted += on;
+        }
+        assert_eq!(
+            counted,
+            Example::ALL.len(),
+            "an entry is on no listed shelf"
+        );
+    }
+
+    /// One run's Delete asks too, and a live run is never asked about: pressing it reports why
+    /// instead of raising a question whose only honest answer is no.
+    #[test]
+    fn deleting_one_run_asks_first_and_never_asks_about_a_live_one() {
+        let dir = tormoni_test_support::ScratchDir::created("app-delete-one");
+        let store = Store::at(dir.path().join("runs")).expect("a store");
+        let name = format!("delete-live-{}", std::process::id());
+        let sock = tormoni_supervisor::socket::path_for(&name).expect("a socket path");
+        let _ = std::fs::remove_file(&sock);
+        let listener = std::os::unix::net::UnixListener::bind(&sock).expect("a live socket");
+
+        let mut ended = displayed("ended", false);
+        ended.finish(tormoni_record::End::Exit(0));
+        let live = displayed(&name, false);
+        for r in [&ended, &live] {
+            store.create(r).expect("created");
+        }
+
+        let sinks = Arc::new(frame::Sinks::open(None, None).expect("sinks"));
+        let mut app = App::new(store.clone(), None, None, sinks, false);
+
+        // A live run is refused at the press, so no question is ever raised about it.
+        let _ = app.update(Message::Delete(RunId(live.id.clone())));
+        assert!(app.confirm.is_none(), "a live run raises no question");
+        assert_eq!(
+            app.status.as_deref(),
+            Some("stop the run before deleting its record")
+        );
+
+        // An ended one asks, and asking alone removes nothing.
+        let _ = app.update(Message::Delete(RunId(ended.id.clone())));
+        assert_eq!(
+            app.confirm,
+            Some(Confirm::One(RunId(ended.id.clone()))),
+            "the press asks rather than removes"
+        );
+        assert_eq!(
+            store.list().expect("listed").len(),
+            2,
+            "asking removes none"
+        );
+
+        // Escape is the same answer as Cancel, and it keeps the record.
+        let _ = app.update(Message::Keyboard(iced::keyboard::Event::KeyPressed {
+            key: iced::keyboard::Key::Named(iced::keyboard::key::Named::Escape),
+            modified_key: iced::keyboard::Key::Named(iced::keyboard::key::Named::Escape),
+            physical_key: iced::keyboard::key::Physical::Code(iced::keyboard::key::Code::Escape),
+            location: iced::keyboard::Location::Standard,
+            modifiers: iced::keyboard::Modifiers::empty(),
+            text: None,
+            repeat: false,
+        }));
+        assert!(app.confirm.is_none(), "escape puts the question away");
+        assert_eq!(store.list().expect("listed").len(), 2, "and keeps the run");
+
+        // Answering it is the only thing that removes.
+        let _ = app.update(Message::Delete(RunId(ended.id.clone())));
+        let _ = app.update(Message::DeleteConfirmed);
+        let left: Vec<String> = store
+            .list()
+            .expect("listed")
+            .into_iter()
+            .map(|r| r.name)
+            .collect();
+        assert_eq!(left, vec![live.name.clone()], "only the answered one went");
+        assert!(app.confirm.is_none(), "the question goes with it");
+        drop(listener);
+        let _ = std::fs::remove_file(&sock);
+    }
+
     /// A selection removes exactly what was selected, only behind the confirm, and never a live run;
     /// a second press unselects, and leaving the list drops the selection.
     #[test]
@@ -1955,7 +2423,7 @@ mod tests {
         assert_eq!(app.list.selected().len(), 1);
         let _ = app.update(Message::RemoveSelected);
         assert!(
-            matches!(app.list, ListMode::Confirming(_)),
+            matches!(app.confirm, Some(Confirm::Selected(_))),
             "asking before removing"
         );
         assert_eq!(
@@ -1963,7 +2431,22 @@ mod tests {
             3,
             "asking removes nothing"
         );
-        let _ = app.update(Message::RemoveConfirmed);
+        // Cancelling gives the selection back rather than dropping it: the way out of the question
+        // is not the way out of the selection that raised it.
+        let _ = app.update(Message::DeleteCancelled);
+        assert!(app.confirm.is_none(), "cancelling puts the question away");
+        assert_eq!(
+            app.list.selected().len(),
+            1,
+            "cancelling keeps what was selected"
+        );
+        assert_eq!(
+            store.list().expect("listed").len(),
+            3,
+            "neither does cancelling the question"
+        );
+        let _ = app.update(Message::RemoveSelected);
+        let _ = app.update(Message::DeleteConfirmed);
         assert_eq!(app.list, ListMode::Browsing);
         let left: Vec<String> = store
             .list()
