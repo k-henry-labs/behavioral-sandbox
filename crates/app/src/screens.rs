@@ -805,12 +805,18 @@ fn card(theme: &iced::Theme) -> container::Style {
 /// here is read before it boots like every other run. Each entry shows the `tormoni` line it is,
 /// built by [`crate::Example::cli`] from the same fields the form takes.
 pub(crate) fn cookbook(app: &App) -> Element<'_, Message> {
-    let mut body = column![].spacing(18);
+    let mut body = column![].spacing(20);
     for shelf in crate::Shelf::ALL {
-        let mut entries =
-            column![section(shelf.title(), crate::Example::on(shelf).count())].spacing(8);
+        // The subject, then one line on what its runs do: enough to skip a shelf or stop at it
+        // without opening an entry.
+        let mut stack = column![
+            section(shelf.title(), crate::Example::on(shelf).count()),
+            muted_line(shelf.about(), SMALL),
+            space().height(8),
+        ]
+        .spacing(8);
         for example in crate::Example::on(shelf) {
-            entries = entries.push(
+            stack = stack.push(
                 button(
                     column![
                         text(example.title).size(BODY).font(HEADING),
@@ -832,7 +838,7 @@ pub(crate) fn cookbook(app: &App) -> Element<'_, Message> {
                 .on_press(Message::Example(*example)),
             );
         }
-        body = body.push(entries);
+        body = body.push(stack);
     }
     framed(
         app,
@@ -872,14 +878,13 @@ fn entry(theme: &iced::Theme, status: text_input::Status) -> text_input::Style {
 pub(crate) fn list(app: &App) -> Element<'_, Message> {
     let live: Vec<&Record> = app.runs.iter().filter(|r| app.is_live(r)).collect();
     let past: Vec<&Record> = app.runs.iter().filter(|r| !app.is_live(r)).collect();
-    let start = row![head_title("Sandboxes"), space().width(Fill)];
+    let start = row![head_title("Sandboxes")];
     let header = match &app.list {
         crate::ListMode::Selecting(ids) => {
             let every = past.len();
             let all = ids.len() == every && every > 0;
             row![
                 head_title(format!("{} of {every} selected", ids.len())),
-                space().width(Fill),
                 small_button(if all { "None" } else { "All" }, push)
                     .on_press(Message::SelectAll(!all)),
                 // Nothing selected is nothing to remove, and iced draws a button with no message as
@@ -949,7 +954,7 @@ pub(crate) fn list(app: &App) -> Element<'_, Message> {
 const PAGE: f32 = 1000.0;
 
 /// The inset a pane's own name and its actions sit at, off the sidebar and the window's edge.
-const GUTTER: f32 = 24.0;
+pub(crate) const GUTTER: f32 = 24.0;
 
 /// Where the page begins, from the window's own top edge rather than from the head above it, so
 /// that the room a reader sees does not follow the head's height.
@@ -982,7 +987,19 @@ fn framed<'a>(
 /// No cap-height correction: the toggle beside it is a glyph in a font, so centring both by the
 /// line box is one rule for both, where a constant would be a guess at one font's cap metrics.
 fn head_title<'a>(name: impl text::IntoFragment<'a>) -> Element<'a, Message> {
-    container(text(name).size(HEAD).font(HEADING).line_height(1.0)).into()
+    container(
+        text(name)
+            .size(HEAD)
+            .font(HEADING)
+            .line_height(1.0)
+            .wrapping(text::Wrapping::None),
+    )
+    // The title takes the free space and gives it back first. A row hands its fixed children
+    // their width before a `Fill` one, so the buttons keep theirs and the name is what clips;
+    // without this the name held its whole width and pushed `New run` off the window.
+    .width(Fill)
+    .clip(true)
+    .into()
 }
 
 /// A control that has to fit a line rather than a page: a head's, whose room the traffic lights
@@ -1050,7 +1067,7 @@ fn head_bar<'a>(app: &App, head: Element<'a, Message>) -> Element<'a, Message> {
 }
 
 /// The sidebar's width: the nav labels plus their counts, and no more.
-const SIDEBAR: f32 = 200.0;
+pub(crate) const SIDEBAR: f32 = 200.0;
 
 /// A sidebar row's label, a step up from body text, as a source list sets one.
 const TAB: f32 = 14.0;
@@ -1301,8 +1318,17 @@ pub(crate) fn run<'a>(app: &'a App, id: &crate::RunId) -> Element<'a, Message> {
     let live = app.is_live(record);
     let mut bar = row![
         small_button("← runs", ghost).on_press(Message::Back),
-        text(&record.name).font(MONO).size(TITLE).line_height(1.0),
-        space().width(Fill),
+        // The name yields before the buttons do, as a head's title does: a run's own controls are
+        // the only way to act on it, and a clipped name still says which run it is.
+        container(
+            text(&record.name)
+                .font(MONO)
+                .size(TITLE)
+                .line_height(1.0)
+                .wrapping(text::Wrapping::None)
+        )
+        .width(Fill)
+        .clip(true),
     ]
     .spacing(12)
     .align_y(iced::alignment::Vertical::Center);
@@ -1325,9 +1351,12 @@ pub(crate) fn run<'a>(app: &'a App, id: &crate::RunId) -> Element<'a, Message> {
         );
     }
 
+    let home = std::env::var("HOME").ok();
     let left = scrollable(
         column![
-            pane("POSTURE", posture_lines(record)),
+            // Spelled as Settings spells the same paths: a guest root under home is most of this
+            // column, and every character of that is `/Users/<you>`.
+            pane("POSTURE", posture_lines(record, home.as_deref())),
             pane("RUN", run_lines(record, live)),
             pane("RESULTS", results_lines(app, record)),
         ]
@@ -1388,6 +1417,35 @@ const FORM_NUMBER: f32 = 96.0;
 /// The width the label column of a pane takes, in logical pixels: the longest label plus a gap.
 const LABEL: f32 = 74.0;
 
+/// How many characters a pane's value column holds before [`elide`] cuts it.
+///
+/// **Measured, not chosen**: the value column is what is left of a [`FillPortion`](Length) of the
+/// default window after the sidebar, the gutters, the card's padding and [`LABEL`], which is about
+/// 342 logical pixels, and [`MONO`] at [`BODY`] advances about 7.8 of them. A narrower window
+/// clips what is left, as a fixed column does; this only bounds the line.
+const VALUE_CHARS: usize = 44;
+
+/// `text` with its middle replaced by an ellipsis when it is longer than `max` characters.
+///
+/// **Both ends survive**, because a path's tail is the half that says which path it is: cutting
+/// only the end leaves every guest root reading the same. Counts characters, not bytes, so a
+/// multi-byte path is cut on a boundary.
+fn elide(text: &str, max: usize) -> String {
+    let count = text.chars().count();
+    if count <= max || max == 0 {
+        return text.to_string();
+    }
+    // One character goes to the ellipsis, and the head keeps the smaller share: a run's own name
+    // sits at the end of a path, and the directories above it repeat across every run.
+    let keep = max - 1;
+    let head = keep / 3;
+    let tail = keep - head;
+    let mut out: String = text.chars().take(head).collect();
+    out.push('…');
+    out.extend(text.chars().skip(count - tail));
+    out
+}
+
 /// A checkbox's box, at the side macOS draws one beside body text.
 const CHECK: f32 = 14.0;
 
@@ -1401,7 +1459,11 @@ fn pane<'a>(title: &'a str, rows: Vec<(String, String)>) -> Element<'a, Message>
                     .font(MONO)
                     .size(BODY)
                     .width(Length::Fixed(LABEL)),
-                text(value).font(MONO).size(BODY).width(Fill),
+                text(elide(&value, VALUE_CHARS))
+                    .font(MONO)
+                    .size(BODY)
+                    .wrapping(text::Wrapping::None)
+                    .width(Fill),
             ]
             .spacing(4),
         );
@@ -1409,22 +1471,22 @@ fn pane<'a>(title: &'a str, rows: Vec<(String, String)>) -> Element<'a, Message>
     container(body.padding(10)).width(Fill).style(card).into()
 }
 
-fn posture_lines(record: &Record) -> Vec<(String, String)> {
+fn posture_lines(record: &Record, home: Option<&str>) -> Vec<(String, String)> {
     let p = &record.posture;
     let mut lines = vec![(
         "root".to_string(),
-        format!("{}, {}", p.root.display(), p.rootfs.as_word()),
+        format!("{}, {}", tilde(home, &p.root), p.rootfs.as_word()),
     )];
     for m in &p.mounts {
         lines.push((
             "mount".to_string(),
-            format!("{} = {}", m.guest.display(), m.host.display()),
+            format!("{} = {}", m.guest.display(), tilde(home, &m.host)),
         ));
     }
     for s in &p.shares {
         lines.push((
             "share".to_string(),
-            format!("{} = {}", s.tag, s.host.display()),
+            format!("{} = {}", s.tag, tilde(home, &s.host)),
         ));
     }
     if p.mounts.is_empty() && p.shares.is_empty() {
@@ -1840,6 +1902,87 @@ mod tests {
             ),
             "the slider's handle, which the toolkit draws round as a Circle: {handle:?}"
         );
+    }
+
+    /// A value longer than its column keeps both ends, because a guest root's tail is the half
+    /// that says which root it is: `~/.local/share/tormoni/rootfs` and `~/.local/share/other/tree`
+    /// differ only past the point an end-truncation would cut.
+    #[test]
+    fn a_long_value_is_cut_in_the_middle_and_keeps_both_ends() {
+        let root = "~/.local/share/tormoni/rootfs, read-only";
+        let cut = elide(root, 30);
+        assert_eq!(cut.chars().count(), 30, "{cut}");
+        assert!(cut.starts_with("~/.local"), "the head is gone: {cut}");
+        assert!(cut.ends_with("read-only"), "the tail is gone: {cut}");
+        assert!(cut.contains('…'), "nothing says it was cut: {cut}");
+
+        // Two roots differing only in their tail stay different, which end-truncation would not.
+        let a = elide("~/.local/share/tormoni/rootfs", 20);
+        let b = elide("~/.local/share/tormoni/other", 20);
+        assert_ne!(a, b, "both cut to the same string: {a}");
+    }
+
+    /// Short enough is left exactly alone: an ellipsis on a value that fits is a lie about it.
+    #[test]
+    fn a_value_that_fits_is_left_alone() {
+        for value in ["none", "1 vcpu, 512 MiB", "read-only"] {
+            assert_eq!(elide(value, VALUE_CHARS), value);
+        }
+        // At the budget exactly, and one past it.
+        let exact: String = "x".repeat(VALUE_CHARS);
+        assert_eq!(elide(&exact, VALUE_CHARS), exact);
+        let over: String = "x".repeat(VALUE_CHARS + 1);
+        assert_eq!(elide(&over, VALUE_CHARS).chars().count(), VALUE_CHARS);
+    }
+
+    /// The cut lands on a character boundary, not inside one: a path may carry any character, and
+    /// slicing bytes panics the moment a cut point falls inside a multi-byte one.
+    ///
+    /// Both values below are chosen so that a byte-slicing `elide` *would* panic: at these
+    /// budgets each cut point sits on a continuation byte.
+    #[test]
+    fn a_multibyte_value_is_cut_on_a_boundary() {
+        for (value, max) in [
+            ("~/Dökümënté/ünïcødé-påth/rëßültß/rootfs", 24),
+            ("é".repeat(60).as_str(), 30),
+        ] {
+            let cut = elide(value, max);
+            assert_eq!(cut.chars().count(), max, "{cut}");
+            let (head, tail) = cut.split_once('…').expect("an ellipsis");
+            assert!(value.starts_with(head), "{cut}: head is not the value's");
+            assert!(value.ends_with(tail), "{cut}: tail is not the value's");
+        }
+    }
+
+    /// The posture pane spells a path the way Settings spells the same one. Before this the run
+    /// screen printed `/Users/<you>/.local/...` in a column two thirds of it wide.
+    #[test]
+    fn the_posture_pane_spells_a_path_the_way_settings_does() {
+        let mut posture = tormoni_record::Posture::new(
+            std::path::PathBuf::from("/Users/x/.local/share/tormoni/rootfs"),
+            std::num::NonZeroU8::MIN,
+            std::num::NonZeroU32::new(512).expect("non-zero"),
+        );
+        posture.shares.push(tormoni_record::Share::new(
+            "work".to_string(),
+            std::path::PathBuf::from("/Users/x/projects"),
+        ));
+        let record = Record::begin("r", Verb::Run, vec!["true".into()], posture);
+
+        let lines = posture_lines(&record, Some("/Users/x"));
+        let root = &lines.iter().find(|(l, _)| l == "root").expect("a root").1;
+        assert!(root.starts_with("~/.local"), "{root}");
+        let share = &lines.iter().find(|(l, _)| l == "share").expect("a share").1;
+        assert!(share.ends_with("~/projects"), "{share}");
+
+        // A path outside home is left whole: `~` there would name the wrong directory.
+        let elsewhere = posture_lines(&record, Some("/Users/someone-else"));
+        let root = &elsewhere
+            .iter()
+            .find(|(l, _)| l == "root")
+            .expect("a root")
+            .1;
+        assert!(root.starts_with("/Users/x/"), "{root}");
     }
 
     /// A path under home is spelled with `~`; anything else is left whole.

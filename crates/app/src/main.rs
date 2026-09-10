@@ -245,10 +245,21 @@ fn window_settings() -> iced::window::Settings {
     let platform_specific = iced::window::settings::PlatformSpecific::default();
     iced::window::Settings {
         size: Size::new(1360.0, 860.0),
+        min_size: Some(WINDOW_MIN),
         platform_specific,
         ..iced::window::Settings::default()
     }
 }
+
+/// The narrowest page this window is meant to draw: a card and the two gutters beside it. Below
+/// this a line of prose is two words wide, which is not a layout but a failure of one.
+const PAGE_MIN: f32 = 360.0;
+
+/// The window will not be dragged narrower than the rail **and** a page beside it, nor shorter
+/// than a card under a head. The rail is never folded for the person: a window that cannot hold
+/// both is one this refuses to become, which is a floor rather than a layout that moves under
+/// them.
+const WINDOW_MIN: Size = Size::new(screens::SIDEBAR + PAGE_MIN + 2.0 * screens::GUTTER, 420.0);
 
 /// Where a plain launch lands: the `--open` flag, else the saved pick, else the notebook.
 fn landing(flag: Option<OpenScreen>, saved: Option<OpenScreen>) -> OpenScreen {
@@ -493,39 +504,57 @@ pub(crate) struct Form {
     pub(crate) mem_mib: String,
 }
 
-/// What a cookbook entry is filed under.
+/// What a cookbook entry is filed under. **A shelf names its subject, not its moral**, so a
+/// reader scanning the rail knows whether a run is about the network or the GPU before reading it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Shelf {
-    /// Prove it runs at all.
-    FirstSteps,
-    /// Rule 2 on a screen: what a sandbox cannot reach until it is granted.
-    Isolation,
-    /// Getting work back out of one.
+    Basics,
+    Network,
+    Filesystem,
     Results,
-    /// What the guest is given.
-    Resources,
-    /// What a run looks like when it goes wrong.
+    Gpu,
+    Sizing,
     Failure,
 }
 
 impl Shelf {
     /// Every shelf, in the order the cookbook lists them.
-    pub(crate) const ALL: [Self; 5] = [
-        Self::FirstSteps,
-        Self::Isolation,
+    pub(crate) const ALL: [Self; 7] = [
+        Self::Basics,
+        Self::Network,
+        Self::Filesystem,
         Self::Results,
-        Self::Resources,
+        Self::Gpu,
+        Self::Sizing,
         Self::Failure,
     ];
 
-    /// The heading over its entries.
+    /// The subject over its entries.
     pub(crate) fn title(self) -> &'static str {
         match self {
-            Self::FirstSteps => "FIRST STEPS",
-            Self::Isolation => "WHAT IT CANNOT REACH",
-            Self::Results => "GETTING WORK BACK",
-            Self::Resources => "WHAT IT IS GIVEN",
-            Self::Failure => "WHEN IT GOES WRONG",
+            Self::Basics => "THE BASICS",
+            Self::Network => "NETWORK",
+            Self::Filesystem => "THE FILESYSTEM",
+            Self::Results => "RESULTS AND OUTPUT",
+            Self::Gpu => "GPU",
+            Self::Sizing => "CPU AND MEMORY",
+            Self::Failure => "WHEN A RUN FAILS",
+        }
+    }
+
+    /// One line under the subject, saying what its runs do.
+    pub(crate) fn about(self) -> &'static str {
+        match self {
+            Self::Basics => "Whether it runs at all, and what the guest looks like from inside.",
+            Self::Network => "What a sandbox reaches, and what it cannot until --net grants it.",
+            Self::Filesystem => {
+                "Which directories are there, which are writable, and what of \
+                                 yours is not."
+            }
+            Self::Results => "Getting files and printed output back out of a run.",
+            Self::Gpu => "What --gpu offers a guest, and what is there without it.",
+            Self::Sizing => "What the posture gives the guest, which is not what this host has.",
+            Self::Failure => "How a bad command reads from outside the sandbox.",
         }
     }
 }
@@ -546,6 +575,7 @@ pub(crate) struct Example {
     pub(crate) shows: &'static str,
     pub(crate) command: &'static str,
     pub(crate) network: bool,
+    pub(crate) gpu: bool,
     pub(crate) vcpus: Option<&'static str>,
     pub(crate) mem_mib: Option<&'static str>,
 }
@@ -563,69 +593,94 @@ const fn plain(
         shows,
         command,
         network: false,
+        gpu: false,
         vcpus: None,
         mem_mib: None,
+    }
+}
+
+/// The same, with a network granted.
+const fn networked(title: &'static str, shows: &'static str, command: &'static str) -> Example {
+    Example {
+        network: true,
+        ..plain(Shelf::Network, title, shows, command)
     }
 }
 
 impl Example {
     /// Every entry, in the order its shelf lists them. Each was run against the tree
     /// `cargo xtask init` writes before it was written down.
-    pub(crate) const ALL: [Self; 16] = [
+    pub(crate) const ALL: [Self; 23] = [
         plain(
-            Shelf::FirstSteps,
+            Shelf::Basics,
             "Hello from a virtual machine",
             "The guest answers Linux, whatever this host is.",
             "uname -a",
         ),
         plain(
-            Shelf::FirstSteps,
+            Shelf::Basics,
             "Look around the guest",
             "Its root is the guest tree, not this machine's.",
             "ls -la /",
         ),
         plain(
-            Shelf::FirstSteps,
+            Shelf::Basics,
             "Who the guest thinks you are",
             "Root inside the VM, which is nobody out here.",
             "id",
         ),
         plain(
-            Shelf::FirstSteps,
-            "What it was given",
-            "One vCPU and 512 MiB, until a posture says otherwise.",
-            "free -m",
-        ),
-        plain(
-            Shelf::Isolation,
-            "No network, by default",
+            Shelf::Network,
+            "Nothing reaches out, by default",
             "There is no resolver and no route, so this fails.",
             "wget -T5 -qO- http://example.com",
         ),
-        Example {
-            network: true,
-            ..plain(
-                Shelf::Isolation,
-                "A network, once granted",
-                "The same command with --net tsi reaches what this host reaches.",
-                "wget -T5 -qO- http://example.com",
-            )
-        },
+        networked(
+            "A network, once granted",
+            "The same command with --net tsi reaches what this host reaches.",
+            "wget -T5 -qO- http://example.com",
+        ),
+        networked(
+            "Names resolve too",
+            "A granted network brings a resolver with it, not just a route.",
+            "nslookup example.com",
+        ),
+        networked(
+            "TLS works",
+            "Certificates come from the guest tree, so https needs nothing extra.",
+            "wget -T5 -qO- https://example.com",
+        ),
+        networked(
+            "Fetch something and keep it",
+            "The download lands in /results, so the record carries what came back.",
+            "wget -T5 -O /results/page.html http://example.com",
+        ),
+        networked(
+            "It is sockets, not the network",
+            "tsi impersonates connections, so a raw ping has nothing to send on.",
+            "ping -c1 -W2 1.1.1.1",
+        ),
+        networked(
+            "Its loopback is your loopback",
+            "With tsi the guest's 127.0.0.1 is this machine's: whatever you have bound there is \
+             reachable from inside.",
+            "wget -T5 -qO- http://127.0.0.1:8000/",
+        ),
         plain(
-            Shelf::Isolation,
+            Shelf::Filesystem,
             "The root is read-only",
             "A write outside the run's own places is refused by the mount.",
             "touch /proof",
         ),
         plain(
-            Shelf::Isolation,
-            "No host directory is shared",
-            "Nothing of yours is here until a --mount names it.",
+            Shelf::Filesystem,
+            "None of your directories are here",
+            "Nothing of yours is in the guest until a --mount names it.",
             "ls -la /mnt",
         ),
         plain(
-            Shelf::Results,
-            "Write where the run can write",
+            Shelf::Filesystem,
+            "Where a run can write",
             "/results is the one place a run is expected to put things.",
             "touch /results/proof",
         ),
@@ -647,10 +702,32 @@ impl Example {
             "stdout and stderr are captured, capped, and shown beside the run.",
             "dmesg",
         ),
+        plain(
+            Shelf::Gpu,
+            "No GPU, by default",
+            "There is no render node in the guest at all until --gpu asks for one.",
+            "ls -la /dev/dri",
+        ),
+        Example {
+            gpu: true,
+            ..plain(
+                Shelf::Gpu,
+                "The card the offer adds",
+                "--gpu gives the guest card0 and renderD128. A driver to use them is the guest's \
+                 own problem, and the stock tree has none.",
+                "ls -la /dev/dri",
+            )
+        },
+        plain(
+            Shelf::Sizing,
+            "What it was given",
+            "One vCPU and 512 MiB, until a posture says otherwise.",
+            "free -m",
+        ),
         Example {
             vcpus: Some("4"),
             ..plain(
-                Shelf::Resources,
+                Shelf::Sizing,
                 "Give it four vCPUs",
                 "The guest counts what the posture gave it, not this host's cores.",
                 "nproc",
@@ -659,7 +736,7 @@ impl Example {
         Example {
             mem_mib: Some("2048"),
             ..plain(
-                Shelf::Resources,
+                Shelf::Sizing,
                 "Give it two gigabytes",
                 "Guest RAM is what the posture says, and the record keeps the number.",
                 "free -m",
@@ -690,6 +767,9 @@ impl Example {
         if self.network {
             line.push_str(" --net tsi");
         }
+        if self.gpu {
+            line.push_str(" --gpu");
+        }
         if let Some(vcpus) = self.vcpus {
             line.push_str(&format!(" --vcpus {vcpus}"));
         }
@@ -706,6 +786,7 @@ impl Example {
         let mut form = Form::blank();
         form.command = self.command.to_string();
         form.network = self.network;
+        form.gpu = self.gpu;
         if let Some(vcpus) = self.vcpus {
             form.vcpus = vcpus.to_string();
         }
@@ -2211,10 +2292,11 @@ mod tests {
         // An entry that says nothing about a field leaves the blank form's own default there.
         let plain = Example::ALL
             .iter()
-            .find(|e| !e.network && e.vcpus.is_none() && e.mem_mib.is_none())
+            .find(|e| !e.network && !e.gpu && e.vcpus.is_none() && e.mem_mib.is_none())
             .expect("a default-posture entry");
         let _ = app.update(Message::Example(*plain));
         assert!(!app.form.network, "and the default posture");
+        assert!(!app.form.gpu, "which offers no gpu either");
         assert_eq!(app.form.vcpus, Form::blank().vcpus);
         assert_eq!(app.form.mem_mib, Form::blank().mem_mib);
     }
@@ -2282,6 +2364,12 @@ mod tests {
                 "{}: the line and the entry disagree about memory",
                 example.title
             );
+            assert_eq!(
+                line.contains("--gpu"),
+                form.gpu,
+                "{}: the line and the form disagree about the gpu",
+                example.title
+            );
         }
     }
 
@@ -2301,6 +2389,18 @@ mod tests {
             Example::ALL.len(),
             "an entry is on no listed shelf"
         );
+    }
+
+    /// A shelf names its subject and says what its runs do, which is the whole reason a reader can
+    /// scan the cookbook: a blank line under a heading leaves the entries to speak for themselves.
+    #[test]
+    fn every_shelf_says_what_its_runs_do() {
+        for shelf in Shelf::ALL {
+            let (title, about) = (shelf.title(), shelf.about());
+            assert_eq!(title, title.to_uppercase(), "{title} is not a heading");
+            assert!(about.len() > 20, "{title}: {about:?} says too little");
+            assert!(about.ends_with('.'), "{title}: {about:?} is not a sentence");
+        }
     }
 
     /// One run's Delete asks too, and a live run is never asked about: pressing it reports why
