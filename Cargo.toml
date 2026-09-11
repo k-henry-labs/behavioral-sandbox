@@ -53,8 +53,6 @@ serde_json = "1"
 # Pure Rust, so the host path takes on no second language; the console verifies with `ring`, and
 # `an_rfc_8032_vector_signs_to_the_published_bytes` is what holds the two implementations
 # together rather than sharing one.
-ed25519-dalek = { version = "2", default-features = false, features = ["std", "zeroize"] }
-sha2 = { version = "0.10", default-features = false, features = ["std"] }
 # Safe wrappers over the pty, termios and signal syscalls the interactive shell path needs on both
 # ends; already in the graph through clap's `terminal_size`. Each crate names only the features it
 # uses. The crate's internal `unsafe` is the dep's, not ours.

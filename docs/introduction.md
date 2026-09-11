@@ -35,7 +35,7 @@ Both platforms run the same sandboxes: KVM on Linux, and Hypervisor.framework on
 the tree also signs itself (`cargo xtask sign`) and bundles as `Tormoni.app` (`cargo xtask bundle`).
 
 **Status.** Pre-release: one maintainer, no external review. A release installs with
-`curl -fsSL https://tormoni.ai/install.sh | sh` on macOS ARM64 and Linux x86_64; [Running a
+`curl -fsSL https://raw.githubusercontent.com/kendricklawton/tormoni/main/install.sh | sh` on macOS ARM64 and Linux x86_64; [Running a
 sandbox](./running.md#installing) says what that does and cannot do. macOS's
 libkrun builds neither the `--sound` nor the guest input backend, so a display there is viewed in
 `Tormoni`. `--gpu` offers a guest the 3D path where libkrun reports the feature, but no host

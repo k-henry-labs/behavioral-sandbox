@@ -17,7 +17,7 @@
   <h3>
     <a href="docs/SUMMARY.md">Docs</a>
     <span> | </span>
-    <a href="docs/architecture.md">Architecture</a>
+    <a href="docs/architecture.md#design-rules">Design rules</a>
     <span> | </span>
     <a href="DEVELOPMENT.md">Developing</a>
     <span> | </span>
@@ -57,8 +57,8 @@ macOS ARM64 builds, signs (`cargo xtask sign`), bundles as `Tormoni.app` (`cargo
 boots the same sandboxes under Hypervisor.framework.
 
 **Status.** Pre-release: one maintainer, no external review. A release installs with
-`curl -fsSL https://tormoni.ai/install.sh | sh` on macOS ARM64 and Linux x86_64 (the [running](docs/running.md)
-page says what it does and cannot do). macOS's
+`curl -fsSL https://raw.githubusercontent.com/kendricklawton/tormoni/main/install.sh | sh` on macOS ARM64 and Linux x86_64 (the
+[documentation](docs/SUMMARY.md) says what it does and cannot do). macOS's
 libkrun builds neither the `--sound` nor the guest input backend, and the display helper's own
 window is compiled out there, so a display on macOS is viewed in `Tormoni`. `--gpu` offers a guest
 the 3D path (virgl + Venus) where libkrun reports the feature, but no host measured so far carries a
@@ -67,7 +67,7 @@ Venus-built renderer, so guest acceleration is unproven.
 ## Design rules
 
 Five rules. A change that breaks one is a design error, not a trade-off. Each states an intent and
-the mechanism serving it; the full text is [docs/architecture.md](docs/architecture.md).
+the mechanism serving it; the full text is [docs/architecture.md](docs/architecture.md#design-rules).
 
 * **Isolation is hardware, not software**: untrusted code runs in a VM under KVM or
   Hypervisor.framework, never behind a guest-side check.
@@ -131,8 +131,8 @@ types. `cargo … -p` takes the package, a path takes the directory.
 | `crates/cli` | `tormoni` | The `tormoni` CLI and its verbs. The binary on `PATH` is `tormoni`. |
 | `crates/serve` | `tormoni-serve` | `tormoni serve`: one box that runs sandboxes for a caller over HTTP, and the meter that says what one held. One tenant, one token; it decides nothing about who is asking. |
 | `crates/app` | `tormoni-app` | The GUI application, `Tormoni`, on iced: the notebook of runs reached from a sidebar, a run's record with its display and output, a start form, stop, re-run, delete, export, clear history, a persisted palette, scale and landing screen, and a shell in your terminal. One AppKit call gives its window a toolbar, which is what puts the window's own buttons on the line its head is drawn to. |
-| `crates/test-support` | `tormoni-test-support` | Shared test fixtures: a self-reclaiming scratch dir, a log sink, a deterministic generator. Dev-only, never shipped. |
 | `docs` | | This documentation, as an mdBook. |
+| `crates/test-support` | `tormoni-test-support` | Shared test fixtures: a self-reclaiming scratch dir, a log sink, a deterministic generator. Dev-only, never shipped. |
 | `xtask` | `xtask` | Dev orchestration: `cargo xtask ci`, the guest image build, the vendor mirror. Never shipped. |
 
 ## Verified on
@@ -147,7 +147,7 @@ happens on Arch Linux `x86_64` and macOS ARM64.
 
 A `v*` tag builds a release: `.github/workflows/release.yml` runs `cargo xtask dist` on macOS ARM64
 and on Linux x86_64 and publishes the two artifacts, `SHA256SUMS` and `install.sh`, which
-`https://tormoni.ai/install.sh` redirects to. There is no published roadmap and no promised date.
+`install.sh` at the repository root installs. There is no published roadmap and no promised date.
 A capability becomes a feature when a test exercises it end to end, and is not announced before
 that. The first
 supported release, `v0.1.0`, will pin the host↔guest wire framing and the supervisor API; until then

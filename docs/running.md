@@ -15,7 +15,7 @@ is where `cargo xtask init` puts one. The flag and the variable are for a tree s
 ## Installing
 
 ```console
-curl -fsSL https://tormoni.ai/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/kendricklawton/tormoni/main/install.sh | sh
 ```
 
 The address redirects to the latest release's `install.sh` on GitHub, as Ollama's does. The script
@@ -98,7 +98,7 @@ so a sandbox started by the CLI is visible to the app and the other way round.
 
 Configuration is resolved in precedence order: 1. Command line flags. 2. Environment variables
 (`$TORMONI_VCPUS`, `$TORMONI_MEM_MIB`, `$TORMONI_GUEST_ROOT`, `$TORMONI_RUNS_DIR`, `$TORMONI_RUNS_KEEP`,
-`$TORMONI_OUTPUT_CAP_KIB`, `$TORMONI_LOG`, `$TORMONI_CLI`, `$TORMONI_THEME`, `$TORMONI_CONSOLE`). 3. The nearest `.tormoni.toml` in or above
+`$TORMONI_OUTPUT_CAP_KIB`, `$TORMONI_LOG`, `$TORMONI_CLI`, `$TORMONI_THEME`). 3. The nearest `.tormoni.toml` in or above
 the current working directory. 4. User defaults in `~/.tormoni.toml`. 5. Built-in defaults.
 
 ## What a run leaves
@@ -125,14 +125,7 @@ readable.
 
 `Tormoni` opens on the notebook, with a sidebar reaching four tabs:
 
-- **The list**: every run, newest first, live ones with a thumbnail of their display. While
-  signed in it also holds what the console keeps, marked `cloud` and asked for on its own slower
-  clock than the window's own tick. A run in both places is **this machine's**, because only this
-  machine's copy can be stopped, shelled into or watched. A remote run is read, exported and
-  re-run here and nothing else: Stop, Shell and Delete each reach a control socket or a record
-  directory on the machine the run is actually on, and a display is a sealed memfd over a local
-  socket, which is not a thing that crosses a network.
-  `a_consoles_runs_merge_beside_this_machines_and_never_over_them` holds the merge to that. `Select`
+- **The list**: every run, newest first, live ones with a thumbnail of their display. `Select`
   turns each ended row into a tick box, `All` takes every one of them, and `Remove` asks about what
   was selected. A live run has no box: it is refused a delete until it stops.
 - **One run**: its posture, output and results beside its live display (keyboard and pointer go
@@ -144,7 +137,7 @@ readable.
   card shows is built from the same fields the form takes
   (`the_line_an_entry_shows_is_the_posture_it_fills_in`). [Examples](./examples.md) has the same
   runs with their output.
-- **Settings** (the platform's command with `,`, from any screen): the account first, then light,
+- **Settings** (the platform's command with `,`, from any screen): light,
   dark or the desktop's own mode, and the interface scale, both applied live, the screen a plain
   launch opens on, and what this machine has to run a sandbox with (the `tormoni` binary and guest
   root it found). The picks are kept across launches in a file beside the runs directory.
@@ -156,39 +149,6 @@ Delete. Escape and a press outside answer it the same way Cancel does, and cance
 question gives the selection back rather than dropping it.
 `deleting_one_run_asks_first_and_never_asks_about_a_live_one` and
 `a_selection_removes_what_was_selected_and_only_behind_the_confirm` hold both paths to it.
-
-**The account is the console's, and the console is a different product.** The app holds a device
-key; no sandbox and no screen needs the key or the account, and the run path never reads either.
-
-**Signing in pairs this device, and needs the console.** Sign in makes an ed25519 key and opens the
-console's connect page on its public half. The block then shows the key's fingerprint, in the
-`SHA256:` form `ssh-keygen -lf` prints, and the page shows the same one: comparing them is what a
-`/connect` link somebody else sent would fail. Press Connect there and the app collects a `tor_`
-token by signing for the key it holds, spends it on the console's `/v1/account`, and shows the
-person over the address the account is named by. Upgrade, Manage and Devices open the console's
-plans, account and keys pages; Devices is where a device this app never signed out of is revoked.
-
-**Sign out takes the key and the token off this disk, and then hands the token back.** The
-console's `DELETE /v1/device` revokes the device that token was minted for, so the row leaves the
-Devices list rather than staying live for an app that signed out. The wipe comes first and does
-not depend on the answer: a console that cannot be reached leaves a row for a key nobody holds,
-and the window says which. Both halves of the wipe finish before the press returns, because Sign
-in is on the screen from that moment and writes a new key into the same directory, so a wipe still
-queued behind that press would delete the key the sign-in had just made
-(`signing_out_empties_the_key_directory_before_it_asks_the_console_anything`). Each Sign in pairs
-a new key, so a token a launch that never signed out left behind is handed back the same way
-(`a_taken_token_leaves_the_disk_with_it`), and the console lists this machine once rather than once
-per sign-in.
-
-There is no token to type and no offline path: with the console unreachable the block says that and
-nothing else. A key collects a token once, so each Sign in makes a new one, and a device nobody
-approves within five minutes is given up on. The key and the token are files under
-`$XDG_DATA_HOME/tormoni/device`, else `~/.local/share/tormoni/device`, at mode `0600` in a `0700`
-directory. That is a file, not a keychain: this build has no credential store to put one in, and
-`device.pub` beside them is the public half, which `ssh-keygen -lf` reads.
-
-The console is `--console URL`, else `$TORMONI_CONSOLE`, else `https://tormoni.ai`; a stack on
-`http://localhost:3000` is one `--console http://localhost:3000` away.
 
 `Tormoni NAME` opens straight onto a run; `--open list|new|settings` opens a screen. Starting and
 stopping go through the `tormoni` binary beside the app, or under its bundle's `Contents/Resources`

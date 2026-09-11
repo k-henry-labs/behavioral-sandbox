@@ -1,4 +1,4 @@
-//! `install.sh`, held in the gate: the script `curl -fsSL https://tormoni.ai/install.sh | sh`
+//! `install.sh`, held in the gate: the script `curl -fsSL https://raw.githubusercontent.com/kendricklawton/tormoni/main/install.sh | sh`
 //! runs, which the release job uploads beside the artifacts.
 //!
 //! - **`sh -n` everywhere, `shellcheck` where it is.** The gate needs no tool it cannot name a

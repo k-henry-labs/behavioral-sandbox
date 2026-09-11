@@ -14,15 +14,12 @@
 //!   display path on the host's monotonic clock, as `cargo xtask bench-frames --app` reads them.
 #![deny(unsafe_code)]
 
-mod account;
 mod chrome;
 mod cli;
-mod device;
 mod fonts;
 mod frame;
 mod icons;
 mod lease;
-mod remote;
 mod screens;
 mod state;
 mod theme;
@@ -66,12 +63,6 @@ const OUTPUT_TAIL: u64 = 256 * 1024;
 /// The shortest gap between two presents a thumbnail in the list is redrawn for. A thumbnail is
 /// a glance, not a screen, and every present it takes is a whole window rebuild.
 const THUMBNAIL_EVERY: std::time::Duration = std::time::Duration::from_millis(100);
-/// How often the console is asked what it holds.
-///
-/// The window's own tick is a second, which is the right rate for a list of processes on this
-/// machine and far too fast for a network. A run that landed on a console thirty seconds ago is
-/// not news worth a request a second.
-const ASK_CONSOLE_EVERY_MS: u64 = 30_000;
 
 /// The most live displays the list leases at once, newest first. Each costs a thread, a socket
 /// and a scanout mapping.
@@ -123,10 +114,6 @@ struct Cli {
     /// unknown name is refused with the three.
     #[arg(long, value_name = "NAME")]
     theme: Option<String>,
-    /// The console to sign in to and open pages of: an `http://` or `https://` address. Falls
-    /// back to `$TORMONI_CONSOLE`, then to the product's own.
-    #[arg(long, value_name = "URL")]
-    console: Option<String>,
     /// Open on this screen instead of the menu.
     #[arg(long, value_name = "SCREEN", conflicts_with = "name")]
     open: Option<OpenScreen>,
@@ -288,13 +275,6 @@ fn main() -> ExitCode {
             return ExitCode::from(EXIT_OPERATIONAL);
         }
     };
-    let console = match account::console(cli.console.as_deref(), std::env::var(account::ENV).ok()) {
-        Ok(origin) => origin,
-        Err(why) => {
-            eprintln!("{NAME}: {why}");
-            return ExitCode::from(EXIT_OPERATIONAL);
-        }
-    };
     frame::report_adapter();
     let sinks = match frame::Sinks::open(cli.drawn_log.as_deref(), cli.input_log.as_deref()) {
         Ok(sinks) => Arc::new(sinks),
@@ -326,7 +306,6 @@ fn main() -> ExitCode {
         );
         app.mode = mode;
         app.theme_overridden = theme_overridden;
-        app.console = console.clone();
         app.scale = scale;
         app.opens_on = opens_on.unwrap_or(OpenScreen::List);
         if app.status.is_none() {
@@ -957,28 +936,6 @@ pub(crate) enum Message {
         RunName,
         iced::futures::channel::mpsc::UnboundedSender<String>,
     ),
-    /// Start signing in: a device key is made and the console's connect page opens for it.
-    SignIn,
-    /// One ask of the console whether this device has been approved yet.
-    Claimed(account::Claim),
-    /// Open the pairing page again, for a browser that was closed before Connect was pressed.
-    PairingPage,
-    /// Stop signing in, keeping neither the key nor a token.
-    SignInCancelled,
-    /// A sign-in answered: the account's identity, or why there is none.
-    SignedIn(Result<account::Identity, String>),
-    /// Give up the account this window holds.
-    SignOut,
-    /// The token a sign-out gave up was handed back to the console, or was not.
-    SignedOut(Result<(), String>),
-    /// A token an earlier launch left behind was handed back, or was not.
-    Retired(Result<(), String>),
-    /// The console's runs, for the next refresh to merge beside this machine's.
-    Fetched(Vec<Record>),
-    /// What a run held on a console printed, for the screen that is open on it.
-    RemoteOutput(RunId, Result<String, String>),
-    /// Open one of the console's pages in the browser: Manage and Upgrade.
-    Console(account::Page),
     /// Something the operator should see in the window rather than on a stderr they may not have.
     Note(String),
     /// A run's lease ended, with why; the sandbox stopping is the ordinary case.
@@ -997,24 +954,6 @@ pub(crate) struct App {
     form: Form,
     /// The last thing worth telling the operator: an error, or what just happened.
     status: Option<String>,
-    /// Who this window is signed in as. Nothing on any screen needs one.
-    account: account::Account,
-    /// The run ids this window got from a console rather than from its own notebook.
-    ///
-    /// Held beside the runs rather than on them: a [`Record`] is the wire format, and where a
-    /// copy of one was read is this window's fact, not the record's.
-    remote: remote::Remote,
-    /// What the last ask of the console brought back, waiting for the next refresh to merge it.
-    /// Fetched off the window's thread, because a console is a network away.
-    fetched: Vec<Record>,
-    /// When the console was last asked. The window ticks once a second and a console is a network
-    /// away, so the list is refreshed on its own, slower clock.
-    asked_ms: u64,
-    /// The console the account is signed in to, and whose pages Manage and Upgrade open.
-    console: String,
-    /// Where this device's key and token live. A field, not a call, so a test never reaches the
-    /// directory the person running it is signed in with.
-    device_dir: PathBuf,
     output: Output,
     /// The shown run's result files, as of the last tick. Held here rather than read in `view`,
     /// which iced rebuilds once per message: with a guest presenting frames that is a directory
@@ -1078,12 +1017,6 @@ impl App {
             platform: cli::Platform::default(),
             form: Form::blank(),
             status: None,
-            account: account::Account::default(),
-            remote: remote::Remote::new(),
-            fetched: Vec::new(),
-            asked_ms: 0,
-            console: account::DEFAULT.to_string(),
-            device_dir: account::dir().unwrap_or_default(),
             output: Output::default(),
             results: Vec::new(),
             log,
@@ -1180,13 +1113,6 @@ impl App {
         // A console's runs are merged in rather than replacing anything: a person signed in on a
         // laptop still has their own, and a run that is in both places is this machine's, because
         // only this machine's copy can be stopped, shelled into or watched.
-        let mine: std::collections::BTreeSet<String> = runs.iter().map(|r| r.id.clone()).collect();
-        for record in std::mem::take(&mut self.fetched) {
-            if !mine.contains(&record.id) {
-                self.remote.insert(record.id.clone());
-                runs.push(record);
-            }
-        }
         runs.sort_by(|a, b| b.started_ms.cmp(&a.started_ms).then(b.id.cmp(&a.id)));
         self.runs = runs;
         if let Screen::Run(id) = &self.screen {
@@ -1208,13 +1134,6 @@ impl App {
             Some(s) if streams.contains(&s) => Some(s),
             _ => streams.first().copied(),
         };
-        // A run this window read from a console has no directory here, so there is nothing local
-        // to tail: its output is asked for once, on the way in.
-        if self.remote.contains(id.as_str()) {
-            self.results = Vec::new();
-            self.output = Output::default();
-            return;
-        }
         let dir = self.store.dir_of(id.as_str());
         self.results = dir.result_files().unwrap_or_default();
         self.output = match stream {
@@ -1306,121 +1225,12 @@ impl App {
     /// not offered for it.
     ///
     /// A remote run can be read, exported and re-run here; it cannot be stopped, shelled into or
-    /// watched, because those reach a socket on the machine it is actually on.
-    pub(crate) fn is_remote(&self, id: &str) -> bool {
-        self.remote.contains(id)
-    }
-
-    /// Asks the console again if it has been long enough, and otherwise does nothing.
-    fn ask_console_if_due(&mut self) -> Task<Message> {
-        let now = tormoni_record::now_ms();
-        if now.saturating_sub(self.asked_ms) < ASK_CONSOLE_EVERY_MS {
-            return Task::none();
-        }
-        self.asked_ms = now;
-        self.fetch_remote()
-    }
-
-    /// Asks the console for its runs, off this thread.
-    ///
-    /// Only while signed in: a window with no token would be asking a console that will refuse,
-    /// once a tick, for ever.
-    fn fetch_remote(&self) -> Task<Message> {
-        if !matches!(self.account, account::Account::SignedIn(_)) {
-            return Task::none();
-        }
-        let Some(cli) = self.platform.tormoni.clone() else {
-            return Task::none();
-        };
-        let console = self.console.clone();
-        Task::perform(
-            async move { remote::list(&cli, Some(&console)).unwrap_or_default() },
-            Message::Fetched,
-        )
-    }
-
-    /// Drops what was mapped for a run this window no longer leases, so a display left behind
-    /// does not keep its memfd, its input session or its history alive.
     fn forget_unwatched(&mut self) {
         let wanted: BTreeSet<RunName> = self.watches().into_iter().map(|w| w.name).collect();
         self.displays.retain(|name, _| wanted.contains(name));
     }
 
     /// Makes a device key, opens the console's page on it, and asks once whether it was
-    /// approved. The key is new each time: the console hands a key its token once.
-    fn start_pairing(&mut self) -> Result<Task<Message>, String> {
-        let dir = self.device_dir.clone();
-        if dir.as_os_str().is_empty() {
-            return Err(
-                "no HOME and no XDG_DATA_HOME, so there is nowhere to keep a device key"
-                    .to_string(),
-            );
-        }
-        let key = device::create(&dir)?;
-        let device_name = account::device_name();
-        let pairing = account::Pairing {
-            device: device_name.clone(),
-            line: key.public().line().to_string(),
-            fingerprint: key.public().fingerprint().to_string(),
-            issued_at: 0,
-            started_ms: tormoni_record::now_ms(),
-        };
-        let url = account::connect_url(&self.console, &device_name, &pairing.line);
-        self.account = account::Account::Pairing(pairing);
-        account::open_url(&url)?;
-        // Last, after every step that can fail: `?` above would drop this task, and the token
-        // it took is off the disk by then, so a leftover would be neither held nor given back.
-        Ok(Task::batch([self.retire_leftover(), self.ask_again(0)]))
-    }
-
-    /// Hands back a token a launch that never signed out left behind, so signing in again makes
-    /// this machine one device on the console rather than one more.
-    ///
-    /// Nothing about the sign-in waits on it, and nothing it does reaches the key directory
-    /// again: the token is off the disk before the task exists.
-    fn retire_leftover(&self) -> Task<Message> {
-        let Some(token) = device::take_token(&self.device_dir) else {
-            return Task::none();
-        };
-        let console = self.console.clone();
-        Task::perform(
-            async move { account::retire(&console, token) },
-            Message::Retired,
-        )
-    }
-
-    /// Asks the console again in `after` seconds, from the second the last claim signed at.
-    ///
-    /// The wait is inside the task, so each one holds a pool thread for a couple of seconds
-    /// rather than one holding it for the whole five minutes.
-    fn ask_again(&self, after: u64) -> Task<Message> {
-        let account::Account::Pairing(pairing) = &self.account else {
-            return Task::none();
-        };
-        let (console, issued_at) = (self.console.clone(), pairing.issued_at);
-        let dir = self.device_dir.clone();
-        Task::perform(
-            async move {
-                if after > 0 {
-                    std::thread::sleep(std::time::Duration::from_secs(after));
-                }
-                account::claim(&console, &dir, issued_at)
-            },
-            Message::Claimed,
-        )
-    }
-
-    /// Opens `page` of the console in the browser; what came of it lands as the operator's line.
-    fn visit(&self, page: account::Page) -> Task<Message> {
-        let console = self.console.clone();
-        Task::perform(
-            async move { account::open(&console, page) },
-            |answer| match answer {
-                Ok(line) | Err(line) => Message::Note(line),
-            },
-        )
-    }
-
     /// The record with `name`, from the last tick.
     fn record_by_name(&self, name: &RunName) -> Option<&Record> {
         self.runs.iter().find(|r| r.name == name.as_str())
@@ -1430,37 +1240,6 @@ impl App {
         match message {
             Message::Tick => {
                 self.refresh();
-                self.ask_console_if_due()
-            }
-            Message::Open(id) if self.is_remote(id.as_str()) => {
-                self.open(id.clone());
-                self.status = None;
-                let Some(cli) = self.platform.tormoni.clone() else {
-                    return Task::none();
-                };
-                let console = self.console.clone();
-                let asked = id.clone();
-                Task::perform(
-                    async move { remote::output(&cli, Some(&console), asked.as_str()) },
-                    move |text| Message::RemoteOutput(id.clone(), text),
-                )
-            }
-            Message::RemoteOutput(id, text) => {
-                // Dropped if the screen moved on: a console's answer that arrives after the run
-                // was closed belongs to a screen nobody is looking at.
-                if self.screen == Screen::Run(id) {
-                    match text {
-                        Ok(text) => {
-                            self.output = Output {
-                                stream: None,
-                                size: text.len() as u64,
-                                text,
-                                capped: false,
-                            };
-                        }
-                        Err(why) => self.status = Some(why),
-                    }
-                }
                 Task::none()
             }
             Message::Open(id) => {
@@ -1615,122 +1394,6 @@ impl App {
                 }
                 Task::none()
             }
-            Message::SignIn => {
-                self.status = None;
-                match self.start_pairing() {
-                    Ok(task) => task,
-                    Err(why) => {
-                        self.status = Some(why);
-                        Task::none()
-                    }
-                }
-            }
-            // A claim that lands after Cancel, or after a second Sign in, belongs to a key this
-            // window no longer waits on: the state says which, so a stale one is dropped.
-            Message::Claimed(claim) => {
-                let account::Account::Pairing(pairing) = &mut self.account else {
-                    return Task::none();
-                };
-                pairing.issued_at = claim.issued_at;
-                match claim.outcome {
-                    account::Claimed::Pending(_) if pairing.gave_up() => {
-                        self.account = account::Account::SignedOut;
-                        self.status = Some(
-                            "nobody approved this device, so the sign-in was dropped".to_string(),
-                        );
-                        Task::none()
-                    }
-                    account::Claimed::Pending(after) => self.ask_again(after),
-                    account::Claimed::Token(token) => {
-                        let (console, dir) = (self.console.clone(), self.device_dir.clone());
-                        Task::perform(
-                            async move { account::finish(&console, &dir, token) },
-                            Message::SignedIn,
-                        )
-                    }
-                    account::Claimed::Refused(why) => {
-                        self.account = account::Account::SignedOut;
-                        self.status = Some(why);
-                        Task::none()
-                    }
-                }
-            }
-            Message::PairingPage => {
-                let account::Account::Pairing(pairing) = &self.account else {
-                    return Task::none();
-                };
-                let url = account::connect_url(&self.console, &pairing.device, &pairing.line);
-                Task::perform(
-                    async move { account::open_url(&url) },
-                    |answer| match answer {
-                        Ok(line) | Err(line) => Message::Note(line),
-                    },
-                )
-            }
-            Message::SignInCancelled => {
-                let _ = device::forget(&self.device_dir);
-                self.account = account::Account::SignedOut;
-                Task::none()
-            }
-            Message::SignedIn(Ok(identity)) => {
-                self.status = Some(format!("signed in as {}", identity.email));
-                self.account = account::Account::SignedIn(identity);
-                Task::none()
-            }
-            Message::SignedIn(Err(why)) => {
-                self.status = Some(why);
-                self.account = account::Account::SignedOut;
-                Task::none()
-            }
-            Message::SignOut => {
-                // Both halves of the wipe happen HERE, before this returns, and not in the task
-                // below: Sign in is on the screen the moment the account goes, and it writes a
-                // new key into this same directory. A wipe still queued behind that press would
-                // delete the key the sign-in had just made.
-                let held = device::take_token(&self.device_dir);
-                // A `Some` here means the token file is already gone, so a wipe that fails past
-                // this leaves a SPENT key and never a credential: its one claim is used, and no
-                // token names it any more. The token is handed back either way.
-                let wiped = device::forget(&self.device_dir);
-                self.account = account::Account::SignedOut;
-                self.status = match (wiped, &held) {
-                    (Err(why), _) => Some(why),
-                    (Ok(()), None) => Some("signed out, and this device's key is gone".to_string()),
-                    (Ok(()), Some(_)) => None,
-                };
-                let Some(token) = held else {
-                    return Task::none();
-                };
-                let console = self.console.clone();
-                Task::perform(
-                    async move { account::retire(&console, token) },
-                    Message::SignedOut,
-                )
-            }
-            Message::SignedOut(Ok(())) => {
-                self.status =
-                    Some("signed out, and the console no longer lists this device".to_string());
-                Task::none()
-            }
-            Message::SignedOut(Err(why)) => {
-                self.status = Some(format!(
-                    "signed out on this machine, but the console still lists this device: {why}"
-                ));
-                Task::none()
-            }
-            Message::Fetched(runs) => {
-                self.fetched = runs;
-                self.refresh();
-                Task::none()
-            }
-            Message::Retired(Ok(())) => Task::none(),
-            Message::Retired(Err(why)) => {
-                self.status = Some(format!(
-                    "the device an earlier sign-in left is still listed on the console: {why}"
-                ));
-                Task::none()
-            }
-            Message::Console(page) => self.visit(page),
             Message::Started(Err(why)) | Message::Acted(Err(why)) => {
                 self.status = Some(why);
                 Task::none()
@@ -1833,24 +1496,6 @@ impl App {
                 }
                 self.refresh();
                 Task::none()
-            }
-            Message::Export(id) if self.is_remote(id.as_str()) => {
-                let (console, store) = (self.console.clone(), self.store.clone());
-                let Some(cli) = self.platform.tormoni.clone() else {
-                    self.status =
-                        Some("no `tormoni` beside this app to reach the console with".into());
-                    return Task::none();
-                };
-                Task::perform(
-                    async move {
-                        let home = std::env::var_os("HOME").map(PathBuf::from);
-                        let dest = export_destination(home, &store).join(format!("{id}.tar"));
-                        remote::pull(&cli, Some(&console), id.as_str(), &dest)
-                            .map(|_| format!("exported to {}", dest.display()))
-                            .map_err(|why| format!("exporting {id}: {why}"))
-                    },
-                    Message::Acted,
-                )
             }
             Message::Export(id) => {
                 let store = self.store.clone();
@@ -2158,216 +1803,6 @@ mod tests {
     /// waiting, one that is refused stops and says why, and a claim that lands after Cancel is
     /// dropped rather than signing a window in that gave up.
     ///
-    /// Driven through the messages the console's answers arrive as, so no console is needed.
-    #[test]
-    fn a_pairing_waits_then_stops_when_the_console_refuses() {
-        let mut app = app_with(vec![], &[]);
-        assert_eq!(app.account, account::Account::SignedOut, "a fresh launch");
-
-        // A claim with nothing waiting for it changes nothing: the state is what says whether
-        // this window still cares about that key.
-        let stray = account::Claim {
-            issued_at: 7,
-            outcome: account::Claimed::Pending(2),
-        };
-        let _ = app.update(Message::Claimed(stray));
-        assert_eq!(
-            app.account,
-            account::Account::SignedOut,
-            "no pairing to answer"
-        );
-
-        app.account = account::Account::Pairing(pairing());
-        let _ = app.update(Message::Claimed(account::Claim {
-            issued_at: 11,
-            outcome: account::Claimed::Pending(2),
-        }));
-        assert_eq!(
-            waiting_second(&app.account),
-            Some(11),
-            "a pending claim keeps the block waiting, carrying the second it signed at"
-        );
-
-        let _ = app.update(Message::Claimed(account::Claim {
-            issued_at: 13,
-            outcome: account::Claimed::Refused("this device key already collected".to_string()),
-        }));
-        assert_eq!(app.account, account::Account::SignedOut);
-        assert_eq!(
-            app.status.as_deref(),
-            Some("this device key already collected")
-        );
-    }
-
-    /// A device nobody approved inside the window is given up on rather than asked about for
-    /// ever, and the operator is told which happened.
-    #[test]
-    fn a_pairing_nobody_approves_is_dropped() {
-        let mut app = app_with(vec![], &[]);
-        let mut stale = pairing();
-        stale.started_ms = tormoni_record::now_ms() - 10 * 60 * 1000;
-        app.account = account::Account::Pairing(stale);
-        let _ = app.update(Message::Claimed(account::Claim {
-            issued_at: 17,
-            outcome: account::Claimed::Pending(2),
-        }));
-        assert_eq!(app.account, account::Account::SignedOut);
-        assert!(
-            app.status
-                .as_deref()
-                .is_some_and(|s| s.contains("nobody approved")),
-            "{:?}",
-            app.status
-        );
-    }
-
-    /// The second the block's pairing last signed at, or `None` where it is not pairing.
-    fn waiting_second(account: &account::Account) -> Option<i64> {
-        match account {
-            account::Account::Pairing(pairing) => Some(pairing.issued_at),
-            _ => None,
-        }
-    }
-
-    /// A pairing this window is waiting on, for the tests above.
-    fn pairing() -> account::Pairing {
-        account::Pairing {
-            device: "a laptop".to_string(),
-            line: "ssh-ed25519 AAAA".to_string(),
-            fingerprint: "SHA256:abc".to_string(),
-            issued_at: 0,
-            started_ms: tormoni_record::now_ms(),
-        }
-    }
-
-    /// The signed-in state the loop lands in, and the way back out of it. Driven through the
-    /// message the console's answer arrives as, so no console is needed here.
-    #[test]
-    fn a_signed_in_window_shows_the_account_and_can_sign_out() {
-        let mut app = app_with(vec![], &[]);
-        let identity = account::Identity {
-            email: "someone@example.com".to_string(),
-            display_name: Some("Someone Else".to_string()),
-        };
-        let _ = app.update(Message::SignedIn(Ok(identity.clone())));
-        assert_eq!(app.account, account::Account::SignedIn(identity));
-        assert_eq!(app.account.title(), "Someone Else");
-        assert_eq!(app.account.line(&app.console), "someone@example.com");
-        assert_eq!(
-            app.status.as_deref(),
-            Some("signed in as someone@example.com")
-        );
-
-        // Pressing Sign out gives up this window's account there and then; what the console
-        // says about the device arrives afterwards, as its own message.
-        let _ = app.update(Message::SignOut);
-        assert_eq!(app.account, account::Account::SignedOut);
-
-        let _ = app.update(Message::SignedOut(Ok(())));
-        assert_eq!(
-            app.status.as_deref(),
-            Some("signed out, and the console no longer lists this device")
-        );
-    }
-
-    /// **The wipe is done before Sign out returns, not by the task it starts.** Sign in is on
-    /// the screen from that moment and writes a new key into this same directory, so a wipe
-    /// still queued behind that press would delete the key the sign-in had just made.
-    #[test]
-    fn signing_out_empties_the_key_directory_before_it_asks_the_console_anything() {
-        let scratch = tormoni_test_support::ScratchDir::created("app-sign-out");
-        let mut app = app_with(vec![], &[]);
-        app.device_dir = scratch.path().join("device");
-        device::create(&app.device_dir).expect("a key");
-        device::save_token(&app.device_dir, "tor_secret").expect("a token");
-        let _ = app.update(Message::SignedIn(Ok(account::Identity {
-            email: "someone@example.com".to_string(),
-            display_name: None,
-        })));
-
-        // The task the press returns is dropped unrun, which is what a Sign in landing first
-        // would do to it.
-        drop(app.update(Message::SignOut));
-        assert_eq!(app.account, account::Account::SignedOut);
-        for name in ["token", "device.key", "device.pub"] {
-            assert!(
-                !app.device_dir.join(name).exists(),
-                "{name} outlived the press"
-            );
-        }
-    }
-
-    /// A sign-out the console never heard still signs this window out, and says what is left
-    /// listed rather than reading as a failure to sign out.
-    #[test]
-    fn a_sign_out_the_console_refused_still_leaves_the_window_signed_out() {
-        let mut app = app_with(vec![], &[]);
-        let _ = app.update(Message::SignedIn(Ok(account::Identity {
-            email: "someone@example.com".to_string(),
-            display_name: None,
-        })));
-        let _ = app.update(Message::SignOut);
-        let _ = app.update(Message::SignedOut(Err("it answered 503".to_string())));
-        assert_eq!(app.account, account::Account::SignedOut);
-        assert!(
-            app.status
-                .as_deref()
-                .is_some_and(|s| s.contains("still lists this device")),
-            "{:?}",
-            app.status
-        );
-    }
-
-    /// **A console's runs land beside this machine's, and a run in both places is this
-    /// machine's.** Only the local copy can be stopped, shelled into or watched, so marking it
-    /// remote would take away buttons that work.
-    #[test]
-    fn a_consoles_runs_merge_beside_this_machines_and_never_over_them() {
-        let dir = tormoni_test_support::ScratchDir::created("app-remote-merge");
-        let store = Store::at(dir.path().join("runs")).expect("a store");
-        let mut mine = displayed("ours", false);
-        mine.id = "1756860007001-ours".to_string();
-        mine.started_ms = 1_756_860_007_001;
-        store.create(&mine).expect("created");
-        store.save(&mine).expect("saved");
-
-        let sinks = Arc::new(frame::Sinks::open(None, None).expect("sinks"));
-        let mut app = App::new(store, None, None, sinks, false);
-        // The same run the console holds a copy of, plus one only it has.
-        let mut theirs = mine.clone();
-        theirs.name = "from-the-console".to_string();
-        let mut only_theirs = displayed("elsewhere", false);
-        only_theirs.id = "1756860007002-elsewhere".to_string();
-        only_theirs.started_ms = 1_756_860_007_002;
-
-        let _ = app.update(Message::Fetched(vec![theirs, only_theirs]));
-
-        let ids: Vec<&str> = app.runs.iter().map(|r| r.id.as_str()).collect();
-        assert_eq!(
-            ids,
-            ["1756860007002-elsewhere", "1756860007001-ours"],
-            "newest first, both sources"
-        );
-        assert!(
-            app.is_remote("1756860007002-elsewhere"),
-            "the console's own run is marked"
-        );
-        assert!(
-            !app.is_remote("1756860007001-ours"),
-            "a run in both places is this machine's"
-        );
-        // And the local copy is the one kept, name and all.
-        let kept = app
-            .runs
-            .iter()
-            .find(|r| r.id == "1756860007001-ours")
-            .expect("the local copy");
-        assert_eq!(
-            kept.name, "ours",
-            "the console's copy overwrote the local one"
-        );
-    }
-
     /// Only the newest open run of a name is the one a VM answering under it belongs to. An
     /// older one is an abandoned run whose name a later sandbox took: shown as running, and
     /// leased for a display it does not have, until it is written back as gone.

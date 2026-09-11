@@ -448,7 +448,6 @@ pub(crate) fn settings(app: &App) -> Element<'_, Message> {
     ]
     .spacing(6);
     let mut body = column![
-        account_block(app),
         setting(
             None,
             "Tormoni",
@@ -499,70 +498,6 @@ pub(crate) fn settings(app: &App) -> Element<'_, Message> {
         body = body.push(text(status).size(BODY));
     }
     framed(app, row![head_title("Settings")].into(), body)
-}
-
-/// The account, first on Settings: the product's name over "Not connected" and a Sign in; then
-/// a field for the token the console's Keys page mints, with Connect and Cancel; then the
-/// person over the handle with the account's mark beside them, and Upgrade, Manage and Sign
-/// out under.
-fn account_block(app: &App) -> Element<'_, Message> {
-    let account = &app.account;
-    let named = || {
-        column![
-            text(account.title()).size(TAB),
-            muted_line(account.line(&app.console), BODY)
-        ]
-        .spacing(4)
-        .width(Fill)
-    };
-    match account {
-        crate::account::Account::Pairing(pairing) => {
-            // The fingerprint is the whole check: a person compares it with the page before
-            // pressing Connect, which is what a /connect link somebody else sent would fail.
-            column![
-                named(),
-                text("Compare this fingerprint with the page, then press Connect there:")
-                    .size(BODY),
-                text(&pairing.fingerprint).size(BODY).font(MONO),
-                row![
-                    page_button("Open the page again", push).on_press(Message::PairingPage),
-                    page_button("Cancel", push).on_press(Message::SignInCancelled),
-                ]
-                .spacing(6),
-            ]
-            .spacing(12)
-            .into()
-        }
-        crate::account::Account::SignedIn(_) => {
-            let actions = row![
-                page_button("Upgrade", primary)
-                    .on_press(Message::Console(crate::account::Page::Plans)),
-                page_button("Manage", push)
-                    .on_press(Message::Console(crate::account::Page::Account)),
-                page_button("Devices", push).on_press(Message::Console(crate::account::Page::Keys)),
-                page_button("Sign out", push).on_press(Message::SignOut),
-            ]
-            .spacing(6);
-            column![
-                row![named(), icons::glyph(icons::CIRCLE_USER)]
-                    .spacing(16)
-                    .align_y(iced::alignment::Vertical::Center),
-                actions,
-            ]
-            .spacing(12)
-            .into()
-        }
-        // A sign-in already in flight has nothing a second press would add, and iced draws a
-        // button with no message as the disabled one it is.
-        state => setting(
-            None,
-            account.title(),
-            account.line(&app.console),
-            page_button("Sign in", push).on_press_maybe(
-                matches!(state, crate::account::Account::SignedOut).then_some(Message::SignIn),
-            ),
-        ),
-    }
 }
 
 /// One setting as a source-list app lays one out: its name over a grey line of what it does,
@@ -1129,7 +1064,7 @@ fn run_row<'a>(app: &'a App, record: &'a Record) -> Element<'a, Message> {
         }
     };
     let dot = record.clone();
-    let mut title = row![
+    let title = row![
         text("●").size(SMALL).style(move |t| text::Style {
             color: Some(status_colour(t, &dot, live))
         }),
@@ -1137,13 +1072,6 @@ fn run_row<'a>(app: &'a App, record: &'a Record) -> Element<'a, Message> {
     ]
     .spacing(8)
     .align_y(iced::alignment::Vertical::Center);
-    // **Which machine it ran on, said rather than inferred.** A remote run looks like any other
-    // until you press something that reaches a socket it does not have, so the row says so first.
-    if app.is_remote(&record.id) {
-        title = title.push(text("cloud").size(SMALL).style(|t| text::Style {
-            color: Some(muted(t)),
-        }));
-    }
     let title = title.push(space().width(Fill));
     // The command is one line and clipped, never wrapped: a long one reflowing a card pushes
     // every card below it out of place. The whole of it is on the run's own screen.
@@ -1210,7 +1138,7 @@ fn run_row<'a>(app: &'a App, record: &'a Record) -> Element<'a, Message> {
         // What this row can be told to do, at its own end: a sandbox is stopped where it is
         // listed rather than only on its own screen. There is no pause, because libkrun has no
         // suspend.
-        body = body.push(row_actions(record, live, app.is_remote(&record.id)));
+        body = body.push(row_actions(record, live));
     }
     let body = body.spacing(12).align_y(iced::alignment::Vertical::Center);
     // A button rather than a container under a `mouse_area`: the row is a thing you click, so it
@@ -1248,15 +1176,7 @@ fn row_card(theme: &iced::Theme, status: button::Status) -> button::Style {
 /// What a row can be told to do without opening the run: stop a live one, run an ended one
 /// again, or take its record away. Everything else stays on the run's own screen.
 ///
-/// **A remote run is offered neither Stop nor Delete.** Both reach a socket and a record
-/// directory on the machine the run is actually on. Re-run is offered, because it fills this
-/// machine's start form from a posture rather than touching the other one.
-fn row_actions<'a>(record: &Record, live: bool, remote: bool) -> iced::widget::Row<'a, Message> {
-    if remote {
-        return row![
-            small_button("Re-run", push).on_press(Message::Rerun(crate::RunId::of(record)))
-        ];
-    }
+fn row_actions<'a>(record: &Record, live: bool) -> iced::widget::Row<'a, Message> {
     if live {
         return row![
             small_button("Stop", destructive).on_press(Message::Stop(crate::RunName::of(record)))
@@ -1350,13 +1270,7 @@ pub(crate) fn run<'a>(app: &'a App, id: &crate::RunId) -> Element<'a, Message> {
     .align_y(iced::alignment::Vertical::Center);
     bar =
         bar.push(small_button("Export", push).on_press(Message::Export(crate::RunId::of(record))));
-    // Stop, Shell and Delete each reach a control socket or a record directory on the machine the
-    // run is on. For a run this window only READ from a console, there is nothing here to reach;
-    // Re-run is still offered, because it fills this machine's form from a posture.
-    if app.is_remote(&record.id) {
-        bar = bar
-            .push(small_button("Re-run", push).on_press(Message::Rerun(crate::RunId::of(record))));
-    } else if live {
+    if live {
         if record.verb == Verb::Up {
             bar = bar.push(
                 small_button("Shell", push).on_press(Message::Shell(crate::RunName::of(record))),

@@ -25,12 +25,9 @@ tormoni-supervisor = { path = "../supervisor" }
 clap = { workspace = true }
 iced = { workspace = true }
 # The console's answer to a sign-in, `/v1/account`, is the one JSON this reads.
-serde_json = { workspace = true }
 # The token is wiped when dropped, and so is a device key read off disk.
 zeroize = { workspace = true }
 # The device keypair pairing makes, and the SHA-256 its fingerprint is.
-ed25519-dalek = { workspace = true }
-sha2 = { workspace = true }
 # The monotonic clock the frame logs share with the helper's `--frame-log`.
 rustix = { workspace = true, features = ["time"] }
 

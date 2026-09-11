@@ -8,8 +8,8 @@ body:
         See [`SECURITY.md`](https://github.com/kendricklawton/tormoni/blob/main/SECURITY.md).
 
         Most first-run failures are already answered in the pinned **Common first failures** post
-        and in the [troubleshooting
-        table](https://github.com/kendricklawton/tormoni/blob/main/docs/cli-install.md#troubleshooting).
+        and in [Running a
+        sandbox](https://github.com/kendricklawton/tormoni/blob/main/docs/running.md).
         Worth a look before you write this up.
 
   - type: textarea

@@ -7,8 +7,8 @@ body:
       value: >-
         One scope note before you write: this repo is **an engine, not a platform**. The platform
         layer above it is deliberately out of scope and belongs to whatever hosts the engine; the
-        non-goals are listed in `docs/embedding-scope.md`. Requests inside that line are very
-        welcome.
+        non-goals follow from design rule 3 in `docs/architecture.md`. Requests inside that line
+        are very welcome.
 
   - type: textarea
     id: problem
@@ -52,5 +52,5 @@ body:
       options:
         - label: >-
             This is engine work, not a platform feature (those belong to the hoster, out of scope
-            by design: see `docs/embedding-scope.md`).
+            by design: see design rule 3 in `docs/architecture.md`).
           required: true

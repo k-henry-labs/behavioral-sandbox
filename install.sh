@@ -1,5 +1,5 @@
 #!/bin/sh
-# install.sh: `curl -fsSL https://tormoni.ai/install.sh | sh`
+# install.sh: `curl -fsSL https://raw.githubusercontent.com/kendricklawton/tormoni/main/install.sh | sh`
 #
 # Installs the release `cargo xtask dist` built for this host. macOS on ARM64 gets
 # /Applications/Tormoni.app and /usr/local/bin/tormoni pointing into it; Linux on x86_64 gets

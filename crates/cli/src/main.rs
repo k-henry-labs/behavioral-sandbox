@@ -11,7 +11,6 @@
 #![forbid(unsafe_code)]
 
 mod agent;
-mod cloud;
 mod frames;
 mod input;
 mod json;
@@ -82,11 +81,6 @@ enum Cmd {
     /// Run sandboxes for a caller over HTTP: one box, one token, one tenant.
     Serve(serve::ServeArgs),
     /// Send runs to the console and read back what it holds.
-    ///
-    /// A namespace rather than more verbs: `ls`, `show` and `rm` above name what THIS machine
-    /// holds, and the same words under `cloud` name what the console does.
-    #[command(subcommand_required = true, arg_required_else_help = true)]
-    Cloud(cloud::CloudArgs),
     /// Become a virtual machine. Not a verb: the supervisor re-executes this binary with it.
     ///
     /// Hidden rather than removed from the parser, so a boot that fails can be reproduced by hand
@@ -112,7 +106,6 @@ fn main() -> ExitCode {
         Cmd::Export(args) => lifecycle::export(&args),
         Cmd::Rm(args) => lifecycle::rm(&args),
         Cmd::Serve(args) => serve::run(&args),
-        Cmd::Cloud(args) => cloud::run(&args),
         Cmd::Vmm(args) => vmm::run(&args),
         Cmd::Frames(args) => frames::run(&args),
     }

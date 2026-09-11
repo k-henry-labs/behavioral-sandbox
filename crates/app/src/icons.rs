@@ -54,7 +54,6 @@ icons! {
     ROCKET = '\u{e286}', 896;
     TERMINAL = '\u{e181}', 757;
     FOLDER = '\u{e0d7}', 918;
-    CIRCLE_USER = '\u{e461}', 922;
     CLOSE = '\u{e1b2}', 582;
     SQUARE = '\u{e167}', 832;
     SQUARE_CHECK = '\u{e16a}', 874;
