@@ -53,7 +53,7 @@ fn a_box_with_nothing_to_check_a_caller_against_does_not_listen() {
     assert_eq!(out.status.code(), Some(EXIT_OPERATIONAL));
     let said = String::from_utf8_lossy(&out.stderr);
     let about_the_token = said.contains("no token");
-    let about_the_host = said.contains("hypervisor") || said.contains("/dev/kvm");
+    let about_the_host = said.to_lowercase().contains("hypervisor") || said.contains("/dev/kvm");
     assert!(
         about_the_token || about_the_host,
         "a refusal should name the token or the host: {said}"
@@ -84,7 +84,7 @@ fn a_token_the_whole_machine_can_read_is_refused() {
         .expect("the binary runs");
     assert_eq!(out.status.code(), Some(EXIT_OPERATIONAL));
     let said = String::from_utf8_lossy(&out.stderr);
-    if !said.contains("hypervisor") && !said.contains("/dev/kvm") {
+    if !said.to_lowercase().contains("hypervisor") && !said.contains("/dev/kvm") {
         assert!(said.contains("0600"), "{said}");
     }
     // Whatever it refused for, the token is not in what it said.
@@ -107,7 +107,7 @@ fn an_address_that_is_not_one_is_refused_before_binding() {
         .expect("the binary runs");
     assert_eq!(out.status.code(), Some(EXIT_OPERATIONAL));
     let said = String::from_utf8_lossy(&out.stderr);
-    if !said.contains("hypervisor") && !said.contains("/dev/kvm") {
+    if !said.to_lowercase().contains("hypervisor") && !said.contains("/dev/kvm") {
         assert!(said.contains("listen on"), "{said}");
     }
 }
