@@ -15,9 +15,11 @@
   </p>
 
   <h3>
-    <a href="docs/SUMMARY.md">Guide</a>
+    <a href="docs/SUMMARY.md">Docs</a>
     <span> | </span>
     <a href="docs/architecture.md">Architecture</a>
+    <span> | </span>
+    <a href="DEVELOPMENT.md">Developing</a>
     <span> | </span>
     <a href="CONTRIBUTING.md">Contributing</a>
   </h3>

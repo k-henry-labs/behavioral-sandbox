@@ -40,6 +40,7 @@ This project follows the [Code of Conduct](CODE_OF_CONDUCT.md). Suspected vulner
 private advisory form described in [`SECURITY.md`](SECURITY.md), never to a public issue or pull
 request.
 
-The developer reference is the book: [Architecture](docs/architecture.md) for the design rules and
-what is in the tree, and [Running a sandbox](docs/running.md) for the verbs and what a run leaves.
-`README.md` covers building from source and the gate (`cargo xtask ci`).
+**Building it** is [DEVELOPMENT.md](DEVELOPMENT.md): prerequisites, the xtask verbs, testing, and
+how a release is cut. **What it is and why it is shaped this way** is the book under
+[`docs/`](docs/SUMMARY.md) — the design rules, the architecture, the guest image build, and the two
+protocols. This file is the process.
