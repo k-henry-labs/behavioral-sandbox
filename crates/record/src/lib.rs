@@ -19,8 +19,25 @@
 //!   oldest first, each time a run is created; a live run is never pruned.
 //! - **An export is one file.** [`RunDir::export_tar`] writes the run directory as a ustar
 //!   archive: a symlink inside is carried as a link entry and never followed.
+//! - **Registries live here too**, in [`registry`]: where images come from and who this machine
+//!   is when it asks. A record there holds a host, a project and a username and **never a
+//!   password**, which is the same rule the posture keeps about environment values.
+//! - **Volumes live here too**, in [`volume`]: a directory with a life of its own, mounted into
+//!   sandboxes by name. Local only, like everything else this crate keeps.
+//! - **Snapshots live here too**, in [`snapshot`]: a named posture to make sandboxes from, in the
+//!   same `key value` lines and under the same data directory. They are in this crate because
+//!   they carry the same [`Posture`] a record does, written by the same writer, so the two files
+//!   cannot come to describe one posture in two ways.
 
 #![forbid(unsafe_code)]
+
+pub mod registry;
+pub mod snapshot;
+pub mod volume;
+
+pub use registry::{REGISTRY_FORMAT, Registry, RegistryStore, registries_dir, registries_dir_from};
+pub use snapshot::{SNAPSHOT_FORMAT, Snapshot, SnapshotStore, snapshots_dir, snapshots_dir_from};
+pub use volume::{VOLUME_FORMAT, Volume, VolumeStore, volumes_dir, volumes_dir_from};
 
 use std::ffi::OsString;
 use std::fmt;
@@ -468,53 +485,23 @@ impl Record {
     #[must_use]
     pub fn to_text(&self) -> String {
         let mut out = String::new();
-        let mut line = |key: &str, value: &dyn fmt::Display| {
-            out.push_str(key);
-            out.push(' ');
-            out.push_str(&escape(&value.to_string()));
-            out.push('\n');
-        };
-        line("record", &FORMAT);
-        line("id", &self.id);
-        line("name", &self.name);
-        line("verb", &self.verb.as_word());
+        line(&mut out, "record", &FORMAT.to_string());
+        line(&mut out, "id", &self.id);
+        line(&mut out, "name", &self.name);
+        line(&mut out, "verb", self.verb.as_word());
         for arg in &self.command {
-            line("arg", arg);
+            line(&mut out, "arg", arg);
         }
-        let p = &self.posture;
-        line(
-            "root",
-            &format!("{} {}", p.root.display(), p.rootfs.as_word()),
-        );
-        for m in &p.mounts {
-            line(
-                "mount",
-                &format!("{} <- {}", m.guest.display(), m.host.display()),
-            );
-        }
-        for s in &p.shares {
-            line("share", &format!("{} <- {}", s.tag, s.host.display()));
-        }
-        for entry in &p.env {
-            line("env", &env_key(entry));
-        }
-        line("network", &p.network.as_word());
-        if let Some(display) = p.display {
-            line("display", &display.as_spec());
-        }
-        line("sound", &on_off(p.sound));
-        line("gpu", &on_off(p.gpu));
-        line("results", &on_off(p.results));
-        line("limits", &format!("{} {}", p.vcpus, p.mem_mib));
-        line("started", &self.started_ms);
+        out.push_str(&posture_text(&self.posture));
+        line(&mut out, "started", &self.started_ms.to_string());
         if let Some(pid) = self.pid {
-            line("pid", &pid);
+            line(&mut out, "pid", &pid.to_string());
         }
         if let Some(ended) = self.ended_ms {
-            line("ended", &ended);
+            line(&mut out, "ended", &ended.to_string());
         }
         if let Some(end) = self.end {
-            line("end", &end);
+            line(&mut out, "end", &end.to_string());
         }
         out
     }
@@ -556,45 +543,16 @@ impl Record {
                 "name" => record.name = value.to_string(),
                 "verb" => record.verb = Verb::from_word(value).ok_or_else(bad)?,
                 "arg" => record.command.push(value.to_string()),
-                "root" => {
-                    let (root, rootfs) = value.rsplit_once(' ').ok_or_else(bad)?;
-                    record.posture.root = PathBuf::from(root);
-                    record.posture.rootfs = Rootfs::from_word(rootfs).ok_or_else(bad)?;
-                }
-                "mount" => {
-                    let (guest, host) = value.split_once(" <- ").ok_or_else(bad)?;
-                    record
-                        .posture
-                        .mounts
-                        .push(Mount::new(PathBuf::from(guest), PathBuf::from(host)));
-                }
-                "share" => {
-                    let (tag, host) = value.split_once(" <- ").ok_or_else(bad)?;
-                    record
-                        .posture
-                        .shares
-                        .push(Share::new(tag.to_string(), PathBuf::from(host)));
-                }
-                "env" => record.posture.env.push(env_key(value).to_string()),
-                "network" => record.posture.network = Network::from_word(value).ok_or_else(bad)?,
-                "display" => {
-                    record.posture.display = Some(DisplayMode::parse(value).ok_or_else(bad)?)
-                }
-                "sound" => record.posture.sound = on_off_from(value).ok_or_else(bad)?,
-                "gpu" => record.posture.gpu = on_off_from(value).ok_or_else(bad)?,
-                "results" => record.posture.results = on_off_from(value).ok_or_else(bad)?,
-                "limits" => {
-                    let (vcpus, mem) = value.split_once(' ').ok_or_else(bad)?;
-                    record.posture.vcpus = vcpus.parse().map_err(|_| bad())?;
-                    record.posture.mem_mib = mem.parse().map_err(|_| bad())?;
-                }
                 "started" => record.started_ms = value.parse().map_err(|_| bad())?,
                 "pid" => record.pid = Some(value.parse().map_err(|_| bad())?),
                 "ended" => record.ended_ms = Some(value.parse().map_err(|_| bad())?),
                 "end" => record.end = Some(End::parse(value).ok_or_else(bad)?),
-                // A key this build does not know is one a later build wrote: carried past, not
-                // refused, so an older reader still lists the run.
-                _ => {}
+                // Either one of the posture's own lines, or a key this build does not know: one
+                // a later build wrote, carried past rather than refused, so an older reader still
+                // lists the run.
+                _ => {
+                    posture_key(&mut record.posture, key, value).map_err(|()| bad())?;
+                }
             }
         }
         if let Some(missing) = REQUIRED.iter().find(|k| !seen.contains(k)) {
@@ -612,6 +570,94 @@ impl Record {
         }
         Ok(record)
     }
+}
+
+/// One `key value` line, escaped, onto `out`. The one way a line is written, so every file this
+/// crate keeps is escaped by the same rule the reader unescapes by.
+fn line(out: &mut String, key: &str, value: &str) {
+    out.push_str(key);
+    out.push(' ');
+    out.push_str(&escape(value));
+    out.push('\n');
+}
+
+/// The posture's own lines, in the order every file that carries one writes them.
+///
+/// **One writer, so two files cannot drift.** A [`Record`] says what a run could touch and a
+/// [`Snapshot`] says what a sandbox made from it will be able to; those are the same sentence
+/// about two moments, so they are the same lines, read back by [`posture_key`]. A posture grown
+/// here reaches both, which is the point: the second file is the one a new field gets missed in.
+fn posture_text(p: &Posture) -> String {
+    let mut out = String::new();
+    line(
+        &mut out,
+        "root",
+        &format!("{} {}", p.root.display(), p.rootfs.as_word()),
+    );
+    for m in &p.mounts {
+        line(
+            &mut out,
+            "mount",
+            &format!("{} <- {}", m.guest.display(), m.host.display()),
+        );
+    }
+    for s in &p.shares {
+        line(
+            &mut out,
+            "share",
+            &format!("{} <- {}", s.tag, s.host.display()),
+        );
+    }
+    for entry in &p.env {
+        line(&mut out, "env", env_key(entry));
+    }
+    line(&mut out, "network", p.network.as_word());
+    if let Some(display) = p.display {
+        line(&mut out, "display", &display.as_spec());
+    }
+    line(&mut out, "sound", on_off(p.sound));
+    line(&mut out, "gpu", on_off(p.gpu));
+    line(&mut out, "results", on_off(p.results));
+    line(&mut out, "limits", &format!("{} {}", p.vcpus, p.mem_mib));
+    out
+}
+
+/// Reads one unescaped `key value` pair into `p`, answering whether it was a posture line at all.
+///
+/// `Ok(false)` is "not mine", which is how a caller tells a key it should refuse from one this
+/// build simply does not know. `Err(())` is a posture line whose value will not parse, which is a
+/// broken file rather than an unknown one.
+fn posture_key(p: &mut Posture, key: &str, value: &str) -> Result<bool, ()> {
+    match key {
+        "root" => {
+            let (root, rootfs) = value.rsplit_once(' ').ok_or(())?;
+            p.root = PathBuf::from(root);
+            p.rootfs = Rootfs::from_word(rootfs).ok_or(())?;
+        }
+        "mount" => {
+            let (guest, host) = value.split_once(" <- ").ok_or(())?;
+            p.mounts
+                .push(Mount::new(PathBuf::from(guest), PathBuf::from(host)));
+        }
+        "share" => {
+            let (tag, host) = value.split_once(" <- ").ok_or(())?;
+            p.shares
+                .push(Share::new(tag.to_string(), PathBuf::from(host)));
+        }
+        "env" => p.env.push(env_key(value).to_string()),
+        "network" => p.network = Network::from_word(value).ok_or(())?,
+        "display" => p.display = Some(DisplayMode::parse(value).ok_or(())?),
+        "sound" => p.sound = on_off_from(value).ok_or(())?,
+        "gpu" => p.gpu = on_off_from(value).ok_or(())?,
+        "results" => p.results = on_off_from(value).ok_or(())?,
+        "limits" => {
+            let (vcpus, mem) = value.split_once(' ').ok_or(())?;
+            p.vcpus = vcpus.parse().map_err(|_| ())?;
+            p.mem_mib = mem.parse().map_err(|_| ())?;
+        }
+        _ => return Ok(false),
+    }
+    Ok(true)
 }
 
 /// The word a posture switch is spelled as.
@@ -795,6 +841,40 @@ pub fn runs_dir_from(
     runs.map(PathBuf::from)
         .or_else(|| xdg_data.map(|d| PathBuf::from(d).join("boxdesk/runs")))
         .or_else(|| home.map(|h| PathBuf::from(h).join(".local/share/boxdesk/runs")))
+}
+
+/// The images directory, from the environment: `$BOXDESK_IMAGES_DIR`, else
+/// `$XDG_DATA_HOME/boxdesk/images`, else `~/.local/share/boxdesk/images`.
+///
+/// **Here rather than in the CLI that fetches them**, because it is one of the directories this
+/// project keeps under one roof, and the window has to be able to name every one of those to say
+/// what removing everything would remove.
+///
+/// # Errors
+///
+/// None of the three is set, so there is nowhere to put one.
+pub fn images_dir() -> io::Result<PathBuf> {
+    images_dir_from(
+        std::env::var_os("BOXDESK_IMAGES_DIR"),
+        std::env::var_os("XDG_DATA_HOME"),
+        std::env::var_os("HOME"),
+    )
+    .ok_or_else(|| {
+        io::Error::other("no images directory: set BOXDESK_IMAGES_DIR, XDG_DATA_HOME or HOME")
+    })
+}
+
+/// [`images_dir`] with the environment reads lifted out.
+#[must_use]
+pub fn images_dir_from(
+    images: Option<OsString>,
+    xdg_data: Option<OsString>,
+    home: Option<OsString>,
+) -> Option<PathBuf> {
+    images
+        .map(PathBuf::from)
+        .or_else(|| xdg_data.map(|d| PathBuf::from(d).join("boxdesk/images")))
+        .or_else(|| home.map(|h| PathBuf::from(h).join(".local/share/boxdesk/images")))
 }
 
 /// Ended runs to keep: `$BOXDESK_RUNS_KEEP`, else 200.
@@ -1577,6 +1657,44 @@ mod tests {
             Some(PathBuf::from("/home/u/.local/share/boxdesk/runs"))
         );
         assert_eq!(runs_dir_from(None, None, None), None);
+    }
+
+    /// **Every store this project keeps sits under one roof**, and each asks the environment in
+    /// the same order. The window has to name all of them to say what removing everything would
+    /// remove, so a directory that answered differently from its neighbours would be one that
+    /// quietly survived a reset.
+    #[test]
+    fn every_store_directory_sits_under_one_roof_and_asks_the_same_three() {
+        let some = |s: &str| Some(OsString::from(s));
+        /// The shape every store's directory resolver has: its own variable, then XDG, then home.
+        type Resolver = fn(Option<OsString>, Option<OsString>, Option<OsString>) -> Option<PathBuf>;
+        let under: [(&str, Resolver); 5] = [
+            ("runs", runs_dir_from),
+            ("snapshots", snapshots_dir_from),
+            ("registries", registries_dir_from),
+            ("volumes", volumes_dir_from),
+            ("images", images_dir_from),
+        ];
+        for (name, dir) in under {
+            assert_eq!(
+                dir(some("/explicit"), some("/xdg"), some("/home/u")),
+                Some(PathBuf::from("/explicit")),
+                "{name}: its own variable wins"
+            );
+            assert_eq!(
+                dir(None, some("/xdg"), some("/home/u")),
+                Some(PathBuf::from(format!("/xdg/boxdesk/{name}"))),
+                "{name}: then XDG_DATA_HOME"
+            );
+            assert_eq!(
+                dir(None, None, some("/home/u")),
+                Some(PathBuf::from(format!(
+                    "/home/u/.local/share/boxdesk/{name}"
+                ))),
+                "{name}: then home"
+            );
+            assert_eq!(dir(None, None, None), None, "{name}: and then nowhere");
+        }
     }
 
     /// The posture sentence names what is granted and what is not, and never claims more than
