@@ -19,13 +19,13 @@
 //! boundary is a `#[pyclass]` built by `models::convert_record`, so a renamed field of
 //! `boxdesk_record::Record` is a compile error rather than a key that quietly stops appearing.
 
+use boxdesk_core::{SandboxOptions, execute_sandbox, resolve_root};
+use boxdesk_record::Store;
+use boxdesk_supervisor::{Net, RootFs, VmConfig};
 use pyo3::prelude::*;
 use std::ffi::OsString;
 use std::num::{NonZeroU8, NonZeroU32};
 use std::path::PathBuf;
-use boxdesk_core::{SandboxOptions, execute_sandbox, resolve_root};
-use boxdesk_record::Store;
-use boxdesk_supervisor::{Net, RootFs, VmConfig};
 
 mod models;
 use models::{PyFile, PyPosture, PyRun, convert_record};

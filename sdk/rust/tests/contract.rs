@@ -7,8 +7,8 @@
 //! posture without booting, which is what lets the contract be checked on a machine with no
 //! hypervisor.
 
+use boxdesk::{Boxdesk, End, Error, Net, RootFs, Sandbox};
 use std::num::{NonZeroU8, NonZeroU32};
-use boxdesk::{End, Error, Net, RootFs, Sandbox, Boxdesk};
 
 /// A guest root that exists, because resolution refuses one that does not — the point here is the
 /// posture, not where a tree lives.

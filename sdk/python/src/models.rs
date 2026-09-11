@@ -1,5 +1,5 @@
-use pyo3::prelude::*;
 use boxdesk_record::{End, Record, RunDir};
+use pyo3::prelude::*;
 
 // `skip_from_py_object`: these cross the boundary outward only. PyO3 0.29 deprecated the
 // automatic `FromPyObject` on a `Clone` pyclass, and a record is something this SDK hands

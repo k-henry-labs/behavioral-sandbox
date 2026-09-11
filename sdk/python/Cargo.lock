@@ -184,6 +184,82 @@ dependencies = [
 ]
 
 [[package]]
+name = "boxdesk"
+version = "0.0.1"
+dependencies = [
+ "axum",
+ "boxdesk-channel",
+ "boxdesk-input",
+ "boxdesk-krun",
+ "boxdesk-record",
+ "boxdesk-serve",
+ "boxdesk-supervisor",
+ "clap",
+ "rustix 1.1.4",
+ "serde_json",
+ "softbuffer",
+ "tokio",
+ "winit",
+]
+
+[[package]]
+name = "boxdesk-channel"
+version = "0.0.1"
+dependencies = [
+ "zeroize",
+]
+
+[[package]]
+name = "boxdesk-input"
+version = "0.0.1"
+dependencies = [
+ "boxdesk-krun",
+]
+
+[[package]]
+name = "boxdesk-krun"
+version = "0.0.1"
+dependencies = [
+ "rustix 1.1.4",
+]
+
+[[package]]
+name = "boxdesk-py"
+version = "0.1.0"
+dependencies = [
+ "boxdesk",
+ "boxdesk-record",
+ "boxdesk-supervisor",
+ "pyo3",
+]
+
+[[package]]
+name = "boxdesk-record"
+version = "0.0.1"
+
+[[package]]
+name = "boxdesk-serve"
+version = "0.0.1"
+dependencies = [
+ "axum",
+ "boxdesk-record",
+ "boxdesk-supervisor",
+ "futures-core",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "boxdesk-supervisor"
+version = "0.0.1"
+dependencies = [
+ "boxdesk-krun",
+ "rustix 1.1.4",
+]
+
+[[package]]
 name = "bumpalo"
 version = "3.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1806,82 +1882,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d38ac1cf9b95face32296c0a3ede1fdc270627c9d9c02a7274dd6d960dc4d56"
 dependencies = [
  "winnow",
-]
-
-[[package]]
-name = "boxdesk"
-version = "0.0.1"
-dependencies = [
- "axum",
- "clap",
- "rustix 1.1.4",
- "serde_json",
- "softbuffer",
- "tokio",
- "boxdesk-channel",
- "boxdesk-input",
- "boxdesk-krun",
- "boxdesk-record",
- "boxdesk-serve",
- "boxdesk-supervisor",
- "winit",
-]
-
-[[package]]
-name = "boxdesk-channel"
-version = "0.0.1"
-dependencies = [
- "zeroize",
-]
-
-[[package]]
-name = "boxdesk-input"
-version = "0.0.1"
-dependencies = [
- "boxdesk-krun",
-]
-
-[[package]]
-name = "boxdesk-krun"
-version = "0.0.1"
-dependencies = [
- "rustix 1.1.4",
-]
-
-[[package]]
-name = "boxdesk-py"
-version = "0.1.0"
-dependencies = [
- "pyo3",
- "boxdesk",
- "boxdesk-record",
- "boxdesk-supervisor",
-]
-
-[[package]]
-name = "boxdesk-record"
-version = "0.0.1"
-
-[[package]]
-name = "boxdesk-serve"
-version = "0.0.1"
-dependencies = [
- "axum",
- "futures-core",
- "serde",
- "serde_json",
- "tokio",
- "boxdesk-record",
- "boxdesk-supervisor",
- "tracing",
-]
-
-[[package]]
-name = "boxdesk-supervisor"
-version = "0.0.1"
-dependencies = [
- "rustix 1.1.4",
- "boxdesk-krun",
 ]
 
 [[package]]

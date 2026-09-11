@@ -9,8 +9,8 @@
 //! the call site — `run.startedMs - t0` throws on a BigInt/number mix. Every value here is far
 //! inside the 2^53 a JS number holds exactly: epoch milliseconds run out in 287,000 years.
 
-use napi_derive::napi;
 use boxdesk_record::{End, Record, RunDir};
+use napi_derive::napi;
 
 #[napi(object)]
 pub struct JsPosture {
