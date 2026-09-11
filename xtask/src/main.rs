@@ -681,7 +681,7 @@ fn major_minor(v: &str) -> Option<(u32, u32)> {
 
 /// Whether a hypervisor answers here, and the question that was put to it.
 ///
-/// **The one place a platform branch is allowed to live** (`AGENTS.md`: host variance in the
+/// **The one place a platform branch is allowed to live** (host variance in the
 /// preflight, never in the boot path), and even here what is asked is a capability: Linux opens the
 /// device, macOS asks the kernel whether it supports virtualization at all. Neither reads a distro,
 /// a release file, or a version.
@@ -772,11 +772,11 @@ fn setup() -> Result<()> {
         dev_tool_path("readelf").is_some(),
     );
 
-    println!("\nMissing items are covered in AGENTS.md -> Building from source.");
+    println!("\nMissing items are covered in README.md -> Building from source.");
     Ok(())
 }
 
-/// The crates whose public API a `v0.1.0` tag would freeze: the surface `AGENTS.md`'s `api`-scope
+/// The crates whose public API a `v0.1.0` tag would freeze: the surface the `api` commit scope
 /// rule names. The wire framing, and the spawn/discovery API both shipped binaries drive their
 /// VMs through.
 const PINNED_SURFACE_CRATES: [&str; 2] = ["tormoni-channel", "tormoni-supervisor"];
@@ -1223,8 +1223,8 @@ exclude = ["fuzz"]
         assert!(effective_uid().is_ok());
     }
 
-    /// The repo-layout table is restated in three places for three audiences, and three copies
-    /// drift. Asserts each names every workspace package against its real directory; only the
+    /// The repo-layout table is restated in two places for two audiences, and two copies drift.
+    /// Asserts each names every workspace package against its real directory; only the
     /// name/directory pairing is pinned.
     #[test]
     fn every_layout_table_lists_every_package() {
@@ -1232,7 +1232,7 @@ exclude = ["fuzz"]
         let real: BTreeMap<String, String> = workspace_packages(root);
         assert!(real.len() >= 5, "expected the full workspace, got {real:?}");
 
-        for page in ["AGENTS.md", "README.md", "docs/architecture.md"] {
+        for page in ["README.md", "docs/architecture.md"] {
             let text = std::fs::read_to_string(root.join(page)).unwrap();
             let mut seen = BTreeSet::new();
             for line in text.lines().filter(|l| l.starts_with('|')) {
@@ -1263,23 +1263,6 @@ exclude = ["fuzz"]
                 "{page}'s layout table omits {missing:?}"
             );
         }
-    }
-
-    /// `AGENTS.md` is now the only document naming the pinned surface, so this asserts that one
-    /// membership rather than an agreement between two: the page that tells a contributor which
-    /// change takes the `api` scope must name every crate on the list the scope refers to.
-    #[test]
-    fn the_manual_names_the_whole_pinned_surface() {
-        let root = workspace_root();
-        let text = std::fs::read_to_string(root.join("AGENTS.md")).expect("AGENTS.md");
-        let missing: Vec<_> = PINNED_SURFACE_CRATES
-            .iter()
-            .filter(|krate| !text.contains(**krate))
-            .collect();
-        assert!(
-            missing.is_empty(),
-            "AGENTS.md does not name {missing:?}, but the `api` commit scope refers to them"
-        );
     }
 
     /// Package name to directory name, from the manifests rather than `cargo metadata`, whose

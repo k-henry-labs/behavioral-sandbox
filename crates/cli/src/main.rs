@@ -14,6 +14,7 @@ mod agent;
 mod cloud;
 mod frames;
 mod input;
+mod json;
 mod lifecycle;
 mod posture;
 mod pty;

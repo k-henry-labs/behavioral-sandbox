@@ -40,11 +40,6 @@ This project follows the [Code of Conduct](CODE_OF_CONDUCT.md). Suspected vulner
 private advisory form described in [`SECURITY.md`](SECURITY.md), never to a public issue or pull
 request.
 
-The developer instructions are consolidated in [`AGENTS.md`](AGENTS.md): the design rules, the repo
-layout, building from source with the pinned toolchains, the gate (`cargo xtask ci`), and the
-commit conventions.
-
-If you drive a coding agent in this repo, point it at [`AGENTS.md`](AGENTS.md): the same ground
-rules, written as standing instructions for a machine. Until the book regrows a Contributing
-chapter, it doubles as the consolidated developer reference for a person too, which is why the
-paragraph above points there.
+The developer reference is the book: [Architecture](docs/architecture.md) for the design rules and
+what is in the tree, and [Running a sandbox](docs/running.md) for the verbs and what a run leaves.
+`README.md` covers building from source and the gate (`cargo xtask ci`).

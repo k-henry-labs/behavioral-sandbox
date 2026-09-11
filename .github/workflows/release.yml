@@ -1,6 +1,6 @@
 # Release: a human pushes a `v*` tag, this builds `cargo xtask dist` on the two hosts the project
 # targets, and publishes the assets `install.sh` fetches from `releases/latest/download/`.
-# Nothing here decides to release: the tag is the decision, and a person makes it (AGENTS.md).
+# Nothing here decides to release: the tag is the decision, and a person makes it.
 # Every action floats on its major, as ci.yml's do, and Dependabot carries them.
 name: Release
 

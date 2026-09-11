@@ -1,7 +1,7 @@
 # cargo-deny config: the supply-chain gate (`cargo deny check`, run by CI and `cargo xtask ci`).
 # Keep the dependency tree light, license-clean, and advisory-free. See https://embarkstudios.github.io/cargo-deny/
 
-# The two targets this project builds for (AGENTS.md). Without this every crate in the lockfile
+# The two targets this project builds for. Without this every crate in the lockfile
 # is audited, including the Android, wasm and Windows halves of `winit` that nothing here compiles.
 [graph]
 targets = ["x86_64-unknown-linux-gnu", "aarch64-apple-darwin"]

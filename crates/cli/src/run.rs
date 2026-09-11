@@ -103,6 +103,10 @@ pub(crate) struct RunArgs {
     /// by default: the record's own empty directory, where the guest's results land.
     #[arg(long)]
     pub(crate) no_results: bool,
+    /// Print the run as one JSON document when it ends, and keep the guest's own output off
+    /// this process's streams: it is captured either way, and comes back inside the document.
+    #[arg(long)]
+    pub(crate) json: bool,
     /// The command, after `--`. The first word is resolved by the guest (its `PATH`, not the
     /// host's), so `echo` runs the guest's `echo`.
     #[arg(last = true, required = true, value_name = "COMMAND")]
@@ -131,6 +135,16 @@ fn execute(args: &RunArgs) -> Result<u8, String> {
     let results = !args.no_results;
 
     if args.dry_run {
+        if args.json {
+            let record = Record::begin(
+                &name,
+                Verb::Run,
+                args.command.clone(),
+                posture_of(&cfg, results),
+            );
+            println!("{}", crate::json::record_json(&record));
+            return Ok(0);
+        }
         print_posture(&name, &cfg, results, &mut std::io::stdout()).map_err(|e| e.to_string())?;
         return Ok(0);
     }
@@ -152,14 +166,25 @@ fn execute(args: &RunArgs) -> Result<u8, String> {
     let mut vm = Vm::spawn(name, &cfg).map_err(|e| e.to_string())?;
     record.pid = Some(vm.pid());
     store.save(&record).map_err(|e| e.to_string())?;
+    // With `--json` this process's streams carry the document and nothing else: a byte of guest
+    // output in front of it is a document no client can parse. The capture is unaffected, so the
+    // output is not lost — it comes back inside the document.
+    let (to_out, to_err): (
+        Box<dyn std::io::Write + Send>,
+        Box<dyn std::io::Write + Send>,
+    ) = if args.json {
+        (Box::new(std::io::sink()), Box::new(std::io::sink()))
+    } else {
+        (Box::new(std::io::stdout()), Box::new(std::io::stderr()))
+    };
     let out = tee(
         vm.take_stdout(),
-        std::io::stdout(),
+        to_out,
         run.append(&run.stdout()).map_err(|e| e.to_string())?,
     );
     let err = tee(
         vm.take_stderr(),
-        std::io::stderr(),
+        to_err,
         run.append(&run.stderr()).map_err(|e| e.to_string())?,
     );
     let waited = vm.wait();
@@ -179,6 +204,9 @@ fn execute(args: &RunArgs) -> Result<u8, String> {
         _ => End::Failed,
     });
     store.save(&record).map_err(|e| e.to_string())?;
+    if args.json {
+        println!("{}", crate::json::complete(&record, &run));
+    }
     Ok(exit_code_of(exit))
 }
 

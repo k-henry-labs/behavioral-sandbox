@@ -57,11 +57,6 @@ that are actually in the tree, and how a sandbox is run.
 - **[Security](./security.md)**, what is trusted, what counts as a security bug, and how to report
   one.
 
-The repository's own operating manual is
-[`AGENTS.md`](https://github.com/kendricklawton/tormoni/blob/main/AGENTS.md) at the root:
-the design rules, the repo layout, the build, and the commit conventions. It is written as standing
-instructions for a coding agent and doubles as the developer reference.
-
 ## License
 
 Apache-2.0.

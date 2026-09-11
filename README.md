@@ -152,7 +152,7 @@ everything, including the crate names, changes without notice.
 
 The project is **open to outside pull requests**, though everything here is pre-`v0.1.0` and
 changes without notice. A pull request signs its commits off (`git commit -s`). The terms are in
-[`CONTRIBUTING.md`](CONTRIBUTING.md), and [`AGENTS.md`](AGENTS.md) is the operating manual.
+[`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## License
 

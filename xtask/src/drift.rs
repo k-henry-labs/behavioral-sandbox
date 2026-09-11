@@ -444,7 +444,7 @@ fn markdown_links(text: &str) -> Vec<(usize, String)> {
 mod tests {
     use super::*;
 
-    /// The enforcer for `AGENTS.md`'s "target kernels, not distros": a host difference is probed
+    /// The enforcer for "target kernels, not distros": a host difference is probed
     /// as a capability, never read off its identity papers. The `Containerfile` is exempt, since
     /// package use inside the image is that image's own userspace.
     #[test]

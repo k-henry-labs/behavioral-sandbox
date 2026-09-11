@@ -49,6 +49,9 @@ pub(crate) struct LsArgs {
     /// Also list the runs that have ended, from the notebook's records, newest first.
     #[arg(long)]
     pub(crate) all: bool,
+    /// Print the runs as one JSON document instead of a table.
+    #[arg(long)]
+    pub(crate) json: bool,
 }
 
 /// Show one run's record: by id, or the newest by name.
@@ -57,6 +60,9 @@ pub(crate) struct ShowArgs {
     /// The run's id, or a VM name.
     #[arg(value_name = "ID|NAME")]
     pub(crate) key: String,
+    /// Print the run as one JSON document instead of the record's own lines.
+    #[arg(long)]
+    pub(crate) json: bool,
 }
 
 /// Export one run as a tar file.
@@ -129,6 +135,18 @@ pub(crate) fn exec(args: &ExecArgs) -> ExitCode {
 }
 
 pub(crate) fn show(args: &ShowArgs) -> ExitCode {
+    if args.json {
+        return match one_as_json(&args.key) {
+            Ok(value) => {
+                println!("{value}");
+                ExitCode::SUCCESS
+            }
+            Err(msg) => {
+                eprintln!("tormoni show: {msg}");
+                ExitCode::from(EXIT_OPERATIONAL)
+            }
+        };
+    }
     match describe(&args.key, &mut std::io::stdout()) {
         Ok(()) => ExitCode::SUCCESS,
         Err(msg) => {
@@ -198,6 +216,9 @@ const CELLS: usize = 6;
 const UNKNOWN: &str = "-";
 
 fn list(args: &LsArgs, out: &mut impl Write) -> Result<(), String> {
+    if args.json {
+        return list_as_json(args, out);
+    }
     if args.reap {
         let removed = discover::reap_stale().map_err(|e| e.to_string())?;
         if removed > 0 {
@@ -227,6 +248,29 @@ fn list(args: &LsArgs, out: &mut impl Write) -> Result<(), String> {
         list_past(out)?;
     }
     Ok(())
+}
+
+/// `ls --json`: the live sandboxes and, with `--all`, the ended runs, as one document.
+///
+/// A live VM is named by its socket and answers about itself; a record is what the notebook
+/// kept. `live` says which a row is, so a client does not infer it from an absent `ended_ms`.
+fn list_as_json(args: &LsArgs, out: &mut impl Write) -> Result<(), String> {
+    let live = discover::live().map_err(|e| e.to_string())?;
+    let names: std::collections::BTreeSet<String> = live.iter().map(|vm| vm.name.clone()).collect();
+    let store = Store::open().map_err(|e| e.to_string())?;
+    let mut runs = Vec::new();
+    for record in store.list().map_err(|e| e.to_string())? {
+        let is_live = record.is_open() && names.contains(&record.name);
+        if !args.all && !is_live {
+            continue;
+        }
+        let mut value = crate::json::record_json(&record);
+        if let Some(object) = value.as_object_mut() {
+            object.insert("live".into(), serde_json::Value::from(is_live));
+        }
+        runs.push(value);
+    }
+    writeln!(out, "{}", serde_json::json!({ "runs": runs })).map_err(|e| e.to_string())
 }
 
 /// The runs that have ended, newest first, after marking as gone the open ones whose VM no
@@ -305,6 +349,12 @@ pub(crate) fn find_run(key: &str) -> Result<(Store, tormoni_record::Record), Str
         format!("no run named or numbered {key:?} (`tormoni ls --all` lists them)")
     })?;
     Ok((store, record))
+}
+
+/// One run as `--json` prints it: the record, its posture, its captured output and its results.
+fn one_as_json(key: &str) -> Result<serde_json::Value, String> {
+    let (store, record) = find_run(key)?;
+    Ok(crate::json::complete(&record, &store.dir_of(&record.id)))
 }
 
 fn describe(key: &str, out: &mut impl Write) -> Result<(), String> {
