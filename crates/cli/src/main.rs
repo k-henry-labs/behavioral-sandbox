@@ -19,6 +19,7 @@ mod lifecycle;
 mod posture;
 mod pty;
 mod run;
+mod serve;
 mod shell;
 mod up;
 mod vmm;
@@ -78,6 +79,8 @@ enum Cmd {
     Export(lifecycle::ExportArgs),
     /// Remove one run's record and everything it captured.
     Rm(lifecycle::RmArgs),
+    /// Run sandboxes for a caller over HTTP: one box, one token, one tenant.
+    Serve(serve::ServeArgs),
     /// Send runs to the console and read back what it holds.
     ///
     /// A namespace rather than more verbs: `ls`, `show` and `rm` above name what THIS machine
@@ -108,6 +111,7 @@ fn main() -> ExitCode {
         Cmd::Show(args) => lifecycle::show(&args),
         Cmd::Export(args) => lifecycle::export(&args),
         Cmd::Rm(args) => lifecycle::rm(&args),
+        Cmd::Serve(args) => serve::run(&args),
         Cmd::Cloud(args) => cloud::run(&args),
         Cmd::Vmm(args) => vmm::run(&args),
         Cmd::Frames(args) => frames::run(&args),

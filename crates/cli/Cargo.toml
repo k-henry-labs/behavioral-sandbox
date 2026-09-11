@@ -23,10 +23,14 @@ tormoni-krun = { path = "../krun" }
 tormoni-input = { path = "../input" }
 # The run record every verb that boots writes: the notebook's unit.
 tormoni-record = { path = "../record" }
+# `tormoni serve`, and the only reason this binary carries an HTTP stack at all.
+tormoni-serve = { path = "../serve" }
 tormoni-supervisor = { path = "../supervisor" }
 clap = { workspace = true }
 # The cloud's answers and its RFC 9457 refusals. The lanes are JSON; nothing else here parses any.
 serde_json = { workspace = true }
+axum = { workspace = true }
+tokio = { workspace = true }
 # Raw mode and window size for the interactive shell, the self-signal a VM stops itself with, and
 # the readiness wait on a non-blocking stdin. Safe wrappers only.
 rustix = { workspace = true, features = ["event", "pipe", "process", "termios", "time"] }

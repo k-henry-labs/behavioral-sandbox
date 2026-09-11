@@ -127,6 +127,7 @@ types. `cargo … -p` takes the package, a path takes the directory.
 | `crates/record` | `tormoni-record` | The run record the notebook keeps: posture, captured output, and the guest's `/results`, one directory per run, exportable as one tar file. |
 | `crates/input` | `tormoni-input` | The guest's keyboard and pointer: device shapes, reports, and the line grammar the replay file and the control socket feed. |
 | `crates/cli` | `tormoni` | The `tormoni` CLI and its verbs. The binary on `PATH` is `tormoni`. |
+| `crates/serve` | `tormoni-serve` | `tormoni serve`: one box that runs sandboxes for a caller over HTTP, and the meter that says what one held. One tenant, one token; it decides nothing about who is asking. |
 | `crates/app` | `tormoni-app` | The GUI application, `Tormoni`, on iced: the notebook of runs reached from a sidebar, a run's record with its display and output, a start form, stop, re-run, delete, export, clear history, a persisted palette, scale and landing screen, and a shell in your terminal. One AppKit call gives its window a toolbar, which is what puts the window's own buttons on the line its head is drawn to. |
 | `crates/test-support` | `tormoni-test-support` | Shared test fixtures: a self-reclaiming scratch dir, a log sink, a deterministic generator. Dev-only, never shipped. |
 | `docs` | | This documentation, as an mdBook. |

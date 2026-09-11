@@ -55,8 +55,13 @@ allow-wildcard-paths = true
 # happened to be clean, and a transitive dependency could have pulled a runtime in without anything
 # saying so. An async runtime arriving is a design change, so it should fail the gate and be argued
 # for, not land as a lockfile diff nobody reads.
+#
+# **One arrived, and it was argued for.** `tormoni serve` listens, and a listener needs a stack in
+# a way a client does not: everything else in this tree reaches the network by shelling out to
+# `curl`. tokio is admitted for that, and for nothing else — the ban below is what still makes a
+# SECOND runtime a design change rather than a lockfile diff. The sandbox path took on no async:
+# `run`, `shell`, `up` and the supervisor are the same synchronous code they were.
 deny = [
-    { name = "tokio" },
     { name = "async-std" },
     { name = "smol" },
     { name = "async-executor" },
