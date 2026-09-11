@@ -73,6 +73,14 @@ Run records under `~/.local/share/boxdesk/runs` are yours and are not removed.
 | `boxdesk show ID\|NAME` | Prints one run's record: what it could touch, what it printed, what it wrote. |
 | `boxdesk rm ID\|NAME` | Removes one run's record and everything it captured. |
 | `boxdesk export ID\|NAME` | Writes one run as a ustar `.tar` (`--to` picks a directory or exact path). |
+| `boxdesk snapshot new NAME` | Writes a snapshot: a named posture to make sandboxes from. |
+| `boxdesk snapshot ls` | Lists the snapshots on this machine; `--json` for a client. |
+| `boxdesk snapshot show NAME` | Prints what a sandbox made from one would boot and could touch. |
+| `boxdesk snapshot rm NAME` | Removes a snapshot. The sandboxes already made from it are untouched. |
+| `boxdesk pull REF` | Fetches an OCI image and flattens it into a guest root this machine can boot. |
+| `boxdesk image ls\|rm` | The images pulled onto this machine, and removing one. |
+| `boxdesk registry add\|ls\|rm` | Where images come from, and who this machine is when it asks. |
+| `boxdesk volume new\|ls\|show\|rm` | Directories with lives of their own, mounted into sandboxes by name. |
 
 There is no daemon: a VM is a helper process listening on a control socket in the runtime directory,
 so a sandbox started by the CLI is visible to the app and the other way round.
@@ -93,13 +101,133 @@ so a sandbox started by the CLI is visible to the app and the other way round.
 | `--env KEY=VALUE` | One guest environment entry. Repeatable. The record keeps the name, never the value. | nothing |
 | `--vcpus N`, `--mem MIB` | Sizing; also `$BOXDESK_VCPUS` and `$BOXDESK_MEM_MIB`. | 1 vCPU, 512 MiB |
 | `--no-results` | Drops the default `/results` mount. | mounted |
+| `--snapshot NAME` | Starts from a snapshot's posture; every flag beside it speaks over it. | none |
+| `--image REF` | Boots an image pulled by `boxdesk pull` instead of a tree on disk. Refuses `--root`. | none |
+| `--volume NAME:GUESTDIR` | Mounts a volume at a guest path. Repeatable. | nothing |
+
+## Snapshots
+
+A **snapshot is a posture with a name on it**: what a sandbox made from it boots, what it may
+touch, and how much machine it gets. It is a template, not a captured VM — nothing pauses or
+copies a running sandbox, and `ROADMAP.md` keeps that separate feature apart from this one.
+
+```console
+boxdesk snapshot new devbox --net tsi --vcpus 4 --mem 4096 -- sleep infinity
+boxdesk run --snapshot devbox -- cargo test
+```
+
+`snapshot new` takes the posture flags above, minus `--env`: a posture keeps the *names* of
+environment entries and never what they are set to, so a snapshot has nowhere to put a value and
+does not pretend otherwise. It refuses to replace a snapshot of the same name unless given
+`--force`.
+
+**A flag beside `--snapshot` always speaks over it, including the flag that closes a posture.**
+`--net none` against a snapshot asking for `tsi` gives no network. This is why `--net` and
+`--rootfs` carry no default value in the parser: with one, typing the default would have been
+indistinguishable from typing nothing, and a snapshot would have opened what the caller had just
+shut. `a_posture_flag_speaks_over_the_snapshot_even_when_it_closes_one` is the check.
+
+Snapshots live in `$BOXDESK_SNAPSHOTS_DIR`, else `$XDG_DATA_HOME/boxdesk/snapshots`, else
+`~/.local/share/boxdesk/snapshots`, one file per snapshot, in the same `key value` lines a record
+uses — written by the same writer, so a posture grown in one reaches the other.
+
+## Images
+
+**An image here is a directory, because that is what libkrun boots.** There is no disk image and
+no kernel to unpack: the VM is handed a tree over virtiofs, and an OCI image flattened is a tree.
+That is why adopting OCI costs so little — every image anyone has already published is reachable,
+and no new infrastructure has to run.
+
+```console
+boxdesk pull alpine:3.20
+boxdesk run --image alpine:3.20 -- /bin/busybox echo hello
+```
+
+A reference reads the way every other client reads one: `alpine` is `docker.io/library/alpine`,
+`org/img` is a Docker Hub repository, and what makes the first element a registry is a dot, a
+colon, or its being `localhost`. Images live in `$BOXDESK_IMAGES_DIR`, else
+`$XDG_DATA_HOME/boxdesk/images`, else `~/.local/share/boxdesk/images`, one flattened tree per
+manifest digest with a file of references beside them.
+
+**Every blob is verified against its digest before `tar` opens it.** A layer that does not hash to
+what the manifest named is refused and removed, so nothing unverified reaches the extractor.
+Layers are flattened in the manifest's order with whiteouts applied first: a `.wh.<name>` entry
+deletes what a lower layer put there and `.wh..wh..opq` empties the directory it sits in, both
+against the tree as it stands *before* this layer lands on it, and the markers never survive into
+the root.
+
+**A pulled image carries no boxdesk guest agent**, so `run` works from one and `shell` and `up` do
+not — they dial an agent on a vsock a stock image has never heard of. `pull` says so when it
+finishes rather than leaving it to be discovered by watching a boot hang.
+
+`pull` uses `curl`, `tar` and `shasum` rather than an HTTP client, a TLS stack, a gzip decoder and
+a tar reader as four new dependencies. `xtask` already fetches and verifies its pinned inputs that
+way and the installer is a shell script; this is the same bargain.
+
+## Registries
+
+A registry record says where images come from and who this machine is when it asks: a host, a
+project, and a username.
+
+```console
+boxdesk registry add work ghcr.io --project acme --username buildbot
+BOXDESK_REGISTRY_PASSWORD=... boxdesk pull ghcr.io/acme/img:v2
+```
+
+**No password is ever written to a file.** A registry record holds the address and the username
+and nothing else; the secret is read from `$BOXDESK_REGISTRY_PASSWORD` at the moment a pull needs
+it. This is the rule a posture keeps about environment values, for the same reason: a file this
+tool writes is a file that gets copied, backed up and shared.
+`a_password_neither_reaches_the_file_nor_comes_back_out_of_one` checks it from both sides — a
+`password` line somebody planted in a registry file is read past and dropped.
+
+Public images need no registry at all. `boxdesk pull alpine:3.20` works as it stands: an
+unauthenticated request is made first, and the `WWW-Authenticate` challenge that comes back is
+what names the token service to ask. That is the flow every registry implements, which is why
+Docker Hub, ghcr.io and quay.io work without any of them being special-cased.
+
+Registries live in `$BOXDESK_REGISTRIES_DIR`, else `$XDG_DATA_HOME/boxdesk/registries`, else
+`~/.local/share/boxdesk/registries`.
+
+## Volumes
+
+**A run's writes end with the run.** What it keeps is `results/` inside its own record, tied to
+that one run; a directory given with `--mount` outlives it but is a path you have to remember and
+nothing manages. A volume is the third thing: a named directory boxdesk makes, keeps and can list,
+mounted into any sandbox that asks for it by name.
+
+```console
+boxdesk volume new cache --about "the package cache, shared between runs"
+boxdesk run --image alpine:3.20 --volume cache:/mnt -- /bin/busybox ls /mnt
+```
+
+**Local only.** A volume is a directory on this machine — not an object store, not shared between
+machines. The cloud was removed from this tree deliberately, and nothing here puts it back.
+
+A volume becomes an ordinary `--mount` before anything else sees it, so the record a run leaves
+says what it could touch in the same words as ever. That also means the guest path has to be a
+directory the image already has, which is the rule `--mount` already keeps, and the refusal is the
+same one.
+
+`boxdesk volume rm` refuses a volume that holds something unless given `--force`, and the window
+asks the same question behind the same card. A volume exists because its contents were worth
+keeping past the run that made them; removing one is the only act in either interface that takes
+that away.
+
+Volumes live in `$BOXDESK_VOLUMES_DIR`, else `$XDG_DATA_HOME/boxdesk/volumes`, else
+`~/.local/share/boxdesk/volumes`, one directory each: the record, and a `data/` beside it that is
+what a guest mounts. The record is never inside what a guest can write.
 
 ## Configuration layering
 
-Configuration is resolved in precedence order: 1. Command line flags. 2. Environment variables
+Configuration is resolved in precedence order: 1. Command line flags. 2. The snapshot named by
+`--snapshot`, if there is one: being asked for by name outranks the machine's ambient settings.
+3. Environment variables
 (`$BOXDESK_VCPUS`, `$BOXDESK_MEM_MIB`, `$BOXDESK_GUEST_ROOT`, `$BOXDESK_RUNS_DIR`, `$BOXDESK_RUNS_KEEP`,
-`$BOXDESK_OUTPUT_CAP_KIB`, `$BOXDESK_LOG`, `$BOXDESK_CLI`, `$BOXDESK_THEME`). 3. The nearest `.boxdesk.toml` in or above
-the current working directory. 4. User defaults in `~/.boxdesk.toml`. 5. Built-in defaults.
+`$BOXDESK_OUTPUT_CAP_KIB`, `$BOXDESK_SNAPSHOTS_DIR`, `$BOXDESK_IMAGES_DIR`, `$BOXDESK_REGISTRIES_DIR`,
+`$BOXDESK_REGISTRY_PASSWORD`, `$BOXDESK_VOLUMES_DIR`, `$BOXDESK_LOG`, `$BOXDESK_CLI`, `$BOXDESK_THEME`). 4. The nearest
+`.boxdesk.toml` in or above the current working directory. 5. User defaults in `~/.boxdesk.toml`.
+6. Built-in defaults.
 
 ## What a run leaves
 
