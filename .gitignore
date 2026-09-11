@@ -30,3 +30,21 @@ scratch/
 /fuzz/artifacts/
 /fuzz/coverage/
 dist/
+
+# The SDKs under `sdk/` are four ecosystems in one tree, and each vendors differently.
+sdk/*/node_modules/
+sdk/*/target/
+sdk/*/dist/
+sdk/*/.venv/
+sdk/**/__pycache__/
+sdk/*/.pytest_cache/
+sdk/*/.mypy_cache/
+sdk/*/.ruff_cache/
+# The compiled FFI modules. napi writes the `.node` beside the manifest and maturin writes the
+# `.so` into the Python package, so neither lands under a `target/` these rules already cover, and
+# both were staged once before this line existed. They are per-platform build outputs the release
+# job produces: a checked-in copy is 832 KiB that goes stale against the Rust it was built from.
+sdk/**/*.node
+sdk/**/*.so
+sdk/**/*.pyd
+sdk/**/*.dylib
