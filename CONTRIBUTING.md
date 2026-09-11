@@ -44,3 +44,8 @@ request.
 how a release is cut. **What it is and why it is shaped this way** is the book under
 [`docs/`](docs/SUMMARY.md) — the design rules, the architecture, the guest image build, and the two
 protocols. This file is the process.
+
+**If you drive a coding agent here, point it at [`AGENTS.md`](AGENTS.md)**, the same ground rules
+written as standing instructions for a machine. One rule there is worth repeating to the person
+holding the keyboard: a change is authored by whoever ran the tool, so no commit in this repository
+carries an agent as a co-author, and `the_log_credits_no_agent` in the gate keeps it that way.
