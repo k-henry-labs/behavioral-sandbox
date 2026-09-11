@@ -15,7 +15,7 @@
   </p>
 
   <h3>
-    <a href="docs/SUMMARY.md">Docs</a>
+    <a href="https://kendricklawton.github.io/tormoni/">Docs</a>
     <span> | </span>
     <a href="docs/architecture.md#design-rules">Design rules</a>
     <span> | </span>

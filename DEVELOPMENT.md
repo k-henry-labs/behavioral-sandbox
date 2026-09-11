@@ -4,7 +4,9 @@ Everything needed to build, test and release Tormoni from source.
 
 For contribution process — issue first, commit sign-off, what a pull request needs, and the five
 design rules every change is reviewed against — see [CONTRIBUTING.md](CONTRIBUTING.md). For what the
-product does and how a person uses it, see <docs/SUMMARY.md>.
+product does and how a person uses it, read the book under [`docs/`](docs/SUMMARY.md), which
+`.github/workflows/docs.yml` publishes to <https://kendricklawton.github.io/tormoni/> on every
+push to `main` that touches it.
 
 ## Prerequisites
 
