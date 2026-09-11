@@ -8,13 +8,13 @@
 //! [`ChannelError`], never panic, never loop unboundedly, and never allocate past
 //! [`MAX_PAYLOAD`](crate::MAX_PAYLOAD).
 //!
-//! **Dependency-free on purpose.** `tormoni-channel` is near dependency-free by design and the supply-chain
+//! **Dependency-free on purpose.** `boxdesk-channel` is near dependency-free by design and the supply-chain
 //! gate keeps a tight license allowlist, so rather than pull in `proptest`/`arbitrary` (and their
-//! trees) as dev-dependencies, the generator is `tormoni_test_support::Rng`, a workspace leaf with an
+//! trees) as dev-dependencies, the generator is `boxdesk_test_support::Rng`, a workspace leaf with an
 //! empty `[dependencies]`. Fixed seeds mean a failure reproduces exactly and the gate never flakes.
 //! The alphabet below stays here, because what is worth generating is this wire's question.
 
-use tormoni_test_support::Rng;
+use boxdesk_test_support::Rng;
 
 use super::*;
 

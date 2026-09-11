@@ -15,8 +15,8 @@ use std::os::unix::net::UnixStream;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use tormoni_channel::ClientConnection;
-use tormoni_supervisor::Vm;
+use boxdesk_channel::ClientConnection;
+use boxdesk_supervisor::Vm;
 
 /// How long the agent is given to answer. Cold boot is ~300 ms on the development laptop; this is
 /// headroom, not a tuned value.
@@ -79,7 +79,7 @@ pub(crate) fn dial(sock: &Path, vm: &mut Vm) -> Result<Dialed, Error> {
 /// end this process cannot `wait` for, or a dead VM reads as a slow one.
 pub(crate) fn connect(sock: &Path, control: &Path) -> Result<Dialed, Error> {
     let ended = |control: &mut &Path| {
-        (!tormoni_supervisor::socket::is_live(control))
+        (!boxdesk_supervisor::socket::is_live(control))
             .then(|| Error::VmEnded("its control socket stopped answering".to_string()))
     };
     let mut watched = control;

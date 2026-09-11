@@ -9,7 +9,7 @@ that adds those.
 ## The guest is a virtual machine, whatever the host is
 
 ```console
-$ tormoni run -- uname -sm
+$ boxdesk run -- uname -sm
 Linux aarch64
 $ uname -sm
 Darwin arm64
@@ -22,7 +22,7 @@ answers from a kernel that is not the one you booted.
 ## Nothing reaches the network until the posture says so
 
 ```console
-$ tormoni run -- wget -T3 -qO- http://example.com
+$ boxdesk run -- wget -T3 -qO- http://example.com
 wget: bad address 'example.com'
 $ echo $?
 1
@@ -32,7 +32,7 @@ $ echo $?
 command works:
 
 ```console
-$ tormoni run --net tsi -- wget -T5 -qO- http://example.com
+$ boxdesk run --net tsi -- wget -T5 -qO- http://example.com
 <!doctype html><html lang="en"><head><title>Example Domain</title>...
 ```
 
@@ -43,14 +43,14 @@ is one of two values, and the record keeps whichever was used.
 
 ```console
 $ mkdir -p /tmp/demo-project && echo 'notes from the host' > /tmp/demo-project/notes.txt
-$ tormoni run -- ls /tmp/demo-project
+$ boxdesk run -- ls /tmp/demo-project
 ls: /tmp/demo-project: No such file or directory
 ```
 
 The guest's `/tmp` is the guest's. `--mount` puts a host directory at a guest path, read-write:
 
 ```console
-$ tormoni run --mount /mnt=/tmp/demo-project -- cat /mnt/notes.txt
+$ boxdesk run --mount /mnt=/tmp/demo-project -- cat /mnt/notes.txt
 notes from the host
 ```
 
@@ -62,21 +62,21 @@ is refused rather than silently dropped, and the error names `/mnt` as somewhere
 `/results` is the one directory a run is expected to write, and it is collected into the record:
 
 ```console
-$ tormoni run -- tar -cf /results/etc.tar /etc
+$ boxdesk run -- tar -cf /results/etc.tar /etc
 tar: removing leading '/' from member names
-$ tormoni show run-98315
+$ boxdesk show run-98315
 ...
 output stdout 0 bytes
 output stderr 44 bytes
 result etc.tar 290304 bytes
 ```
 
-`tormoni export` writes that record, its captured output and its results as one tar file.
+`boxdesk export` writes that record, its captured output and its results as one tar file.
 
 ## The record says what the run could touch
 
 ```console
-$ tormoni show 1789019565376-run-97863
+$ boxdesk show 1789019565376-run-97863
 record 1
 id 1789019565376-run-97863
 name run-97863
@@ -85,7 +85,7 @@ arg /bin/busybox
 arg sh
 arg -c
 arg cat /mnt/notes.txt; echo written-from-the-guest > /mnt/from-guest.txt
-root /Users/you/.local/share/tormoni/rootfs read-only
+root /Users/you/.local/share/boxdesk/rootfs read-only
 mount /mnt <- /tmp/demo-project
 network none
 sound off
@@ -96,7 +96,7 @@ started 1789019565376
 pid 97865
 ended 1789019565673
 end exit 0
-dir /Users/you/.local/share/tormoni/runs/1789019565376-run-97863
+dir /Users/you/.local/share/boxdesk/runs/1789019565376-run-97863
 output stdout 20 bytes
 output stderr 0 bytes
 ```
@@ -108,9 +108,9 @@ the record spells out every one.
 ## The exit status is the command's
 
 ```console
-$ tormoni run -- false; echo $?
+$ boxdesk run -- false; echo $?
 1
-$ tormoni run -- true; echo $?
+$ boxdesk run -- true; echo $?
 0
 ```
 
@@ -119,24 +119,24 @@ So a sandbox drops into a shell pipeline or a `Makefile` without a wrapper readi
 ## A sandbox that outlives the command
 
 ```console
-$ tormoni up --name demo
+$ boxdesk up --name demo
 demo
-$ tormoni ls
+$ boxdesk ls
 NAME              PID       VCPUS   MEM       NET     ROOTFS      CHANNEL
 demo              98051     1       512       none    read-only   present
-$ tormoni exec demo -- uptime
+$ boxdesk exec demo -- uptime
  05:53:02 up 0 min,  0 users,  load average: 0.00, 0.00, 0.00
-$ tormoni stop demo
+$ boxdesk stop demo
 demo
 ```
 
 `up` registers a socket under the runtime directory, and both binaries find live sandboxes by
-reading it, so a sandbox started in the terminal shows up in `Tormoni` and the other way round.
+reading it, so a sandbox started in the terminal shows up in `Boxdesk` and the other way round.
 
 ## How long a run takes here
 
 ```console
-$ for i in $(seq 1 15); do /usr/bin/time -p tormoni run -- true; done
+$ for i in $(seq 1 15); do /usr/bin/time -p boxdesk run -- true; done
 n=15  p50=0.16s  p90=0.23s  max=0.24s
 ```
 
@@ -146,13 +146,13 @@ the number. Measure your own host before repeating it; this one says nothing abo
 
 ## In the application
 
-`Tormoni` carries these and more under **Cookbook** in the sidebar, on five shelves: first steps,
+`Boxdesk` carries these and more under **Cookbook** in the sidebar, on five shelves: first steps,
 what a sandbox cannot reach, getting work back, what it is given, and what a failure looks like.
 A press fills the start form rather than booting, so the posture sentence is read before anything
-runs, and each entry shows the `tormoni` line it is.
+runs, and each entry shows the `boxdesk` line it is.
 
 That line is built from the entry's posture rather than stored beside it, so the card and the form
 cannot say different things: `the_line_an_entry_shows_is_the_posture_it_fills_in` is what holds
 them together, and a second rendering of the same table is where an SDK snippet will come from.
-Every run started there is the same `tormoni` binary with the same flags, and lands in the same
+Every run started there is the same `boxdesk` binary with the same flags, and lands in the same
 record this page has been reading.

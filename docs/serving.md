@@ -1,6 +1,6 @@
 # Serving sandboxes
 
-`tormoni serve` turns an installed copy into a box that runs sandboxes for a caller over HTTP,
+`boxdesk serve` turns an installed copy into a box that runs sandboxes for a caller over HTTP,
 instead of only for the person at the keyboard. It is for somebody who has a machine with a
 hypervisor and wants their own team to use it, without anything leaving their network.
 
@@ -10,9 +10,9 @@ questions for something that knows about more than one machine; this knows about
 on.
 
 ```console
-tormoni serve                      # loopback on 8420
-tormoni serve --bind 0.0.0.0:8420  # reachable from elsewhere, said out loud
-tormoni serve --concurrency 8      # the most sandboxes to run at once
+boxdesk serve                      # loopback on 8420
+boxdesk serve --bind 0.0.0.0:8420  # reachable from elsewhere, said out loud
+boxdesk serve --concurrency 8      # the most sandboxes to run at once
 ```
 
 ## Before it listens
@@ -23,7 +23,7 @@ It refuses rather than starting half-working, and each refusal names the thing t
   usually means membership of the `kvm` group; macOS wants a machine that virtualises at all. This
   is a host permission, and no reinstall changes it.
 - **No token.** Write one to `serve.token` in the data directory at mode `0600`, or set
-  `$TORMONI_SERVE_TOKEN`. Nothing mints one for you: it is a secret of your choosing, and the box
+  `$BOXDESK_SERVE_TOKEN`. Nothing mints one for you: it is a secret of your choosing, and the box
   accepts exactly that one.
 - **A token anybody can read.** A credential at `0644` on a shared machine belongs to every account
   on it, so it is refused rather than used, and rather than quietly fixed.
@@ -33,7 +33,7 @@ on `0.0.0.0` the first time somebody tries it is a bad default with a long tail;
 machine takes saying so, and is said back to you at startup.
 
 `--bind`, the token and the data directory each have an environment variable
-(`$TORMONI_SERVE_BIND`, `$TORMONI_SERVE_TOKEN`, `$TORMONI_SERVE_DATA`), so a container runs this
+(`$BOXDESK_SERVE_BIND`, `$BOXDESK_SERVE_TOKEN`, `$BOXDESK_SERVE_DATA`), so a container runs this
 with no config file.
 
 ## The lanes
@@ -45,7 +45,7 @@ by a person.
 | Lane | What it does |
 |---|---|
 | `POST /v1/runs` | One ephemeral sandbox. The response streams while it runs. |
-| `GET /v1/runs/{id}/archive` | The ustar `tormoni export` writes, unchanged. |
+| `GET /v1/runs/{id}/archive` | The ustar `boxdesk export` writes, unchanged. |
 | `POST /v1/sandboxes` | One that outlives its command, reached afterwards by name. |
 | `POST /v1/sandboxes/{name}/exec` | Another command in one already up. |
 | `DELETE /v1/sandboxes/{name}` | Stops one. |
@@ -68,7 +68,7 @@ does at a keyboard.
 ## The archive is the same archive
 
 A served run leaves **byte for byte** the record a local run leaves. Not equivalent: the same
-bytes, because a job re-enters the same `tormoni run` rather than driving the supervisor a second
+bytes, because a job re-enters the same `boxdesk run` rather than driving the supervisor a second
 time. There is one run path, not two that agree today.
 `a_served_archive_is_byte_for_byte_the_one_a_local_export_writes` boots a sandbox through a
 listening server and compares the digests.

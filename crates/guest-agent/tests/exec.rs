@@ -1,4 +1,4 @@
-//! Integration tests for the guest agent, driving [`tormoni_guest_agent::serve`] through the **public**
+//! Integration tests for the guest agent, driving [`boxdesk_guest_agent::serve`] through the **public**
 //! channel API ([`ClientConnection`]) over a unix socketpair, the same protocol the host will speak
 //! over vsock, but with no VM.
 // The agent, and so this suite, is Linux-only; the crate under test compiles to nothing
@@ -14,7 +14,7 @@ use std::os::unix::fs::PermissionsExt as _;
 use std::os::unix::net::UnixStream;
 use std::time::Duration;
 
-use tormoni_channel::{ClientConnection, Request};
+use boxdesk_channel::{ClientConnection, Request};
 
 mod common;
 
@@ -85,7 +85,7 @@ fn stdin_is_fed_to_the_command() {
 #[test]
 fn env_reaches_the_command_but_never_the_agents_own_process() {
     // Both halves: the variable reaches the command, and `serve` did not touch this process's env.
-    let key = "TORMONI_TEST_ENV_SCOPE";
+    let key = "BOXDESK_TEST_ENV_SCOPE";
     assert!(
         std::env::var_os(key).is_none(),
         "test precondition: {key} must not be set"
@@ -108,16 +108,16 @@ fn env_reaches_the_command_but_never_the_agents_own_process() {
 /// read the same `PATH` the spawn will.
 #[test]
 fn a_program_on_the_injected_path_runs_rather_than_being_refused() {
-    let scratch = tormoni_test_support::ScratchDir::created("agent-injected-path");
+    let scratch = boxdesk_test_support::ScratchDir::created("agent-injected-path");
     let bin = scratch.path().join("bin");
     std::fs::create_dir_all(&bin).expect("bin dir");
-    let tool = bin.join("tormoni-probe-tool");
+    let tool = bin.join("boxdesk-probe-tool");
     std::fs::write(&tool, "#!/bin/sh\nprintf 'ran-from-injected-PATH'\n").expect("write the tool");
     std::fs::set_permissions(&tool, std::fs::Permissions::from_mode(0o755)).expect("chmod");
 
     let inherited = std::env::var("PATH").unwrap_or_default();
     let injected = format!("{}:{inherited}", bin.display());
-    let run = Agent::run(Exec::new(&["tormoni-probe-tool"]).env("PATH", &injected));
+    let run = Agent::run(Exec::new(&["boxdesk-probe-tool"]).env("PATH", &injected));
     assert_eq!(
         run.outcome,
         Outcome::Exit(0),
@@ -148,7 +148,7 @@ fn injected_file_is_read_by_the_command_and_artifact_returned() {
 fn session_state_persists_across_connections() {
     // Two connections on one session dir share a working directory, across both an injected file
     // and one the first exec wrote.
-    let scratch = tormoni_test_support::ScratchDir::new("agent-session");
+    let scratch = boxdesk_test_support::ScratchDir::new("agent-session");
 
     // Exec 1: read the injected file, append to it, and write a new one.
     let mut agent = Agent::start_in(scratch.path());
@@ -174,7 +174,7 @@ fn session_state_persists_across_connections() {
 #[test]
 fn a_relative_program_built_in_the_session_runs_by_its_path() {
     // A `/`-bearing relative program resolves against the run's dir, not the agent's cwd.
-    let scratch = tormoni_test_support::ScratchDir::new("agent-relprog");
+    let scratch = boxdesk_test_support::ScratchDir::new("agent-relprog");
 
     // One exec per connection against the shared session dir: build the executable, then run it.
     let run_argv = |argv: &[&str]| {
@@ -281,7 +281,7 @@ fn a_run_carries_both_streams_and_only_the_requested_artifacts() {
 fn bad_handshake_is_rejected_not_hung() {
     // A wrong magic fails promptly: `read_exact` gets its 6 bytes and the check fails.
     let (mut host, guest) = UnixStream::pair().expect("socketpair");
-    let agent = std::thread::spawn(move || tormoni_guest_agent::serve(guest));
+    let agent = std::thread::spawn(move || boxdesk_guest_agent::serve(guest));
     host.write_all(b"XXXXXX not a handshake")
         .expect("write garbage");
     let result = agent.join().expect("agent thread");
@@ -298,7 +298,7 @@ fn stalled_host_does_not_wedge_the_guest() {
 
     let (tx, rx) = std::sync::mpsc::channel();
     let agent = std::thread::spawn(move || {
-        let r = tormoni_guest_agent::serve(guest);
+        let r = boxdesk_guest_agent::serve(guest);
         let _ = tx.send(());
         r
     });
@@ -340,7 +340,7 @@ fn a_host_that_stalls_mid_frame_is_a_bounded_typed_error() {
 
     let (tx, rx) = std::sync::mpsc::channel();
     let agent = std::thread::spawn(move || {
-        let r = tormoni_guest_agent::serve(guest);
+        let r = boxdesk_guest_agent::serve(guest);
         let _ = tx.send(());
         r
     });

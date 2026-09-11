@@ -1,11 +1,11 @@
-# Developing Tormoni
+# Developing Boxdesk
 
-Everything needed to build, test and release Tormoni from source.
+Everything needed to build, test and release Boxdesk from source.
 
 For contribution process — issue first, commit sign-off, what a pull request needs, and the five
 design rules every change is reviewed against — see [CONTRIBUTING.md](CONTRIBUTING.md). For what the
 product does and how a person uses it, read the book under [`docs/`](docs/SUMMARY.md), which
-`.github/workflows/docs.yml` publishes to <https://kendricklawton.github.io/tormoni/> on every
+`.github/workflows/docs.yml` publishes to <https://kendricklawton.github.io/boxdesk/> on every
 push to `main` that touches it.
 
 ## Prerequisites
@@ -49,15 +49,15 @@ floating stable means a lint that passes on your machine can fail in CI.
 ## Initial setup
 
 ```console
-git clone https://github.com/kendricklawton/tormoni.git
-cd tormoni
+git clone https://github.com/kendricklawton/boxdesk.git
+cd boxdesk
 cargo xtask setup            # what this host can and cannot do
-cargo xtask init             # a guest tree where tormoni looks for one
+cargo xtask init             # a guest tree where boxdesk looks for one
 cargo build                  # the CLI and the app
 ```
 
 `cargo xtask init` puts the pinned Alpine minirootfs and the static guest agent at
-`~/.local/share/tormoni/rootfs` (or `$TORMONI_GUEST_ROOT`). It runs on either platform — the base is
+`~/.local/share/boxdesk/rootfs` (or `$BOXDESK_GUEST_ROOT`). It runs on either platform — the base is
 a tarball and the agent is a static musl build, so neither step needs `apk`. Without it nothing
 boots, because there is no guest to boot.
 
@@ -65,7 +65,7 @@ On macOS a binary must carry the hypervisor entitlement before it can start a VM
 `cargo build` or `cargo test` replaces the binary and drops the signature with it**:
 
 ```console
-cargo xtask sign             # re-entitle the built tormoni; run it after a build, not once
+cargo xtask sign             # re-entitle the built boxdesk; run it after a build, not once
 ```
 
 ## Build and run
@@ -73,13 +73,13 @@ cargo xtask sign             # re-entitle the built tormoni; run it after a buil
 ```console
 cargo build                            # debug
 cargo build --release                  # release; the benches require this
-cargo run -p tormoni -- run -- echo hi # the CLI
+cargo run -p boxdesk -- run -- echo hi # the CLI
 cargo xtask app                        # build, bundle and start the GUI
 ```
 
 `cargo xtask app` exists because the Dock's label and the menu bar name a bare executable by its
 file name, and only a bundle carries a name of its own. It starts the copy inside
-`artifacts/Tormoni.app` so the platform calls it `Tormoni`; its output still reaches your terminal.
+`artifacts/Boxdesk.app` so the platform calls it `Boxdesk`; its output still reaches your terminal.
 Anything after `--` reaches the app. Off macOS it starts the built binary.
 
 ### The xtask verbs
@@ -88,16 +88,16 @@ Anything after `--` reaches the app. Off macOS it starts the built binary.
 |---|---|
 | `cargo xtask ci` | The gate: fmt, prose-drift, clippy `-D warnings`, build, test, docs, `cargo deny`, sign |
 | `cargo xtask setup` | What this host can and cannot do |
-| `cargo xtask init` | A bootable guest tree where `tormoni` looks for one, on any host |
-| `cargo xtask sign` | macOS: re-entitle the built `tormoni` for Hypervisor.framework |
-| `cargo xtask bundle` | macOS: assemble `artifacts/Tormoni.app` from the built pair |
+| `cargo xtask init` | A bootable guest tree where `boxdesk` looks for one, on any host |
+| `cargo xtask sign` | macOS: re-entitle the built `boxdesk` for Hypervisor.framework |
+| `cargo xtask bundle` | macOS: assemble `artifacts/Boxdesk.app` from the built pair |
 | `cargo xtask app` | Build, bundle and start the GUI under its own name |
 | `cargo xtask dist` | This host's release under `dist/`, as `install.sh` downloads it |
 | `cargo xtask build-rootfs` | The guest image: Alpine + runtimes + the static agent (Linux only) |
 | `cargo xtask vendor` | Mirror every sha-pinned upstream input for offline builds |
 | `cargo xtask icons` | Cut the Lucide release to the glyphs `crates/app/src/icons.rs` names |
 | `cargo xtask fonts` | Cut Inter and Geist Mono to what `crates/app/src/fonts.rs` compiles in |
-| `cargo xtask app-icon` | Cut `crates/app/icon/tormoni.svg` into the `.icns` and PNG the bundle names |
+| `cargo xtask app-icon` | Cut `crates/app/icon/boxdesk.svg` into the `.icns` and PNG the bundle names |
 | `cargo xtask bench-boot` | Cold-boot latency as percentiles. Needs `/dev/kvm` and a **release** build |
 | `cargo xtask bench-footprint` | Per-sandbox memory footprint of a cohort of idle VMs |
 | `cargo xtask bench-frames` | The guest-to-host frame path, headless |
@@ -112,22 +112,22 @@ compiles them in and the gate builds with no network.
 
 ### Workspace crates
 
-Directories stay short and packages carry the `tormoni-` prefix, so a package is its directory plus
-that prefix — with one exception: `crates/cli` builds `tormoni`, the bare name going to the command
+Directories stay short and packages carry the `boxdesk-` prefix, so a package is its directory plus
+that prefix — with one exception: `crates/cli` builds `boxdesk`, the bare name going to the command
 a person types.
 
 | Path | Package | Role |
 |---|---|---|
-| `crates/supervisor` | `tormoni-supervisor` | Spawns, tracks, stops and reaps the helper processes that **are** VMs |
-| `crates/krun` | `tormoni-krun` | The safe wrapper over libkrun. **The one crate that may use `unsafe`**, because the library is C |
-| `crates/channel` | `tormoni-channel` | The host↔guest wire protocol, shared by both ends |
-| `crates/guest-agent` | `tormoni-guest-agent` | The in-guest agent. Builds to nothing off Linux |
-| `crates/record` | `tormoni-record` | The run record: posture, captured output, `/results`, one directory per run |
-| `crates/input` | `tormoni-input` | The guest's keyboard and pointer |
-| `crates/cli` | `tormoni` | The CLI, its verbs, and `execute_sandbox` — the one run path |
-| `crates/serve` | `tormoni-serve` | `tormoni serve`: one box, one token, and the meter |
-| `crates/app` | `tormoni-app` | The GUI, `Tormoni`, on iced |
-| `crates/test-support` | `tormoni-test-support` | Shared test fixtures. Dev-only, never shipped |
+| `crates/supervisor` | `boxdesk-supervisor` | Spawns, tracks, stops and reaps the helper processes that **are** VMs |
+| `crates/krun` | `boxdesk-krun` | The safe wrapper over libkrun. **The one crate that may use `unsafe`**, because the library is C |
+| `crates/channel` | `boxdesk-channel` | The host↔guest wire protocol, shared by both ends |
+| `crates/guest-agent` | `boxdesk-guest-agent` | The in-guest agent. Builds to nothing off Linux |
+| `crates/record` | `boxdesk-record` | The run record: posture, captured output, `/results`, one directory per run |
+| `crates/input` | `boxdesk-input` | The guest's keyboard and pointer |
+| `crates/cli` | `boxdesk` | The CLI, its verbs, and `execute_sandbox` — the one run path |
+| `crates/serve` | `boxdesk-serve` | `boxdesk serve`: one box, one token, and the meter |
+| `crates/app` | `boxdesk-app` | The GUI, `Boxdesk`, on iced |
+| `crates/test-support` | `boxdesk-test-support` | Shared test fixtures. Dev-only, never shipped |
 | `xtask` | `xtask` | Dev orchestration. Never shipped |
 
 ### SDKs
@@ -143,25 +143,25 @@ and carry their own lockfiles.
 | `sdk/go` | Subprocess | The one SDK still built on an argv; cgo's costs were judged not worth it |
 
 Because Go builds a command line by hand, `every_run_flag_is_one_the_sdks_know` in
-`xtask/src/lints.rs` fails when `tormoni run` grows a flag `sdk/go` does not pass. The other three
+`xtask/src/lints.rs` fails when `boxdesk run` grows a flag `sdk/go` does not pass. The other three
 get that from the compiler.
 
 ### Other directories
 
 - `fuzz` — the `cargo fuzz` harness. Its own detached workspace, nightly, never in the gate.
-- `install.sh` — what `curl -fsSL https://raw.githubusercontent.com/kendricklawton/tormoni/main/install.sh | sh` runs.
+- `install.sh` — what `curl -fsSL https://raw.githubusercontent.com/kendricklawton/boxdesk/main/install.sh | sh` runs.
 
 ### How the JS SDK ships
 
-Five npm packages, the shape esbuild and napi both use. The main package `tormoni` carries **no
+Five npm packages, the shape esbuild and napi both use. The main package `boxdesk` carries **no
 binary at all** — 11 kB of JavaScript and types — and declares four `optionalDependencies`:
 
 | Package | `os` / `cpu` |
 |---|---|
-| `@tormoni/js-darwin-arm64` | darwin / arm64 |
-| `@tormoni/js-darwin-x64` | darwin / x64 |
-| `@tormoni/js-linux-x64-gnu` | linux / x64 |
-| `@tormoni/js-linux-arm64-gnu` | linux / arm64 |
+| `@boxdesk/js-darwin-arm64` | darwin / arm64 |
+| `@boxdesk/js-darwin-x64` | darwin / x64 |
+| `@boxdesk/js-linux-x64-gnu` | linux / x64 |
+| `@boxdesk/js-linux-arm64-gnu` | linux / arm64 |
 
 npm installs only the one matching the host, because each manifest declares `os` and `cpu`. The
 generated loader in `index.js` tries a `.node` beside itself first — which is what makes a local
@@ -171,9 +171,9 @@ Their manifests live in `sdk/js/npm/<triple>/` and **are committed**; the `.node
 beside them at release time are not. `napi create-npm-dir -t .` regenerates the manifests from the
 `napi` block in `package.json`, and `napi version` bumps them.
 
-**`napi.package.name` must stay set to `@tormoni/js`.** Without it the loader falls back to
-unscoped names like `tormoni-darwin-arm64`, which squats four global npm names instead of four
-inside a scope you own. The `@tormoni` scope has to exist on npm before any of this publishes.
+**`napi.package.name` must stay set to `@boxdesk/js`.** Without it the loader falls back to
+unscoped names like `boxdesk-darwin-arm64`, which squats four global npm names instead of four
+inside a scope you own. The `@boxdesk` scope has to exist on npm before any of this publishes.
 
 **Do not add `*.node` back to the main package's `files`.** It shipped the host's own binary to
 every consumer, which is 1.6 MB nobody on another platform can load.
@@ -217,7 +217,7 @@ Three closures:
   names in `xtask/src/rootfs.rs`, and `guest-agent` baked at `/usr/local/bin/guest-agent`.
 - **Desktop**: adds `cage` (a wlroots kiosk compositor), `foot` (a Wayland terminal), `seatd` and
   `eudev`, `xkeyboard-config` and one font. No Mesa driver — the session renders with pixman. Plus
-  `tormoni-session`, not a package but a program the build writes, which starts `seatd`, then
+  `boxdesk-session`, not a package but a program the build writes, which starts `seatd`, then
   `cage`, and runs `foot` in it.
 - **ML**: llama.cpp, the Venus ICD, `vulkan-tools`, and python3 with numpy for a CPU baseline. **A
   scaffold**: its package names are unverified, it has no lockfile, and no host has built it, so
@@ -239,12 +239,12 @@ running a command inside a guest.
 
 ### There is no daemon
 
-A running sandbox **is** a helper process (`tormoni __vmm`) listening on a Unix socket under the
-user's runtime directory. Sockets live at `$XDG_RUNTIME_DIR/tormoni/<name>.sock`, falling back to
+A running sandbox **is** a helper process (`boxdesk __vmm`) listening on a Unix socket under the
+user's runtime directory. Sockets live at `$XDG_RUNTIME_DIR/boxdesk/<name>.sock`, falling back to
 `$TMPDIR` and then `/tmp`. The directory is created `0700`, and its ownership and mode are checked
 at runtime before a socket in it is trusted — because those fallbacks are shared.
 
-The socket directory is the registry. `tormoni ls` scans it, but **file existence is not the
+The socket directory is the registry. `boxdesk ls` scans it, but **file existence is not the
 liveness test**: `socket::is_live` makes a non-blocking connect, and a socket whose process died is
 cleared by `socket::clear_if_stale`. The agent socket sits alongside at `<name>.agent`, and a
 detached run's log at `<name>.log`.
@@ -256,7 +256,7 @@ A request is one word on one line; the answer begins `ok` or `err <why>`, and a 
 closed connection — `an_unknown_request_is_answered_with_what_this_vm_speaks` holds that.
 
 - `info` — `ok`, then the machine's shape as `key value` lines (`proto`, `pid`, `vcpus`, `mem_mib`,
-  `net`, `rootfs`, `channel`), which is the row `tormoni ls` prints.
+  `net`, `rootfs`, `channel`), which is the row `boxdesk ls` prints.
 - `stop` — `ok` **first**, and the process exits after, so a caller learns the request was accepted
   rather than inferring it from a dropped connection.
 - `display` — leases the scanout. The answer carries the sealed memfd holding the frame slots and
@@ -307,16 +307,16 @@ compromised agent is the CPU, through KVM or Hypervisor.framework — not anythi
 
 ```console
 cargo test --workspace                            # everything the gate runs
-cargo test -p tormoni-record                      # one crate
-cargo test -p tormoni-supervisor spawn            # one test by name
-cargo test -p tormoni --test e2e -- --ignored     # the ones that boot a guest
+cargo test -p boxdesk-record                      # one crate
+cargo test -p boxdesk-supervisor spawn            # one test by name
+cargo test -p boxdesk --test e2e -- --ignored     # the ones that boot a guest
 ```
 
 **The tests that boot a guest are `#[ignore]`d, and each names its own prerequisite** — `/dev/kvm`
 and a guest tree. A test whose prerequisite is missing skips itself, and cargo counts a skipped test
 as a pass, which is the failure mode that rule exists to avoid.
 
-Some suites compile to nothing on macOS and say so at the end of a gate run: `tormoni-guest-agent`
+Some suites compile to nothing on macOS and say so at the end of a gate run: `boxdesk-guest-agent`
 reaps through a pidfd and listens on AF_VSOCK, the helper's own window needs a thread other than the
 main one, and the benches read `/proc`.
 
@@ -337,7 +337,7 @@ The Python and JS suites need their native module **rebuilt** before they run: a
 ## Benchmarking
 
 `bench-boot`, `bench-footprint` and `bench-frames` each need `/dev/kvm`, a guest tree and a
-**release** `tormoni`. They report nearest-rank percentiles with the host and date, per design rule
+**release** `boxdesk`. They report nearest-rank percentiles with the host and date, per design rule
 5 — a number that cannot be defended is withdrawn rather than published.
 
 ## Code quality
@@ -374,8 +374,8 @@ for d in sdk/rust sdk/python sdk/js; do (cd $d && cargo fmt --all); done
 
 1. `check-version` — the tag equals the workspace version in `Cargo.toml` and is **annotated**,
    since the notes come from the annotation.
-2. `dist-macos` — `cargo xtask dist` on `macos-15`, producing `Tormoni-macos-aarch64.zip`.
-3. `dist-linux` — `cargo xtask dist` in a Fedora container, producing `tormoni-linux-x86_64.tgz`.
+2. `dist-macos` — `cargo xtask dist` on `macos-15`, producing `Boxdesk-macos-aarch64.zip`.
+3. `dist-linux` — `cargo xtask dist` in a Fedora container, producing `boxdesk-linux-x86_64.tgz`.
 4. `release` — concatenates the checksums, adds `install.sh`, verifies, and publishes.
 
 A tag containing `-` is marked a prerelease, which `releases/latest` skips, so `v0.0.5-rc1`
@@ -391,6 +391,6 @@ Two limits worth knowing before promising a release to anyone:
 ## Additional resources
 
 - [CONTRIBUTING.md](CONTRIBUTING.md) — how to contribute, and the five design rules
-- [README.md](README.md) — what Tormoni is
+- [README.md](README.md) — what Boxdesk is
 - [SECURITY.md](SECURITY.md) — reporting a vulnerability
 - [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)

@@ -1,28 +1,28 @@
-# tormoni-js
+# boxdesk-js
 
-The JavaScript / TypeScript SDK for [Tormoni](https://github.com/kendricklawton/tormoni).
+The JavaScript / TypeScript SDK for [Boxdesk](https://github.com/kendricklawton/boxdesk).
 
-Tormoni runs untrusted code inside a **hardware-isolated virtual machine** on your own machine —
+Boxdesk runs untrusted code inside a **hardware-isolated virtual machine** on your own machine —
 KVM on Linux, Hypervisor.framework on macOS, via libkrun. It is not a container. Every run leaves a
 record: the posture it was given, its captured output, and whatever it wrote to `/results`.
 
-This package is a thin, faithful wrapper around the `tormoni` command line tool. It shells out, it
+This package is a thin, faithful wrapper around the `boxdesk` command line tool. It shells out, it
 reads one JSON document, and it hands it to you. No HTTP, no runtime dependencies.
 
 ## Install
 
 ```bash
-npm install tormoni
+npm install boxdesk
 ```
 
-You also need the `tormoni` CLI on your `PATH`. Node 20 or newer.
+You also need the `boxdesk` CLI on your `PATH`. Node 20 or newer.
 
 ## Use
 
 ```ts
-import { Tormoni } from "tormoni";
+import { Boxdesk } from "boxdesk";
 
-const run = await new Tormoni().run(["node", "-e", "console.log(6*7)"]);
+const run = await new Boxdesk().run(["node", "-e", "console.log(6*7)"]);
 console.log(run.stdout); // "42\n"
 console.log(run.ok);     // true
 ```
@@ -30,20 +30,20 @@ console.log(run.ok);     // true
 CommonJS works too:
 
 ```js
-const { Tormoni } = require("tormoni");
+const { Boxdesk } = require("boxdesk");
 ```
 
 ## A failed command is not an error
 
-`tormoni run` exits with the guest command's own status, so the process exit code tells you nothing
-about whether Tormoni itself worked. The rule this SDK follows:
+`boxdesk run` exits with the guest command's own status, so the process exit code tells you nothing
+about whether Boxdesk itself worked. The rule this SDK follows:
 
-> If stdout parses as one JSON document, **the sandbox ran**. If it does not, **Tormoni failed**.
+> If stdout parses as one JSON document, **the sandbox ran**. If it does not, **Boxdesk failed**.
 
 So a guest command that exits non-zero comes back as an ordinary `Run` and raises nothing:
 
 ```ts
-const run = await tormoni.run(["sh", "-c", "exit 3"]);
+const run = await boxdesk.run(["sh", "-c", "exit 3"]);
 run.ok;      // false
 run.endKind; // "exit"
 run.endCode; // 3
@@ -56,29 +56,29 @@ Read `endKind` before `endCode`. `endKind` is one of `"exit"`, `"signal"`, `"sto
 A missing binary, an absent guest root, or a hypervisor that will not answer *is* an error:
 
 ```ts
-import { TormoniError, TormoniNotFoundError } from "tormoni";
+import { BoxdeskError, BoxdeskNotFoundError } from "boxdesk";
 
 try {
-  await tormoni.run(["true"]);
+  await boxdesk.run(["true"]);
 } catch (error) {
-  if (error instanceof TormoniNotFoundError) {
+  if (error instanceof BoxdeskNotFoundError) {
     // The CLI could not be found or executed.
-  } else if (error instanceof TormoniError) {
-    error.stderr;   // Tormoni's own words, verbatim. Show them unchanged.
+  } else if (error instanceof BoxdeskError) {
+    error.stderr;   // Boxdesk's own words, verbatim. Show them unchanged.
     error.exitCode; // 2
   }
 }
 ```
 
-Both extend `TormoniException`. Tormoni's messages are written for a person and maintained
+Both extend `BoxdeskException`. Boxdesk's messages are written for a person and maintained
 upstream, so this SDK passes them through rather than re-wording them.
 
 ## API
 
-### `new Tormoni({ path })`
+### `new Boxdesk({ path })`
 
-`path` is optional. It defaults to `$TORMONI_CLI` — the same variable Tormoni's desktop app uses —
-and then to `tormoni` on `PATH`.
+`path` is optional. It defaults to `$BOXDESK_CLI` — the same variable Boxdesk's desktop app uses —
+and then to `boxdesk` on `PATH`.
 
 | Method | Returns | What it does |
 |---|---|---|
@@ -96,12 +96,12 @@ run's bytes to list them is a directory walk per row.
 
 ### Options
 
-Each maps onto exactly one flag of `tormoni run`. Anything you leave out is left off the command
+Each maps onto exactly one flag of `boxdesk run`. Anything you leave out is left off the command
 line, so the CLI's own defaults stand.
 
 | Option | Flag | Meaning |
 |---|---|---|
-| `root` | `--root DIR` | Guest root tree. Default `$TORMONI_GUEST_ROOT`, then `~/.local/share/tormoni/rootfs` |
+| `root` | `--root DIR` | Guest root tree. Default `$BOXDESK_GUEST_ROOT`, then `~/.local/share/boxdesk/rootfs` |
 | `vcpus` | `--vcpus N` | vCPUs. Default 1 |
 | `mem` | `--mem MIB` | Guest RAM in MiB. Default 512 |
 | `workdir` | `--workdir DIR` | Guest working directory |
@@ -121,7 +121,7 @@ built without a backend refuses them, and `--display` does not currently boot on
 SDK passes them through and lets the CLI's refusal reach you; it does not probe for support.
 
 ```ts
-const run = await tormoni.run(["sh", "-c", "cp report.csv /results/"], {
+const run = await boxdesk.run(["sh", "-c", "cp report.csv /results/"], {
   mounts: [["/mnt", "/home/you/project"]],
   net: "tsi",
   env: { API_KEY: process.env.API_KEY! },
@@ -168,7 +168,7 @@ Two things worth knowing:
 
 - **`outputTruncated`** is true when the capture cap cut the output. When it is true, `stdout` is a
   prefix. Check it before treating captured output as complete.
-- **`posture.env` holds names, never values.** Tormoni deliberately never writes an environment
+- **`posture.env` holds names, never values.** Boxdesk deliberately never writes an environment
   value to a record, so no value is available here or anywhere else in this SDK.
 
 ## Development
@@ -188,11 +188,11 @@ npm test          # no hypervisor and no network needed
 npm run build     # tsup -> ESM + CJS + .d.ts
 ```
 
-The suite talks to a stub `tormoni` binary written to a temp directory, so it never boots a VM.
+The suite talks to a stub `boxdesk` binary written to a temp directory, so it never boots a VM.
 There is one integration test that uses the real binary, off unless you ask for it:
 
 ```bash
-TORMONI_INTEGRATION=1 npm test
+BOXDESK_INTEGRATION=1 npm test
 ```
 
 ## License

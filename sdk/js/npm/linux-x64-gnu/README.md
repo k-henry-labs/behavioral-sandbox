@@ -1,3 +1,3 @@
-# `@tormoni/js-linux-x64-gnu`
+# `@boxdesk/js-linux-x64-gnu`
 
-This is the **x86_64-unknown-linux-gnu** binary for `@tormoni/js`
+This is the **x86_64-unknown-linux-gnu** binary for `@boxdesk/js`

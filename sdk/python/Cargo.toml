@@ -1,11 +1,11 @@
 [package]
-name = "tormoni-py"
+name = "boxdesk-py"
 version = "0.1.0"
 edition = "2024"
 publish = false
 
 [lib]
-name = "_tormoni_core"
+name = "_boxdesk_core"
 crate-type = ["cdylib"]
 
 [dependencies]
@@ -14,6 +14,6 @@ crate-type = ["cdylib"]
 # per platform, which is what `pyproject.toml`'s 3.9-3.13 classifiers would otherwise promise
 # five times over.
 pyo3 = { version = "0.29", features = ["extension-module", "abi3-py39"] }
-tormoni-core = { package = "tormoni", path = "../../crates/cli" }
-tormoni-record = { path = "../../crates/record" }
-tormoni-supervisor = { path = "../../crates/supervisor" }
+boxdesk-core = { package = "boxdesk", path = "../../crates/cli" }
+boxdesk-record = { path = "../../crates/record" }
+boxdesk-supervisor = { path = "../../crates/supervisor" }

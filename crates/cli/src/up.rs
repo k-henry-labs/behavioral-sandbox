@@ -1,15 +1,15 @@
-//! `tormoni up`: start a sandbox that outlives the command that started it.
+//! `boxdesk up`: start a sandbox that outlives the command that started it.
 //!
-//! Every `tormoni run` is a cold boot, because libkrun has no snapshot surface: ~300 ms before the
+//! Every `boxdesk run` is a cold boot, because libkrun has no snapshot surface: ~300 ms before the
 //! guest runs anything, paid again for each command (`scratch/ROADMAP.md` 2.9). A VM started here
-//! is booted once and then used by `tormoni exec` until `tormoni stop`, which is the only way to amortise
+//! is booted once and then used by `boxdesk exec` until `boxdesk stop`, which is the only way to amortise
 //! that on a library with no snapshots.
 //!
 //! - **The workload is the agent**, so there is something to exec into, reached over the socket
 //!   the helper maps beside the VM's control socket. Both live in the runtime directory, because
 //!   a VM nobody holds a handle to has to be findable by name.
 //! - **Readiness is the handshake, not the spawn.** This verb does not return until the agent has
-//!   answered, so a `tormoni exec` typed straight after it meets a VM that is ready.
+//!   answered, so a `boxdesk exec` typed straight after it meets a VM that is ready.
 //! - **Detaching is deliberate and singular.** [`Vm::detach`] is the one path in the supervisor
 //!   that leaves a helper running; everything else exists to make that impossible by accident.
 
@@ -17,8 +17,8 @@ use std::process::ExitCode;
 
 use clap::Args;
 
-use tormoni_channel::{GUEST_AGENT_PATH, GUEST_DEFAULT_PATH, VSOCK_PORT};
-use tormoni_supervisor::{Console, Vm, VmConfig, socket};
+use boxdesk_channel::{GUEST_AGENT_PATH, GUEST_DEFAULT_PATH, VSOCK_PORT};
+use boxdesk_supervisor::{Console, Vm, VmConfig, socket};
 
 use crate::EXIT_OPERATIONAL;
 
@@ -28,13 +28,13 @@ pub(crate) struct UpArgs {
     /// The VM's name, which is how `exec`, `ls` and `stop` reach it. Defaults to `vm-<pid>`.
     #[arg(long, value_name = "NAME")]
     pub(crate) name: Option<String>,
-    /// The guest root directory. Falls back like `tormoni run`'s.
+    /// The guest root directory. Falls back like `boxdesk run`'s.
     #[arg(long, value_name = "DIR")]
     pub(crate) root: Option<std::path::PathBuf>,
-    /// vCPUs for this sandbox. Falls back to `$TORMONI_VCPUS`, then 1.
+    /// vCPUs for this sandbox. Falls back to `$BOXDESK_VCPUS`, then 1.
     #[arg(long, value_name = "N")]
     pub(crate) vcpus: Option<std::num::NonZeroU8>,
-    /// Guest RAM in MiB. Falls back to `$TORMONI_MEM_MIB`, then 512.
+    /// Guest RAM in MiB. Falls back to `$BOXDESK_MEM_MIB`, then 512.
     #[arg(long, value_name = "MIB")]
     pub(crate) mem: Option<std::num::NonZeroU32>,
     /// A host directory made read-write at a guest path, as `GUESTDIR=HOSTDIR`. Repeatable.
@@ -56,7 +56,7 @@ pub(crate) struct UpArgs {
     /// runs; `WIDTHxHEIGHT@HZ` also tells the guest its refresh rate. Closing the window stops
     /// the sandbox.
     #[arg(long, value_name = "WIDTHxHEIGHT[@HZ]", value_parser = crate::run::parse_display)]
-    pub(crate) display: Option<tormoni_supervisor::Display>,
+    pub(crate) display: Option<boxdesk_supervisor::Display>,
     /// Keep PATH holding the display's latest frame as a binary PPM. Needs `--display`.
     #[arg(long, value_name = "PATH")]
     pub(crate) screenshot: Option<std::path::PathBuf>,
@@ -98,14 +98,14 @@ pub(crate) fn run(args: &UpArgs) -> ExitCode {
         }
         Ok(Outcome::Described) => ExitCode::SUCCESS,
         Err(msg) => {
-            eprintln!("tormoni up: {msg}");
+            eprintln!("boxdesk up: {msg}");
             ExitCode::from(EXIT_OPERATIONAL)
         }
     }
 }
 
 fn start(args: &UpArgs) -> Result<Outcome, String> {
-    let root = tormoni::resolve_root(args.root.as_deref())?;
+    let root = boxdesk::resolve_root(args.root.as_deref())?;
     let name = args
         .name
         .clone()
@@ -115,7 +115,7 @@ fn start(args: &UpArgs) -> Result<Outcome, String> {
     let log = socket::log_path_for(&name).map_err(|e| e.to_string())?;
     if socket::is_live(&control) {
         return Err(format!(
-            "a VM named {name:?} is already running; `tormoni ls` lists it and `tormoni stop {name}` ends it"
+            "a VM named {name:?} is already running; `boxdesk ls` lists it and `boxdesk stop {name}` ends it"
         ));
     }
     // Both sockets are this name's, and this name has no live VM, so a leftover from a previous
@@ -128,7 +128,7 @@ fn start(args: &UpArgs) -> Result<Outcome, String> {
     // A `PATH` for the agent and for everything it runs: libkrun exports none, so
     // without this a bare program name resolves nowhere inside the guest.
     cfg.env = vec![
-        "TORMONI_LOG=warn".into(),
+        "BOXDESK_LOG=warn".into(),
         format!("PATH={GUEST_DEFAULT_PATH}").into(),
     ];
     cfg.vsock = Some((VSOCK_PORT, channel.clone()));
@@ -148,10 +148,10 @@ fn start(args: &UpArgs) -> Result<Outcome, String> {
         args.screenshot.as_deref(),
         args.frame_log.as_deref(),
     )?;
-    if let Some(v) = crate::run::resolve_limit(args.vcpus, "TORMONI_VCPUS")? {
+    if let Some(v) = crate::run::resolve_limit(args.vcpus, "BOXDESK_VCPUS")? {
         cfg.vcpus = v;
     }
-    if let Some(m) = crate::run::resolve_limit(args.mem, "TORMONI_MEM_MIB")? {
+    if let Some(m) = crate::run::resolve_limit(args.mem, "BOXDESK_MEM_MIB")? {
         cfg.mem_mib = m;
     }
     for spec in &args.shares {
@@ -175,17 +175,17 @@ fn start(args: &UpArgs) -> Result<Outcome, String> {
             .map_err(|e| e.to_string())?;
         return Ok(Outcome::Described);
     }
-    let store = tormoni_record::Store::open().map_err(|e| e.to_string())?;
-    let mut record = tormoni_record::Record::begin(
+    let store = boxdesk_record::Store::open().map_err(|e| e.to_string())?;
+    let mut record = boxdesk_record::Record::begin(
         &name,
-        tormoni_record::Verb::Up,
+        boxdesk_record::Verb::Up,
         Vec::new(),
-        tormoni::posture_of(&cfg, results),
+        boxdesk::posture_of(&cfg, results),
     );
     let run = store.create(&record).map_err(|e| e.to_string())?;
     if results {
         cfg.mounts.push((
-            std::path::PathBuf::from(tormoni_record::RESULTS_GUEST_PATH),
+            std::path::PathBuf::from(boxdesk_record::RESULTS_GUEST_PATH),
             run.results(),
         ));
     }
@@ -198,7 +198,7 @@ fn start(args: &UpArgs) -> Result<Outcome, String> {
     let dialed = match crate::agent::dial(&channel, &mut vm) {
         Ok(dialed) => dialed,
         Err(e) => {
-            record.finish(tormoni_record::End::Failed);
+            record.finish(boxdesk_record::End::Failed);
             let _ = store.save(&record);
             return Err(format!("{e}; its own report is in {}", log.display()));
         }

@@ -5,8 +5,8 @@
 //! guest sees as `/results`. The CLI writes it at start and at end; the CLI and the app both read
 //! it, so neither shows a run the other cannot.
 //!
-//! - **Local, and only here.** `$TORMONI_RUNS_DIR`, else `$XDG_DATA_HOME/tormoni/runs`, else
-//!   `~/.local/share/tormoni/runs`, created `0700`. Nothing in this crate opens a socket.
+//! - **Local, and only here.** `$BOXDESK_RUNS_DIR`, else `$XDG_DATA_HOME/boxdesk/runs`, else
+//!   `~/.local/share/boxdesk/runs`, created `0700`. Nothing in this crate opens a socket.
 //! - **An id is one directory name, by an allow-list.** [`valid_id`] holds an id to
 //!   `a-z A-Z 0-9 - _`, and every method that reads, writes or removes refuses one it rejects:
 //!   the id is joined to a path and [`Store::remove`] hands the result to `remove_dir_all`.
@@ -15,7 +15,7 @@
 //! - **Output is capped, and the cap is visible.** A capped file stops at the cap and leaves a
 //!   `.truncated` sidecar, so a reader knows the file is not the whole output rather than reading
 //!   a marker line as if the guest wrote it.
-//! - **Retention is a count.** Ended runs beyond `$TORMONI_RUNS_KEEP` (default 200) are removed,
+//! - **Retention is a count.** Ended runs beyond `$BOXDESK_RUNS_KEEP` (default 200) are removed,
 //!   oldest first, each time a run is created; a live run is never pruned.
 //! - **An export is one file.** [`RunDir::export_tar`] writes the run directory as a ustar
 //!   archive: a symlink inside is carried as a link entry and never followed.
@@ -41,9 +41,9 @@ const DEFAULT_CAP: u64 = 4 * 1024 * 1024;
 
 /// What the guest could do to its root.
 ///
-/// The record's own spelling of `tormoni_supervisor::RootFs`, which this crate cannot name without
+/// The record's own spelling of `boxdesk_supervisor::RootFs`, which this crate cannot name without
 /// depending on the crate that links libkrun; `the_record_and_the_config_spell_the_posture_alike`
-/// in `tormoni` holds the two in step.
+/// in `boxdesk` holds the two in step.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[non_exhaustive]
 pub enum Rootfs {
@@ -75,7 +75,7 @@ impl Rootfs {
     }
 }
 
-/// What the guest could reach off the machine. The record's spelling of `tormoni_supervisor::Net`.
+/// What the guest could reach off the machine. The record's spelling of `boxdesk_supervisor::Net`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[non_exhaustive]
 pub enum Network {
@@ -107,7 +107,7 @@ impl Network {
     }
 }
 
-/// The display a run had: non-zero by type, as `tormoni_supervisor::Display` is.
+/// The display a run had: non-zero by type, as `boxdesk_supervisor::Display` is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct DisplayMode {
@@ -166,11 +166,11 @@ impl DisplayMode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Verb {
-    /// `tormoni run`: one command, its stdout and stderr captured.
+    /// `boxdesk run`: one command, its stdout and stderr captured.
     Run,
-    /// `tormoni shell`: a pty session, the terminal's output captured.
+    /// `boxdesk shell`: a pty session, the terminal's output captured.
     Shell,
-    /// `tormoni up`: a long-lived sandbox, each `exec`'s output appended.
+    /// `boxdesk up`: a long-lived sandbox, each `exec`'s output appended.
     Up,
 }
 
@@ -205,7 +205,7 @@ pub enum End {
     Exit(i32),
     /// The VM was killed by this signal.
     Signal(i32),
-    /// `tormoni stop` ended it.
+    /// `boxdesk stop` ended it.
     Stopped,
     /// Its socket was found dead with no end recorded: the VM went without anyone watching.
     Gone,
@@ -308,7 +308,7 @@ pub struct Posture {
     /// dropped where the posture is built, and [`Record::to_text`] cuts at the first `=` again,
     /// so a value cannot reach the file even from a caller that put one here.
     pub env: Vec<String>,
-    /// vCPUs. Non-zero by type, as `tormoni_supervisor::VmConfig`'s is: a record of a machine with
+    /// vCPUs. Non-zero by type, as `boxdesk_supervisor::VmConfig`'s is: a record of a machine with
     /// no cpu describes one that never booted.
     pub vcpus: NonZeroU8,
     /// Guest RAM in MiB, non-zero for [`vcpus`](Self::vcpus)' reason.
@@ -316,7 +316,7 @@ pub struct Posture {
 }
 
 /// The limits a posture nobody configured carries: one cpu and libkrun's own 512 MiB, spelled as
-/// `tormoni_supervisor::VmConfig`'s default spells them.
+/// `boxdesk_supervisor::VmConfig`'s default spells them.
 impl Default for Posture {
     fn default() -> Self {
         Self {
@@ -772,16 +772,16 @@ pub fn now_ms() -> u64 {
         .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX))
 }
 
-/// The runs directory, from the environment: `$TORMONI_RUNS_DIR`, else `$XDG_DATA_HOME/tormoni/runs`,
-/// else `~/.local/share/tormoni/runs`.
+/// The runs directory, from the environment: `$BOXDESK_RUNS_DIR`, else `$XDG_DATA_HOME/boxdesk/runs`,
+/// else `~/.local/share/boxdesk/runs`.
 pub fn runs_dir() -> io::Result<PathBuf> {
     runs_dir_from(
-        std::env::var_os("TORMONI_RUNS_DIR"),
+        std::env::var_os("BOXDESK_RUNS_DIR"),
         std::env::var_os("XDG_DATA_HOME"),
         std::env::var_os("HOME"),
     )
     .ok_or_else(|| {
-        io::Error::other("no runs directory: set TORMONI_RUNS_DIR, XDG_DATA_HOME or HOME")
+        io::Error::other("no runs directory: set BOXDESK_RUNS_DIR, XDG_DATA_HOME or HOME")
     })
 }
 
@@ -793,23 +793,23 @@ pub fn runs_dir_from(
     home: Option<OsString>,
 ) -> Option<PathBuf> {
     runs.map(PathBuf::from)
-        .or_else(|| xdg_data.map(|d| PathBuf::from(d).join("tormoni/runs")))
-        .or_else(|| home.map(|h| PathBuf::from(h).join(".local/share/tormoni/runs")))
+        .or_else(|| xdg_data.map(|d| PathBuf::from(d).join("boxdesk/runs")))
+        .or_else(|| home.map(|h| PathBuf::from(h).join(".local/share/boxdesk/runs")))
 }
 
-/// Ended runs to keep: `$TORMONI_RUNS_KEEP`, else 200.
+/// Ended runs to keep: `$BOXDESK_RUNS_KEEP`, else 200.
 #[must_use]
 pub fn keep_count() -> usize {
-    std::env::var("TORMONI_RUNS_KEEP")
+    std::env::var("BOXDESK_RUNS_KEEP")
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(DEFAULT_KEEP)
 }
 
-/// Bytes an output file holds: `$TORMONI_OUTPUT_CAP_KIB` KiB, else 4 MiB.
+/// Bytes an output file holds: `$BOXDESK_OUTPUT_CAP_KIB` KiB, else 4 MiB.
 #[must_use]
 pub fn output_cap() -> u64 {
-    std::env::var("TORMONI_OUTPUT_CAP_KIB")
+    std::env::var("BOXDESK_OUTPUT_CAP_KIB")
         .ok()
         .and_then(|v| v.parse::<u64>().ok())
         .map_or(DEFAULT_CAP, |kib| kib.saturating_mul(1024))
@@ -943,7 +943,7 @@ impl Store {
         Ok(removed)
     }
 
-    /// Writes the run as `tormoni-<id>.tar` into `dest` when `dest` is a directory, or exactly at
+    /// Writes the run as `boxdesk-<id>.tar` into `dest` when `dest` is a directory, or exactly at
     /// `dest` otherwise, and returns the path written. Each caller writes its own temporary and
     /// renames it whole, so concurrent exports replace one another rather than tear.
     pub fn export(&self, id: &str, dest: &Path) -> io::Result<PathBuf> {
@@ -955,7 +955,7 @@ impl Store {
             ));
         }
         let target = if dest.is_dir() {
-            dest.join(format!("tormoni-{id}.tar"))
+            dest.join(format!("boxdesk-{id}.tar"))
         } else {
             dest.to_path_buf()
         };
@@ -1491,7 +1491,7 @@ mod tests {
     /// by name, tells a live run from an ended one, and prunes ended runs beyond the count.
     #[test]
     fn the_store_creates_lists_finds_and_prunes() {
-        let dir = tormoni_test_support::ScratchDir::created("record-store");
+        let dir = boxdesk_test_support::ScratchDir::created("record-store");
         let store = Store::at(dir.path().join("runs")).expect("a store");
         let mut first = Record::begin("a", Verb::Up, vec![], posture());
         first.started_ms -= 10;
@@ -1550,7 +1550,7 @@ mod tests {
     /// and leaves a sidecar saying it was cut.
     #[test]
     fn a_capped_file_stops_at_the_cap_and_says_so() {
-        let dir = tormoni_test_support::ScratchDir::created("record-cap");
+        let dir = boxdesk_test_support::ScratchDir::created("record-cap");
         let path = dir.path().join("stdout");
         let mut out = Capped::open(&path, 10).expect("opened");
         out.write_all(b"12345").expect("under the cap");
@@ -1570,11 +1570,11 @@ mod tests {
         );
         assert_eq!(
             runs_dir_from(None, Some("/xdg".into()), Some("/home/u".into())),
-            Some(PathBuf::from("/xdg/tormoni/runs"))
+            Some(PathBuf::from("/xdg/boxdesk/runs"))
         );
         assert_eq!(
             runs_dir_from(None, None, Some("/home/u".into())),
-            Some(PathBuf::from("/home/u/.local/share/tormoni/runs"))
+            Some(PathBuf::from("/home/u/.local/share/boxdesk/runs"))
         );
         assert_eq!(runs_dir_from(None, None, None), None);
     }
@@ -1607,7 +1607,7 @@ mod tests {
     /// points at it.
     #[test]
     fn an_id_that_would_leave_the_store_is_refused_by_every_door() {
-        let dir = tormoni_test_support::ScratchDir::created("record-id");
+        let dir = boxdesk_test_support::ScratchDir::created("record-id");
         let neighbour = dir.path().join("neighbour");
         std::fs::create_dir_all(neighbour.join("keep")).expect("a directory beside the store");
         let store = Store::at(dir.path().join("runs")).expect("a store");
@@ -1703,7 +1703,7 @@ mod tests {
     /// was copied from, which `remove` would then take away in its place.
     #[test]
     fn a_directory_carrying_another_runs_record_is_refused() {
-        let dir = tormoni_test_support::ScratchDir::created("record-copied");
+        let dir = boxdesk_test_support::ScratchDir::created("record-copied");
         let store = Store::at(dir.path().join("runs")).expect("a store");
         let record = Record::begin("orig", Verb::Run, vec![], posture());
         store.create(&record).expect("created");
@@ -1719,11 +1719,11 @@ mod tests {
         assert_eq!(store.list().expect("listed").len(), 1, "listed once");
     }
 
-    /// Two writers save one record at the same moment (`tormoni stop` and the run's own end), and a
+    /// Two writers save one record at the same moment (`boxdesk stop` and the run's own end), and a
     /// reader between them sees one whole record or the other, never a torn or missing one.
     #[test]
     fn two_writers_saving_at_once_never_leave_a_torn_record() {
-        let dir = tormoni_test_support::ScratchDir::created("record-race");
+        let dir = boxdesk_test_support::ScratchDir::created("record-race");
         let store = Store::at(dir.path().join("runs")).expect("a store");
         let record = Record::begin("raced", Verb::Run, vec!["true".into()], posture());
         store.create(&record).expect("created");
@@ -1839,7 +1839,7 @@ mod tests {
     /// and an unchanged run exports the same bytes twice.
     #[test]
     fn a_run_directory_round_trips_through_its_tar() {
-        let dir = tormoni_test_support::ScratchDir::created("record-tar");
+        let dir = boxdesk_test_support::ScratchDir::created("record-tar");
         let store = Store::at(dir.path().join("runs")).expect("a store");
         let record = record_with_id("1756860007123-x");
         let run = store.create(&record).expect("created");
@@ -1882,7 +1882,7 @@ mod tests {
     /// A path longer than the name field is split across prefix and name, and joins back.
     #[test]
     fn a_long_path_is_split_across_prefix_and_name() {
-        let dir = tormoni_test_support::ScratchDir::created("record-tar-long");
+        let dir = boxdesk_test_support::ScratchDir::created("record-tar-long");
         let store = Store::at(dir.path().join("runs")).expect("a store");
         let record = record_with_id("1756860007123-long");
         let run = store.create(&record).expect("created");
@@ -1905,7 +1905,7 @@ mod tests {
     /// A symlink is archived as itself: the target string is kept, the target is never opened.
     #[test]
     fn a_symlink_is_archived_as_itself_and_never_followed() {
-        let dir = tormoni_test_support::ScratchDir::created("record-tar-link");
+        let dir = boxdesk_test_support::ScratchDir::created("record-tar-link");
         std::fs::write(dir.path().join("outside.txt"), b"SENTINEL-DO-NOT-ARCHIVE")
             .expect("the outside file");
         let store = Store::at(dir.path().join("runs")).expect("a store");
@@ -1930,7 +1930,7 @@ mod tests {
     /// A file mutated after its header keeps the pinned size, so the next entry still parses.
     #[test]
     fn a_file_that_grows_or_shrinks_mid_export_keeps_its_pinned_size() {
-        let dir = tormoni_test_support::ScratchDir::created("record-tar-pin");
+        let dir = boxdesk_test_support::ScratchDir::created("record-tar-pin");
         let store = Store::at(dir.path().join("runs")).expect("a store");
         let record = record_with_id("1756860007123-pin");
         let run = store.create(&record).expect("created");
@@ -1987,7 +1987,7 @@ mod tests {
     /// A path swapped for a symlink between its header and its read is refused, not followed.
     #[test]
     fn an_entry_swapped_mid_export_is_refused() {
-        let dir = tormoni_test_support::ScratchDir::created("record-tar-swap");
+        let dir = boxdesk_test_support::ScratchDir::created("record-tar-swap");
         let outside = dir.path().join("other.txt");
         std::fs::write(&outside, b"other").expect("the other file");
         let store = Store::at(dir.path().join("runs")).expect("a store");
@@ -2031,7 +2031,7 @@ mod tests {
     /// A file past what eleven octal digits carry is refused with its path, nothing read.
     #[test]
     fn an_entry_too_big_for_ustar_is_refused() {
-        let dir = tormoni_test_support::ScratchDir::created("record-tar-big");
+        let dir = boxdesk_test_support::ScratchDir::created("record-tar-big");
         let store = Store::at(dir.path().join("runs")).expect("a store");
         let record = record_with_id("1756860007123-big");
         let run = store.create(&record).expect("created");
@@ -2045,7 +2045,7 @@ mod tests {
     /// A name no split fits, and a link target past the linkname field, are refused by path.
     #[test]
     fn an_unencodable_name_or_linkname_is_refused_with_its_path() {
-        let dir = tormoni_test_support::ScratchDir::created("record-tar-name");
+        let dir = boxdesk_test_support::ScratchDir::created("record-tar-name");
         let store = Store::at(dir.path().join("runs")).expect("a store");
         let record = record_with_id("1756860007123-name");
         let run = store.create(&record).expect("created");
@@ -2071,7 +2071,7 @@ mod tests {
     /// path, refuses an unknown id, and leaves no temporary behind.
     #[test]
     fn the_store_exports_beside_and_replaces() {
-        let dir = tormoni_test_support::ScratchDir::created("record-tar-store");
+        let dir = boxdesk_test_support::ScratchDir::created("record-tar-store");
         let store = Store::at(dir.path().join("runs")).expect("a store");
         let record = record_with_id("1756860007123-exp");
         let run = store.create(&record).expect("created");
@@ -2080,7 +2080,7 @@ mod tests {
         std::fs::create_dir(&dest).expect("a dest dir");
 
         let written = store.export(&record.id, &dest).expect("exported");
-        assert_eq!(written, dest.join("tormoni-1756860007123-exp.tar"));
+        assert_eq!(written, dest.join("boxdesk-1756860007123-exp.tar"));
         assert!(!read_tar(&std::fs::read(&written).expect("read")).is_empty());
         let again = store.export(&record.id, &dest).expect("re-exported");
         assert_eq!(again, written, "replaced in place");

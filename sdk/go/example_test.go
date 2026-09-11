@@ -1,21 +1,21 @@
-// Copyright 2026 The Tormoni Authors. All rights reserved.
+// Copyright 2026 The Boxdesk Authors. All rights reserved.
 // Use of this source code is governed by the Apache-2.0 license that can be
 // found in the LICENSE file.
 
-package tormoni_test
+package boxdesk_test
 
 import (
 	"context"
 	"fmt"
 	"log"
 
-	tormoni "github.com/kendricklawton/tormoni/sdk/go"
+	boxdesk "github.com/kendricklawton/boxdesk/sdk/go"
 )
 
 // This example runs a command in a sandbox and reads its captured output. It
-// needs a working Tormoni install, so it is compiled but not run by `go test`.
+// needs a working Boxdesk install, so it is compiled but not run by `go test`.
 func Example() {
-	c := tormoni.New()
+	c := boxdesk.New()
 	run, err := c.Run(context.Background(), []string{"echo", "hi"}, nil)
 	if err != nil {
 		log.Fatal(err)
@@ -27,11 +27,11 @@ func Example() {
 // A guest command exiting non-zero is not an error. It is a record you read.
 func ExampleRun_OK() {
 	code := 3
-	failed := &tormoni.Run{EndKind: tormoni.EndExit, EndCode: &code}
+	failed := &boxdesk.Run{EndKind: boxdesk.EndExit, EndCode: &code}
 	fmt.Println(failed.OK(), *failed.EndCode)
 
 	// A run that is still going has no end kind at all, and no code.
-	running := &tormoni.Run{}
+	running := &boxdesk.Run{}
 	fmt.Println(running.OK(), running.EndKind == "", running.EndCode == nil)
 
 	// Output:
@@ -42,10 +42,10 @@ func ExampleRun_OK() {
 // Options map one-to-one onto the CLI's flags.
 func ExampleRunOptions() {
 	vcpus, mem := 2, 1024
-	opts := &tormoni.RunOptions{
+	opts := &boxdesk.RunOptions{
 		VCPUs:  &vcpus,
 		MemMiB: &mem,
-		Mounts: []tormoni.Mount{{Guest: "/mnt", Host: "/home/you/project"}},
+		Mounts: []boxdesk.Mount{{Guest: "/mnt", Host: "/home/you/project"}},
 		Env:    []string{"API_KEY=s3cret"},
 		Net:    "tsi",
 	}

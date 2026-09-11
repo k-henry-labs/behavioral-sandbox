@@ -5,35 +5,35 @@ import type { Run, RunOptions } from "./types";
 //
 // It is EXTERNAL to the bundle (see `tsup.config.ts`) and must stay that way: it contains a
 // `require` for every platform triple napi knows, and esbuild following those tries to resolve
-// `tormoni-js.android-arm64.node` and fails the whole build. Kept external, the import survives
+// `boxdesk-js.android-arm64.node` and fails the whole build. Kept external, the import survives
 // into both outputs and resolves to `index.js` beside the package at run time.
 import * as core from "../index.js";
 
-export interface TormoniConfig {
+export interface BoxdeskConfig {
   /**
-   * Unused, and kept so a `new Tormoni({ path })` written against the old subprocess SDK still
+   * Unused, and kept so a `new Boxdesk({ path })` written against the old subprocess SDK still
    * compiles. There is no binary to find: the sandbox runs through the linked core.
    *
-   * @deprecated The SDK no longer spawns the `tormoni` CLI.
+   * @deprecated The SDK no longer spawns the `boxdesk` CLI.
    */
   path?: string;
 }
 
 /**
- * A handle on the Tormoni core.
+ * A handle on the Boxdesk core.
  *
  * Nothing here spawns a process or speaks HTTP. `run` calls the same `execute_sandbox` the
- * `tormoni` binary calls, so a run started here leaves the record a run started at a keyboard
+ * `boxdesk` binary calls, so a run started here leaves the record a run started at a keyboard
  * leaves.
  */
-export class Tormoni {
-  constructor(_config: TormoniConfig = {}) {}
+export class Boxdesk {
+  constructor(_config: BoxdeskConfig = {}) {}
 
   /**
    * Boot a fresh sandbox, run one command, wait, and return the record.
    *
    * A command that exits non-zero is **not** an error: it comes back as a {@link Run} whose `ok`
-   * is false. Only a failure of Tormoni itself throws.
+   * is false. Only a failure of Boxdesk itself throws.
    */
   async run(command: readonly string[], options: RunOptions = {}): Promise<Run> {
     return this.runSync(command, options);

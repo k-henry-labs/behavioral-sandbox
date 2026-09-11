@@ -3,7 +3,7 @@
 //!
 //! The Alpine minirootfs, the static `apk` tool, **and** the resolved `.apk`
 //! package closure are fetched once, sha-verified, and written under the vendor dir alongside a
-//! [`MANIFEST_NAME`] recording each file's hash. Setting `TORMONI_VENDOR_DIR` to that dir then takes every
+//! [`MANIFEST_NAME`] recording each file's hash. Setting `BOXDESK_VENDOR_DIR` to that dir then takes every
 //! build path offline: [`fetch_one`](crate::artifacts) restores the binary artifacts from the mirror, and
 //! the rootfs build installs packages from the vendored apk cache rather than the CDN.
 //!
@@ -32,7 +32,7 @@ pub(crate) fn default_vendor_dir() -> PathBuf {
 
 /// `cargo xtask vendor [--dir DIR]`: download every sha-pinned upstream input into `DIR`, populate
 /// the apk cache with the resolved package closure, and write the sha manifest. Always fetches from
-/// **upstream** (it is what fills the mirror), regardless of any `TORMONI_VENDOR_DIR` already set.
+/// **upstream** (it is what fills the mirror), regardless of any `BOXDESK_VENDOR_DIR` already set.
 pub(crate) fn vendor(dir: Option<PathBuf>) -> Result<()> {
     let dir = dir.unwrap_or_else(default_vendor_dir);
     std::fs::create_dir_all(&dir)
@@ -70,7 +70,7 @@ pub(crate) fn vendor(dir: Option<PathBuf>) -> Result<()> {
         .with_context(|| format!("write {}", dir.join(MANIFEST_NAME).display()))?;
 
     println!(
-        "\n✓ vendored {count} files + manifest in {}\n  build offline with: TORMONI_VENDOR_DIR={} \
+        "\n✓ vendored {count} files + manifest in {}\n  build offline with: BOXDESK_VENDOR_DIR={} \
          cargo xtask build-rootfs",
         dir.display(),
         dir.display()
@@ -184,7 +184,7 @@ fn walk_files(root: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
 /// Render the manifest body: a header comment plus one `sha256  relpath` line per entry.
 fn render_manifest(entries: &[(String, String)]) -> String {
     let mut out = String::from(
-        "# tormoni vendored upstream inputs — `sha256  path` (path relative to this dir).\n\
+        "# boxdesk vendored upstream inputs — `sha256  path` (path relative to this dir).\n\
          # Regenerate with `cargo xtask vendor`; re-verify offline with `cargo xtask vendor --verify`.\n\
          # This mirror is not committed (gitignored); the hashes below are the audit trail.\n",
     );

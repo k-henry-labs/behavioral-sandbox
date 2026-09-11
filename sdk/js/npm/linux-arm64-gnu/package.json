@@ -1,5 +1,5 @@
 {
-  "name": "@tormoni/js-linux-arm64-gnu",
+  "name": "@boxdesk/js-linux-arm64-gnu",
   "version": "0.1.0",
   "os": [
     "linux"
@@ -7,13 +7,13 @@
   "cpu": [
     "arm64"
   ],
-  "main": "tormoni-js.linux-arm64-gnu.node",
+  "main": "boxdesk-js.linux-arm64-gnu.node",
   "files": [
-    "tormoni-js.linux-arm64-gnu.node"
+    "boxdesk-js.linux-arm64-gnu.node"
   ],
-  "description": "The JS SDK for Tormoni: run untrusted code in a hardware-isolated VM",
+  "description": "The JS SDK for Boxdesk: run untrusted code in a hardware-isolated VM",
   "keywords": [
-    "tormoni",
+    "boxdesk",
     "sandbox",
     "vm",
     "microvm",
@@ -22,14 +22,14 @@
     "untrusted-code"
   ],
   "author": "Kendrick Lawton",
-  "homepage": "https://github.com/kendricklawton/tormoni",
+  "homepage": "https://github.com/kendricklawton/boxdesk",
   "license": "Apache-2.0",
   "engines": {
     "node": ">=20"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/kendricklawton/tormoni.git",
+    "url": "git+https://github.com/kendricklawton/boxdesk.git",
     "directory": "sdk/js"
   },
   "libc": [

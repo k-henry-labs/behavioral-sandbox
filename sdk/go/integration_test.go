@@ -1,8 +1,8 @@
-// Copyright 2026 The Tormoni Authors. All rights reserved.
+// Copyright 2026 The Boxdesk Authors. All rights reserved.
 // Use of this source code is governed by the Apache-2.0 license that can be
 // found in the LICENSE file.
 
-package tormoni_test
+package boxdesk_test
 
 import (
 	"context"
@@ -10,21 +10,21 @@ import (
 	"testing"
 	"time"
 
-	tormoni "github.com/kendricklawton/tormoni/sdk/go"
+	boxdesk "github.com/kendricklawton/boxdesk/sdk/go"
 )
 
 // TestIntegrationRun boots a real sandbox with the real binary. It is skipped
-// unless TORMONI_INTEGRATION=1, because CI has no hypervisor.
+// unless BOXDESK_INTEGRATION=1, because CI has no hypervisor.
 //
-//	TORMONI_INTEGRATION=1 go test -run TestIntegration -v ./...
+//	BOXDESK_INTEGRATION=1 go test -run TestIntegration -v ./...
 func TestIntegrationRun(t *testing.T) {
-	if os.Getenv("TORMONI_INTEGRATION") != "1" {
-		t.Skip("set TORMONI_INTEGRATION=1 to run against a real Tormoni install")
+	if os.Getenv("BOXDESK_INTEGRATION") != "1" {
+		t.Skip("set BOXDESK_INTEGRATION=1 to run against a real Boxdesk install")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	c := tormoni.New()
+	c := boxdesk.New()
 
 	run, err := c.Run(ctx, []string{"echo", "hi"}, nil)
 	if err != nil {

@@ -15,7 +15,7 @@ cargo-fuzz = true
 [dependencies]
 libfuzzer-sys = "0.4"
 
-[dependencies.tormoni-channel]
+[dependencies.boxdesk-channel]
 path = "../crates/channel"
 features = ["fuzzing"]
 

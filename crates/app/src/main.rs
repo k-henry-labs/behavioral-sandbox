@@ -1,12 +1,12 @@
-//! `Tormoni`: the notebook. Runs on this machine, live and past, one row each; a run opens to
+//! `Boxdesk`: the notebook. Runs on this machine, live and past, one row each; a run opens to
 //! its record, and a live one to its display with the keyboard and pointer going in.
 //!
-//! - **Everything here the CLI can do.** The records are `tormoni-record`'s, read straight from the
-//!   runs directory; starting, stopping and a shell go through the `tormoni` binary beside this one,
+//! - **Everything here the CLI can do.** The records are `boxdesk-record`'s, read straight from the
+//!   runs directory; starting, stopping and a shell go through the `boxdesk` binary beside this one,
 //!   so the app grows no verb the CLI lacks and an agent driving the CLI and a person at this
 //!   window see one notebook.
 //! - **Nothing leaves the machine.** The runs directory is local, the sockets are local, and the
-//!   only processes started are `tormoni` and, for a shell, the operator's terminal.
+//!   only processes started are `boxdesk` and, for a shell, the operator's terminal.
 //! - **Bounded.** The list is what retention keeps, the output pane shows the tail of a file up
 //!   to a fixed size, the frame history is capped, and a display lease is shut down when its run
 //!   is left, so nothing grows with time in the window.
@@ -34,9 +34,9 @@ use clap::Parser;
 use iced::animation::Easing;
 use iced::{Animation, Element, Size, Subscription, Task};
 
-use tormoni_krun::SharedFrames;
-use tormoni_record::{Record, Store};
-use tormoni_supervisor::control::Damage;
+use boxdesk_krun::SharedFrames;
+use boxdesk_record::{Record, Store};
+use boxdesk_supervisor::control::Damage;
 
 /// Exit code for an operational failure, the CLI's convention.
 const EXIT_OPERATIONAL: u8 = 2;
@@ -76,15 +76,15 @@ const _: () = assert!(MAX_THUMBNAILS < frame::MAX_TEXTURES);
 /// macOS reads for the menu bar and the Dock and a desktop entry names in `Exec`.
 ///
 /// Not `CARGO_BIN_NAME`. Cargo writes every binary of a workspace into one directory, and the
-/// default macOS filesystem is case-insensitive, so a `Tormoni` built beside `tormoni` would be
+/// default macOS filesystem is case-insensitive, so a `Boxdesk` built beside `boxdesk` would be
 /// the same file; the build keeps them apart and `cargo xtask dist` renames this one.
-pub(crate) const NAME: &str = "Tormoni";
+pub(crate) const NAME: &str = "Boxdesk";
 
 /// The identifier the application registers under. The Linux window carries it, which is what
 /// pairs the window with its desktop entry; xtask's bundle carries the same word as
 /// `CFBundleIdentifier` and holds the two equal by reading this line.
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
-pub(crate) const APP_ID: &str = "ai.tormoni.app";
+pub(crate) const APP_ID: &str = "ai.boxdesk.app";
 
 #[derive(Parser)]
 #[command(
@@ -110,7 +110,7 @@ struct Cli {
     #[arg(long)]
     exit_with_lease: bool,
     /// The mode to draw in: `light`, `dark`, or `system`, which follows the desktop. Case is
-    /// ignored. Falls back to `$TORMONI_THEME`, then to the pick in Settings, then to `system`. An
+    /// ignored. Falls back to `$BOXDESK_THEME`, then to the pick in Settings, then to `system`. An
     /// unknown name is refused with the three.
     #[arg(long, value_name = "NAME")]
     theme: Option<String>,
@@ -431,7 +431,7 @@ pub(crate) enum Stream {
 
 impl Stream {
     /// The file this stream is in a run's directory.
-    fn path(self, dir: &tormoni_record::RunDir) -> PathBuf {
+    fn path(self, dir: &boxdesk_record::RunDir) -> PathBuf {
         match self {
             Self::Stdout => dir.stdout(),
             Self::Stderr => dir.stderr(),
@@ -441,11 +441,11 @@ impl Stream {
     }
 
     /// The streams a run of `verb` has.
-    pub(crate) fn of(verb: tormoni_record::Verb) -> &'static [Self] {
+    pub(crate) fn of(verb: boxdesk_record::Verb) -> &'static [Self] {
         match verb {
-            tormoni_record::Verb::Run => &[Self::Stdout, Self::Stderr],
-            tormoni_record::Verb::Shell => &[Self::Shell],
-            tormoni_record::Verb::Up => &[Self::Exec],
+            boxdesk_record::Verb::Run => &[Self::Stdout, Self::Stderr],
+            boxdesk_record::Verb::Shell => &[Self::Shell],
+            boxdesk_record::Verb::Up => &[Self::Exec],
             _ => &[],
         }
     }
@@ -548,8 +548,8 @@ impl Shelf {
 /// One cookbook entry: a run worth trying, and the one thing trying it shows.
 ///
 /// **The posture is the data; every rendering is derived from it.** [`Example::cli`] builds the
-/// `tormoni` line from these fields rather than storing a string, so a second rendering (a
-/// `tormoni-js` or `tormoni-python` snippet) is a second function over the same table and cannot
+/// `boxdesk` line from these fields rather than storing a string, so a second rendering (a
+/// `boxdesk-js` or `boxdesk-python` snippet) is a second function over the same table and cannot
 /// drift from the form a press fills.
 ///
 /// `command` is plain argv: [`cli::start`] splits the form's field on whitespace and does no
@@ -747,9 +747,9 @@ impl Example {
         Self::ALL.iter().filter(move |e| e.shelf == shelf)
     }
 
-    /// The `tormoni` line this entry is, built from its posture rather than stored beside it.
+    /// The `boxdesk` line this entry is, built from its posture rather than stored beside it.
     pub(crate) fn cli(&self) -> String {
-        let mut line = String::from("tormoni run");
+        let mut line = String::from("boxdesk run");
         if self.network {
             line.push_str(" --net tsi");
         }
@@ -803,7 +803,7 @@ impl Form {
         Self {
             name: String::new(),
             root: p.root.display().to_string(),
-            writable_root: p.rootfs == tormoni_record::Rootfs::Writable,
+            writable_root: p.rootfs == boxdesk_record::Rootfs::Writable,
             command: record.command.join(" "),
             mounts: p
                 .mounts
@@ -817,7 +817,7 @@ impl Form {
                 .map(|s| format!("{}={}", s.tag, s.host.display()))
                 .collect::<Vec<_>>()
                 .join(" "),
-            network: p.network == tormoni_record::Network::Tsi,
+            network: p.network == boxdesk_record::Network::Tsi,
             display: p.display.is_some(),
             display_size: p
                 .display
@@ -949,7 +949,7 @@ pub(crate) struct App {
     runs: Vec<Record>,
     /// The names answering on their control sockets as of the last tick.
     live: BTreeSet<RunName>,
-    /// Where `tormoni` and the guest root are, as of the last tick: what the menu reports.
+    /// Where `boxdesk` and the guest root are, as of the last tick: what the menu reports.
     platform: cli::Platform,
     form: Form,
     /// The last thing worth telling the operator: an error, or what just happened.
@@ -969,7 +969,7 @@ pub(crate) struct App {
     mode: theme::Mode,
     /// What the desktop is showing, as the toolkit last reported it: what `System` follows.
     desktop: iced::theme::Mode,
-    /// Whether --theme or $TORMONI_THEME set it, which outranks a pick at the next launch.
+    /// Whether --theme or $BOXDESK_THEME set it, which outranks a pick at the next launch.
     theme_overridden: bool,
     /// The interface scale in percent; Settings changes it live.
     scale: u16,
@@ -1097,10 +1097,10 @@ impl App {
     }
 
     /// Rereads the notebook: the records, which names answer, and marks the open records whose
-    /// VM does not answer as gone (the one bookkeeping a listing does, as `tormoni ls --all`).
+    /// VM does not answer as gone (the one bookkeeping a listing does, as `boxdesk ls --all`).
     fn refresh(&mut self) {
         self.platform = cli::probe();
-        self.live = tormoni_supervisor::discover::live()
+        self.live = boxdesk_supervisor::discover::live()
             .map(|found| {
                 found
                     .into_iter()
@@ -1378,7 +1378,7 @@ impl App {
             Message::Start => {
                 let form = self.form.clone();
                 Task::perform(
-                    async move { cli::start(&cli::tormoni_path(), &form) },
+                    async move { cli::start(&cli::boxdesk_path(), &form) },
                     Message::Started,
                 )
             }
@@ -1404,11 +1404,11 @@ impl App {
                 Task::none()
             }
             Message::Stop(name) => Task::perform(
-                async move { cli::stop(&cli::tormoni_path(), name.as_str()) },
+                async move { cli::stop(&cli::boxdesk_path(), name.as_str()) },
                 Message::Acted,
             ),
             Message::Shell(name) => Task::perform(
-                async move { cli::open_shell(&cli::tormoni_path(), name.as_str()) },
+                async move { cli::open_shell(&cli::boxdesk_path(), name.as_str()) },
                 Message::Acted,
             ),
             Message::Rerun(id) => {
@@ -1655,9 +1655,9 @@ fn hotkey(key: &iced::keyboard::Key, modifiers: iced::keyboard::Modifiers) -> Op
 /// Marks as gone, in `runs` and in the store, every open record that no VM in `live` belongs to.
 ///
 /// **A name is reusable**, and `live` says only that *some* VM answers under one, so the newest
-/// open run of a name is the one that VM is: the rule `tormoni ls --all` settles a name by, and the
-/// one [`tormoni_record::Store::open_run`] reads a name by. `runs` is newest first, as
-/// [`tormoni_record::Store::list`] returns it, which is what makes the first claim on a name the
+/// open run of a name is the one that VM is: the rule `boxdesk ls --all` settles a name by, and the
+/// one [`boxdesk_record::Store::open_run`] reads a name by. `runs` is newest first, as
+/// [`boxdesk_record::Store::list`] returns it, which is what makes the first claim on a name the
 /// newest rather than an arbitrary one.
 fn settle_gone(store: &Store, runs: &mut [Record], live: &BTreeSet<RunName>) {
     let mut claimed = BTreeSet::new();
@@ -1666,7 +1666,7 @@ fn settle_gone(store: &Store, runs: &mut [Record], live: &BTreeSet<RunName>) {
         if claimed.insert(name.clone()) && live.contains(&name) {
             continue;
         }
-        record.finish(tormoni_record::End::Gone);
+        record.finish(boxdesk_record::End::Gone);
         let _ = store.save(record);
     }
 }
@@ -1745,7 +1745,7 @@ mod tests {
     /// the store.
     #[test]
     fn an_export_lands_in_downloads_then_home_then_beside_the_store() {
-        let dir = tormoni_test_support::ScratchDir::created("app-export-dest");
+        let dir = boxdesk_test_support::ScratchDir::created("app-export-dest");
         let store = Store::at(dir.path().join("data/runs")).expect("a store");
         let home = dir.path().join("home");
         std::fs::create_dir_all(home.join("Downloads")).expect("a downloads dir");
@@ -1761,7 +1761,7 @@ mod tests {
     /// The pane shows the tail of a file and its whole size, and an absent file is empty.
     #[test]
     fn the_output_pane_shows_the_tail() {
-        let dir = std::env::temp_dir().join(format!("tormoni-app-tail-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("boxdesk-app-tail-{}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("a dir");
         let path = dir.join("stdout");
         std::fs::write(&path, "0123456789").expect("written");
@@ -1773,19 +1773,19 @@ mod tests {
 
     /// A run with a display, live or not, for the watch-set tests.
     fn displayed(name: &str, with_display: bool) -> Record {
-        let mut p = tormoni_record::Posture::new(
+        let mut p = boxdesk_record::Posture::new(
             PathBuf::from("/img"),
             std::num::NonZeroU8::MIN,
             std::num::NonZeroU32::new(512).expect("non-zero"),
         );
         p.display = with_display
-            .then(|| tormoni_record::DisplayMode::parse("640x480"))
+            .then(|| boxdesk_record::DisplayMode::parse("640x480"))
             .flatten();
-        Record::begin(name, tormoni_record::Verb::Run, vec!["true".into()], p)
+        Record::begin(name, boxdesk_record::Verb::Run, vec!["true".into()], p)
     }
 
     fn app_with(runs: Vec<Record>, live: &[&str]) -> App {
-        let dir = tormoni_test_support::ScratchDir::created("app-watches");
+        let dir = boxdesk_test_support::ScratchDir::created("app-watches");
         let store = Store::at(dir.path().join("runs")).expect("a store");
         let sinks = Arc::new(frame::Sinks::open(None, None).expect("sinks"));
         let mut app = App::new(store, None, None, sinks, false);
@@ -1808,7 +1808,7 @@ mod tests {
     /// leased for a display it does not have, until it is written back as gone.
     #[test]
     fn an_open_run_whose_name_was_taken_again_is_not_shown_as_live() {
-        let dir = tormoni_test_support::ScratchDir::created("app-settle-gone");
+        let dir = boxdesk_test_support::ScratchDir::created("app-settle-gone");
         let store = Store::at(dir.path().join("runs")).expect("a store");
         let mut abandoned = displayed("web", true);
         abandoned.started_ms -= 10;
@@ -1827,14 +1827,14 @@ mod tests {
         assert_eq!(
             (runs[1].end, runs[2].end),
             (
-                Some(tormoni_record::End::Gone),
-                Some(tormoni_record::End::Gone)
+                Some(boxdesk_record::End::Gone),
+                Some(boxdesk_record::End::Gone)
             ),
             "the older `web` and the unanswered `solo` are gone"
         );
         assert_eq!(
             store.read(&abandoned.id).expect("read").end,
-            Some(tormoni_record::End::Gone),
+            Some(boxdesk_record::End::Gone),
             "and written back, so the notebook says so next time too"
         );
 
@@ -1908,12 +1908,12 @@ mod tests {
         app.screen = Screen::List;
         // A real mapping, so what is dropped is the memfd and the region, not a stand-in.
         let frames = {
-            use tormoni_krun::DisplayBackend as _;
-            let mut fb = tormoni_krun::MemoryFramebuffer::shared();
-            fb.configure_scanout(0, 64, 32, 64, 32, tormoni_krun::PixelFormat::B8G8R8X8Unorm)
+            use boxdesk_krun::DisplayBackend as _;
+            let mut fb = boxdesk_krun::MemoryFramebuffer::shared();
+            fb.configure_scanout(0, 64, 32, 64, 32, boxdesk_krun::PixelFormat::B8G8R8X8Unorm)
                 .expect("a scanout");
             let (fd, layout) = fb.share(0).expect("shareable").expect("a scanout");
-            Arc::new(tormoni_krun::SharedFrames::map(fd, layout).expect("mapped"))
+            Arc::new(boxdesk_krun::SharedFrames::map(fd, layout).expect("mapped"))
         };
         for name in ["alpha", "beta"] {
             app.displays.insert(
@@ -1938,7 +1938,7 @@ mod tests {
     /// The window opens on the menu; naming a run on the command line skips straight to it.
     #[test]
     fn the_window_opens_on_the_notebook_and_a_deep_link_skips_it() {
-        let dir = tormoni_test_support::ScratchDir::created("app-boot");
+        let dir = boxdesk_test_support::ScratchDir::created("app-boot");
         let store = Store::at(dir.path().join("runs")).expect("a store");
         let record = displayed("opened", false);
         store.create(&record).expect("created");
@@ -2001,7 +2001,7 @@ mod tests {
     /// anything boots, so a press starts no VM and writes no record.
     #[test]
     fn a_cookbook_entry_fills_the_form_and_starts_nothing() {
-        let dir = tormoni_test_support::ScratchDir::created("app-cookbook");
+        let dir = boxdesk_test_support::ScratchDir::created("app-cookbook");
         let store = Store::at(dir.path().join("runs")).expect("a store");
         let sinks = Arc::new(frame::Sinks::open(None, None).expect("sinks"));
         let mut app = App::new(store.clone(), None, None, sinks, false);
@@ -2059,15 +2059,15 @@ mod tests {
     }
 
     /// The line an entry shows is the posture it fills in, so what a reader copies into a terminal
-    /// and what the form starts cannot say different things. The same table renders a `tormoni-js`
-    /// or `tormoni-python` snippet later, and this is what holds every rendering to the fields.
+    /// and what the form starts cannot say different things. The same table renders a `boxdesk-js`
+    /// or `boxdesk-python` snippet later, and this is what holds every rendering to the fields.
     #[test]
     fn the_line_an_entry_shows_is_the_posture_it_fills_in() {
         for example in &Example::ALL {
             let line = example.cli();
             let form = example.form();
             assert!(
-                line.starts_with("tormoni run "),
+                line.starts_with("boxdesk run "),
                 "{}: {line} is not a run",
                 example.title
             );
@@ -2137,15 +2137,15 @@ mod tests {
     /// instead of raising a question whose only honest answer is no.
     #[test]
     fn deleting_one_run_asks_first_and_never_asks_about_a_live_one() {
-        let dir = tormoni_test_support::ScratchDir::created("app-delete-one");
+        let dir = boxdesk_test_support::ScratchDir::created("app-delete-one");
         let store = Store::at(dir.path().join("runs")).expect("a store");
         let name = format!("delete-live-{}", std::process::id());
-        let sock = tormoni_supervisor::socket::path_for(&name).expect("a socket path");
+        let sock = boxdesk_supervisor::socket::path_for(&name).expect("a socket path");
         let _ = std::fs::remove_file(&sock);
         let listener = std::os::unix::net::UnixListener::bind(&sock).expect("a live socket");
 
         let mut ended = displayed("ended", false);
-        ended.finish(tormoni_record::End::Exit(0));
+        ended.finish(boxdesk_record::End::Exit(0));
         let live = displayed(&name, false);
         for r in [&ended, &live] {
             store.create(r).expect("created");
@@ -2207,17 +2207,17 @@ mod tests {
     /// a second press unselects, and leaving the list drops the selection.
     #[test]
     fn a_selection_removes_what_was_selected_and_only_behind_the_confirm() {
-        let dir = tormoni_test_support::ScratchDir::created("app-clear");
+        let dir = boxdesk_test_support::ScratchDir::created("app-clear");
         let store = Store::at(dir.path().join("runs")).expect("a store");
         let name = format!("clear-live-{}", std::process::id());
-        let sock = tormoni_supervisor::socket::path_for(&name).expect("a socket path");
+        let sock = boxdesk_supervisor::socket::path_for(&name).expect("a socket path");
         let _ = std::fs::remove_file(&sock);
         let listener = std::os::unix::net::UnixListener::bind(&sock).expect("a live socket");
 
         let mut gone = displayed("gone", false);
-        gone.finish(tormoni_record::End::Exit(0));
+        gone.finish(boxdesk_record::End::Exit(0));
         let mut failed = displayed("failed", false);
-        failed.finish(tormoni_record::End::Failed);
+        failed.finish(boxdesk_record::End::Failed);
         let live = displayed(&name, false);
         for r in [&gone, &failed, &live] {
             store.create(r).expect("created");
@@ -2305,22 +2305,22 @@ mod tests {
     /// A re-run's form is the record's command and posture again.
     #[test]
     fn a_rerun_form_is_the_records_posture_again() {
-        let mut p = tormoni_record::Posture::new(
+        let mut p = boxdesk_record::Posture::new(
             PathBuf::from("/img"),
             std::num::NonZeroU8::new(2).expect("non-zero"),
             std::num::NonZeroU32::new(768).expect("non-zero"),
         );
-        p.rootfs = tormoni_record::Rootfs::Writable;
-        p.mounts.push(tormoni_record::Mount::new(
+        p.rootfs = boxdesk_record::Rootfs::Writable;
+        p.mounts.push(boxdesk_record::Mount::new(
             PathBuf::from("/mnt"),
             PathBuf::from("/home/x/out"),
         ));
-        p.network = tormoni_record::Network::Tsi;
-        p.display = tormoni_record::DisplayMode::parse("800x600");
+        p.network = boxdesk_record::Network::Tsi;
+        p.display = boxdesk_record::DisplayMode::parse("800x600");
         p.results = false;
-        let record = tormoni_record::Record::begin(
+        let record = boxdesk_record::Record::begin(
             "r",
-            tormoni_record::Verb::Run,
+            boxdesk_record::Verb::Run,
             vec!["python3".into(), "x.py".into()],
             p,
         );

@@ -1,5 +1,5 @@
 [package]
-name = "tormoni-record"
+name = "boxdesk-record"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -12,7 +12,7 @@ description = "The run record: what the notebook keeps for one sandbox's lifetim
 [dependencies]
 
 [dev-dependencies]
-tormoni-test-support = { path = "../test-support" }
+boxdesk-test-support = { path = "../test-support" }
 
 [lints]
 workspace = true

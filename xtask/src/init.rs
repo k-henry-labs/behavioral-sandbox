@@ -1,6 +1,6 @@
 //! `cargo xtask init`: the guest tree a first run needs, on whatever host is here.
 //!
-//! - **The pinned Alpine minirootfs**, hash-checked by [`crate::artifacts`], unpacked where `tormoni`
+//! - **The pinned Alpine minirootfs**, hash-checked by [`crate::artifacts`], unpacked where `boxdesk`
 //!   looks for a root when no flag names one.
 //! - **The static agent beside it**, so `up`, `exec` and `shell` answer and not only `run`.
 //! - **A fixture, not the image.** `apk.static` is a Linux ELF, so nothing here installs the
@@ -12,16 +12,16 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 
-use tormoni_channel::GUEST_AGENT_PATH;
+use boxdesk_channel::GUEST_AGENT_PATH;
 
 use crate::artifacts::fetch_one;
 use crate::guest_bins::build_guest_agent;
 use crate::rootfs::{GuestArch, alpine_artifact};
 use crate::run_tool;
 
-/// Where a guest tree goes when nothing names one, under the per-user data directory: `tormoni`'s own
+/// Where a guest tree goes when nothing names one, under the per-user data directory: `boxdesk`'s own
 /// last fallback, which `the_default_guest_root_is_the_one_the_cli_looks_in` holds this to.
-const GUEST_ROOT_UNDER_DATA: &str = "tormoni/rootfs";
+const GUEST_ROOT_UNDER_DATA: &str = "boxdesk/rootfs";
 
 /// The resolver a guest reads once `--net tsi` is granted; with no file at all a name never
 /// resolves, and the minirootfs ships none.
@@ -43,7 +43,7 @@ pub(crate) fn init(root: Option<PathBuf>, arch: Option<String>, force: bool) -> 
 }
 
 /// Writes the guest tree at `root` for `arch`: the base, the agent, the results mount point and
-/// the resolver. `dist` archives one of these; `init` puts one where `tormoni` looks.
+/// the resolver. `dist` archives one of these; `init` puts one where `boxdesk` looks.
 pub(crate) fn write_tree(root: &Path, arch: GuestArch) -> Result<()> {
     let base = alpine_artifact(arch);
     fetch_one(&base)?;
@@ -66,17 +66,17 @@ pub(crate) fn write_tree(root: &Path, arch: GuestArch) -> Result<()> {
     std::fs::write(root.join("etc/resolv.conf"), RESOLV_CONF).context("write /etc/resolv.conf")
 }
 
-/// The tree's destination: the flag, else `$TORMONI_GUEST_ROOT`, else the per-user data directory, the
-/// order `tormoni` itself resolves a root in.
+/// The tree's destination: the flag, else `$BOXDESK_GUEST_ROOT`, else the per-user data directory, the
+/// order `boxdesk` itself resolves a root in.
 fn resolve_root(flag: Option<PathBuf>) -> Result<PathBuf> {
-    if let Some(root) = flag.or_else(|| std::env::var_os("TORMONI_GUEST_ROOT").map(PathBuf::from)) {
+    if let Some(root) = flag.or_else(|| std::env::var_os("BOXDESK_GUEST_ROOT").map(PathBuf::from)) {
         return Ok(root);
     }
     let data = std::env::var_os("XDG_DATA_HOME")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")));
     data.map(|d| d.join(GUEST_ROOT_UNDER_DATA))
-        .context("no HOME and no XDG_DATA_HOME: pass --root or set TORMONI_GUEST_ROOT")
+        .context("no HOME and no XDG_DATA_HOME: pass --root or set BOXDESK_GUEST_ROOT")
 }
 
 /// Empties `root` for a fresh tree, refusing a directory that holds something other than one, so
@@ -123,7 +123,7 @@ fn report(root: &Path, arch: GuestArch) {
     println!("    {GUEST_AGENT_PATH}   the exec channel `up`, `exec` and `shell` speak");
     println!("    /results                     where a run's own output lands");
     println!("    /etc/resolv.conf             reachable only where `--net tsi` is granted");
-    println!("\n  next: tormoni run -- /bin/busybox uname -a");
+    println!("\n  next: boxdesk run -- /bin/busybox uname -a");
     println!(
         "  no runtimes here (python3, nodejs): `apk` is a Linux binary, so those come from \
          `cargo xtask build-rootfs` on Linux."
@@ -133,9 +133,9 @@ fn report(root: &Path, arch: GuestArch) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tormoni_test_support::ScratchDir;
+    use boxdesk_test_support::ScratchDir;
 
-    /// The default this writes to is the default `tormoni` reads from. Two crates, one path, and no
+    /// The default this writes to is the default `boxdesk` reads from. Two crates, one path, and no
     /// constant either can share.
     ///
     /// It reads `crates/cli/src/lib.rs`, where `resolve_root` moved when the SDKs began calling it:
@@ -148,7 +148,7 @@ mod tests {
         assert!(
             cli.contains(&format!("join(\"{GUEST_ROOT_UNDER_DATA}\")")),
             "crates/cli/src/lib.rs no longer joins {GUEST_ROOT_UNDER_DATA:?} onto the data \
-             directory, so `xtask init` would write a tree `tormoni` does not look for"
+             directory, so `xtask init` would write a tree `boxdesk` does not look for"
         );
     }
 

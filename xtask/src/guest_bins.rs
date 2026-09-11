@@ -46,7 +46,7 @@ fn build_guest_musl(arch: GuestArch) -> Result<PathBuf> {
         "--release",
         "--locked",
         "-p",
-        "tormoni-guest-agent",
+        "boxdesk-guest-agent",
     ];
     args.extend_from_slice(selector);
     args.extend_from_slice(&["--target", target]);

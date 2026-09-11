@@ -8,7 +8,7 @@
 //! hypervisor.
 
 use std::num::{NonZeroU8, NonZeroU32};
-use tormoni::{End, Error, Net, RootFs, Sandbox, Tormoni};
+use boxdesk::{End, Error, Net, RootFs, Sandbox, Boxdesk};
 
 /// A guest root that exists, because resolution refuses one that does not — the point here is the
 /// posture, not where a tree lives.
@@ -24,7 +24,7 @@ fn rooted(command: [&str; 1]) -> Sandbox {
 #[test]
 fn env_values_go_out_and_names_come_back() {
     const SECRET: &str = "s3cret-value-nobody-should-see";
-    let outcome = Tormoni::new()
+    let outcome = Boxdesk::new()
         .dry_run(
             rooted(["env"])
                 .env(format!("API_KEY={SECRET}"))
@@ -43,7 +43,7 @@ fn env_values_go_out_and_names_come_back() {
 /// A value may contain `=`; the cut is at the FIRST one.
 #[test]
 fn a_value_holding_an_equals_sign_keeps_its_name() {
-    let outcome = Tormoni::new()
+    let outcome = Boxdesk::new()
         .dry_run(rooted(["env"]).env("TOKEN=a=b=c"))
         .expect("a dry run settles a posture");
     assert_eq!(outcome.record.posture.env, ["TOKEN"]);
@@ -52,7 +52,7 @@ fn a_value_holding_an_equals_sign_keeps_its_name() {
 /// The posture that comes back is the one that was asked for.
 #[test]
 fn the_posture_is_the_one_that_was_asked_for() {
-    let outcome = Tormoni::new()
+    let outcome = Boxdesk::new()
         .dry_run(
             rooted(["true"])
                 .vcpus(NonZeroU8::new(2).expect("non-zero"))
@@ -78,7 +78,7 @@ fn the_posture_is_the_one_that_was_asked_for() {
 /// from the binary's would give a caller a sandbox the docs do not describe.
 #[test]
 fn the_defaults_are_the_clis_own() {
-    let outcome = Tormoni::new()
+    let outcome = Boxdesk::new()
         .dry_run(rooted(["true"]))
         .expect("a dry run settles a posture");
     let p = &outcome.record.posture;
@@ -92,7 +92,7 @@ fn the_defaults_are_the_clis_own() {
 /// A dry run has settled a posture and nothing more.
 #[test]
 fn a_dry_run_has_no_end_and_no_directory() {
-    let outcome = Tormoni::new()
+    let outcome = Boxdesk::new()
         .dry_run(rooted(["true"]))
         .expect("a dry run settles a posture");
     assert_eq!(outcome.record.verb.as_word(), "run");
@@ -113,7 +113,7 @@ fn a_dry_run_has_no_end_and_no_directory() {
 /// false for every end that is not a clean zero.
 #[test]
 fn only_a_clean_exit_is_ok() {
-    let mut record = Tormoni::new()
+    let mut record = Boxdesk::new()
         .dry_run(rooted(["true"]))
         .expect("a dry run settles a posture")
         .record;
@@ -128,7 +128,7 @@ fn only_a_clean_exit_is_ok() {
         (End::Failed, false),
     ] {
         record.finish(end);
-        let outcome = tormoni::Outcome {
+        let outcome = boxdesk::Outcome {
             record: record.clone(),
             dir: None,
             code: 0,
@@ -140,7 +140,7 @@ fn only_a_clean_exit_is_ok() {
 /// An empty command is refused with a sentence, not a panic on `command[0]`.
 #[test]
 fn an_empty_command_is_refused() {
-    let err = Tormoni::new()
+    let err = Boxdesk::new()
         .run(Sandbox::new(Vec::<String>::new()))
         .expect_err("an empty command cannot run");
     assert!(matches!(err, Error::Posture(_)), "{err:?}");
@@ -151,7 +151,7 @@ fn an_empty_command_is_refused() {
 /// later as a boot that could not find its tree.
 #[test]
 fn a_missing_guest_root_is_refused() {
-    let err = Tormoni::new()
+    let err = Boxdesk::new()
         .dry_run(Sandbox::new(["true"]).root("/definitely/not/a/guest/root"))
         .expect_err("a missing root cannot be run against");
     assert!(matches!(err, Error::Posture(_)), "{err:?}");
@@ -160,7 +160,7 @@ fn a_missing_guest_root_is_refused() {
 /// A run nobody filed is a refusal naming what was looked for.
 #[test]
 fn a_missing_run_names_what_was_asked_for() {
-    let err = Tormoni::new()
+    let err = Boxdesk::new()
         .show("1-definitely-not-a-run")
         .expect_err("no such run");
     assert!(err.to_string().contains("no run"), "{err}");

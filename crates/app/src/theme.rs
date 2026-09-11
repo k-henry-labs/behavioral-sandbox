@@ -133,7 +133,7 @@ fn dark() -> iced::Theme {
 }
 
 /// The environment variable a mode can be named in, below the flag and above the default.
-pub(crate) const ENV: &str = "TORMONI_THEME";
+pub(crate) const ENV: &str = "BOXDESK_THEME";
 
 /// The mode `asked` names, or the default when nothing asked.
 ///

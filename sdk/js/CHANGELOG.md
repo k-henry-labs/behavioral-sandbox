@@ -12,12 +12,12 @@ First release.
 
 ### Added
 
-- `Tormoni` client wrapping the `tormoni` CLI: `run`, `runSync`, `dryRun`, `show` and `runs`.
+- `Boxdesk` client wrapping the `boxdesk` CLI: `run`, `runSync`, `dryRun`, `show` and `runs`.
 - `Run`, `Posture` and `RunFile` record types, mapped by hand from the CLI's JSON document.
-- `TormoniException`, `TormoniNotFoundError` and `TormoniError`, the last carrying Tormoni's
+- `BoxdeskException`, `BoxdeskNotFoundError` and `BoxdeskError`, the last carrying Boxdesk's
   own `stderr` verbatim alongside the process exit code.
-- Binary resolution from an explicit path, then `$TORMONI_CLI`, then `tormoni` on `PATH`.
+- Binary resolution from an explicit path, then `$BOXDESK_CLI`, then `boxdesk` on `PATH`.
 - ESM and CommonJS builds with type declarations for both.
 
-[Unreleased]: https://github.com/kendricklawton/tormoni-js/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/kendricklawton/tormoni-js/releases/tag/v0.1.0
+[Unreleased]: https://github.com/kendricklawton/boxdesk-js/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/kendricklawton/boxdesk-js/releases/tag/v0.1.0

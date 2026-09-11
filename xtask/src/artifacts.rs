@@ -18,7 +18,7 @@ pub(crate) struct Artifact {
     pub(crate) dest: PathBuf,
 }
 
-/// Obtains one artifact into place, from the `TORMONI_VENDOR_DIR` mirror when set and its pinned URL
+/// Obtains one artifact into place, from the `BOXDESK_VENDOR_DIR` mirror when set and its pinned URL
 /// otherwise. The sha256 is the contract either way, and every build path comes through here.
 pub(crate) fn fetch_one(a: &Artifact) -> Result<()> {
     match vendor_dir() {
@@ -48,7 +48,7 @@ fn restore_from_vendor(a: &Artifact, vendor: &Path) -> Result<()> {
     if !src.is_file() {
         bail!(
             "vendored input {name} not found in {} — run `cargo xtask vendor` to populate the \
-             mirror (or unset TORMONI_VENDOR_DIR to fetch from upstream)",
+             mirror (or unset BOXDESK_VENDOR_DIR to fetch from upstream)",
             vendor.display()
         );
     }
@@ -210,7 +210,7 @@ mod tests {
     #[test]
     fn a_missing_hasher_is_skipped_for_the_next() {
         use std::os::unix::fs::PermissionsExt;
-        let scratch = tormoni_test_support::ScratchDir::created("sha256");
+        let scratch = boxdesk_test_support::ScratchDir::created("sha256");
         let empty = scratch.path().join("empty");
         std::fs::write(&empty, b"").unwrap();
 
@@ -238,7 +238,7 @@ mod tests {
     /// the half that does depend on a tool being installed, and the build needs one anyway.
     #[test]
     fn the_hosts_own_hasher_reads_the_known_digest() {
-        let scratch = tormoni_test_support::ScratchDir::created("sha256-host");
+        let scratch = boxdesk_test_support::ScratchDir::created("sha256-host");
         let empty = scratch.path().join("empty");
         std::fs::write(&empty, b"").unwrap();
         assert_eq!(

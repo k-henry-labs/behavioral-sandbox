@@ -1,22 +1,22 @@
 # Control socket and host/guest IPC
 
-Tormoni uses a two-tier IPC design for host management and host↔guest
+Boxdesk uses a two-tier IPC design for host management and host↔guest
 communication: a host control socket for local process discovery and display leasing, and a
 virtio-vsock wire protocol for in-guest command execution.
 
 ## Host control socket
 
-There is no background daemon. A running sandbox is a helper process (`tormoni __vmm`) listening on a
+There is no background daemon. A running sandbox is a helper process (`boxdesk __vmm`) listening on a
 Unix domain socket under the user's runtime directory.
 
 ### Socket resolution and discovery
 
-Sockets live in `$XDG_RUNTIME_DIR/tormoni/<name>.sock` (falling back to `$TMPDIR/tormoni/<name>.sock` or
-`/tmp/tormoni/<name>.sock`). The directory is created `0700` and its ownership and mode are checked at
+Sockets live in `$XDG_RUNTIME_DIR/boxdesk/<name>.sock` (falling back to `$TMPDIR/boxdesk/<name>.sock` or
+`/tmp/boxdesk/<name>.sock`). The directory is created `0700` and its ownership and mode are checked at
 runtime, before a socket in it is trusted, because the fallbacks are shared temporary directories.
 
 The socket directory acts as the VM registry:
-- **Discovery**: `tormoni ls` scans the socket directory for files ending in `.sock`.
+- **Discovery**: `boxdesk ls` scans the socket directory for files ending in `.sock`.
 - **Liveness probe**: Rather than relying on file existence, `socket::is_live` attempts a
   non-blocking `UnixStream::connect`. A socket file whose process has died is cleaned up via
   `socket::clear_if_stale`.
@@ -30,7 +30,7 @@ to 4096 bytes at most. A word the VM does not know is answered with the words it
 than a closed connection (`an_unknown_request_is_answered_with_what_this_vm_speaks`).
 
 - `info`: `ok`, then the machine's shape and posture as `key value` lines (`proto`, `pid`, `vcpus`,
-  `mem_mib`, `net`, `rootfs`, `channel`), which is what `tormoni ls` prints a row from.
+  `mem_mib`, `net`, `rootfs`, `channel`), which is what `boxdesk ls` prints a row from.
 - `stop`: `ok` first, and the process exits after, so a caller learns the request was accepted
   rather than inferring it from a closed connection.
 - `display`: leases the scanout. The answer carries the sealed memfd holding the frame slots and
@@ -40,9 +40,9 @@ than a closed connection (`an_unknown_request_is_answered_with_what_this_vm_spea
   until the caller closes it, and whatever those lines left pressed is released then. Refused by a
   VM with no display, which has no devices.
 
-## Host↔guest wire framing (`tormoni-channel`)
+## Host↔guest wire framing (`boxdesk-channel`)
 
-Command execution inside a guest goes through `tormoni-channel`, a length-prefixed wire protocol
+Command execution inside a guest goes through `boxdesk-channel`, a length-prefixed wire protocol
 operating over AF_VSOCK (port 1024) or a Unix socket fallback.
 
 ### Handshake and framing
@@ -81,7 +81,7 @@ The wire protocol defines discrete frame discriminants:
   ASCII control characters and Unicode bidirectional control code points (`Bidi_Control`), which are
   what a terminal would otherwise act on and what Trojan Source relies on.
 
-## In-guest agent (`tormoni-guest-agent`)
+## In-guest agent (`boxdesk-guest-agent`)
 
 The guest agent is a statically linked Rust binary (`guest-agent`, compiled against
 `x86_64-unknown-linux-musl` or `aarch64-unknown-linux-musl`) baked into the guest image at

@@ -1,12 +1,12 @@
-//! The `tormoni` binary as the app runs it: starting a run, stopping one, and a shell in the
+//! The `boxdesk` binary as the app runs it: starting a run, stopping one, and a shell in the
 //! operator's terminal. The app has no verb of its own, so this is the whole bridge.
 //!
-//! - **Which `tormoni`.** `$TORMONI_CLI` if set, else the `tormoni` beside this binary (a
+//! - **Which `boxdesk`.** `$BOXDESK_CLI` if set, else the `boxdesk` beside this binary (a
 //!   `target/` pair), else the one under the bundle's `Contents/Resources` (where Ollama keeps
 //!   its own), else the one on `PATH`, which a Finder-launched app cannot count on.
-//! - **A started run is not this process's.** `tormoni run` is spawned detached with its stdio on
+//! - **A started run is not this process's.** `boxdesk run` is spawned detached with its stdio on
 //!   `/dev/null` (the record has the output), and a thread reaps it so nothing is left a zombie;
-//!   `tormoni up` returns at once with the name.
+//!   `boxdesk up` returns at once with the name.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -14,44 +14,44 @@ use std::process::{Command, Stdio};
 use crate::Form;
 
 /// Where the CLI is.
-pub(crate) fn tormoni_path() -> PathBuf {
-    if let Some(path) = std::env::var_os("TORMONI_CLI") {
+pub(crate) fn boxdesk_path() -> PathBuf {
+    if let Some(path) = std::env::var_os("BOXDESK_CLI") {
         return PathBuf::from(path);
     }
     std::env::current_exe()
         .ok()
         .and_then(|me| near(&me).into_iter().find(|p| p.is_file()))
-        .unwrap_or_else(|| PathBuf::from("tormoni"))
+        .unwrap_or_else(|| PathBuf::from("boxdesk"))
 }
 
-/// The two places a packaged `tormoni` sits relative to the executable `exe`: beside it, and
+/// The two places a packaged `boxdesk` sits relative to the executable `exe`: beside it, and
 /// under the bundle's `Contents/Resources` two levels up.
 fn near(exe: &Path) -> Vec<PathBuf> {
     let mut found = Vec::new();
     if let Some(dir) = exe.parent() {
-        found.push(dir.join("tormoni"));
+        found.push(dir.join("boxdesk"));
     }
     if let Some(contents) = exe.parent().and_then(Path::parent) {
-        found.push(contents.join("Resources").join("tormoni"));
+        found.push(contents.join("Resources").join("boxdesk"));
     }
     found
 }
 
 /// The guest root the CLI would default to, for the form's first value.
 pub(crate) fn default_root() -> Option<PathBuf> {
-    if let Some(root) = std::env::var_os("TORMONI_GUEST_ROOT") {
+    if let Some(root) = std::env::var_os("BOXDESK_GUEST_ROOT") {
         return Some(PathBuf::from(root));
     }
     let data = std::env::var_os("XDG_DATA_HOME")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")))?;
-    Some(data.join("tormoni/rootfs"))
+    Some(data.join("boxdesk/rootfs"))
 }
 
-/// What the menu's status line reports: where `tormoni` and the guest root are, if anywhere.
+/// What the menu's status line reports: where `boxdesk` and the guest root are, if anywhere.
 #[derive(Debug, Default)]
 pub(crate) struct Platform {
-    pub(crate) tormoni: Option<PathBuf>,
+    pub(crate) boxdesk: Option<PathBuf>,
     pub(crate) root: GuestRoot,
 }
 
@@ -73,15 +73,15 @@ pub(crate) fn probe() -> Platform {
         None => GuestRoot::Unset,
     };
     Platform {
-        tormoni: find_tormoni(),
+        boxdesk: find_boxdesk(),
         root,
     }
 }
 
-/// The `tormoni` that [`tormoni_path`] names, when it would actually spawn: the path itself when it is
+/// The `boxdesk` that [`boxdesk_path`] names, when it would actually spawn: the path itself when it is
 /// an executable file, or the first executable match on `PATH` for a bare name.
-fn find_tormoni() -> Option<PathBuf> {
-    let named = tormoni_path();
+fn find_boxdesk() -> Option<PathBuf> {
+    let named = boxdesk_path();
     if named
         .parent()
         .is_some_and(|dir| !dir.as_os_str().is_empty())
@@ -175,35 +175,35 @@ fn run_argv(posture: &[String], command: &[&str]) -> Vec<String> {
     argv
 }
 
-/// Starts the run the form describes and returns its name: `tormoni run` for a command, detached,
-/// or `tormoni up` for a sandbox with none.
-pub(crate) fn start(tormoni: &Path, form: &Form) -> Result<crate::RunName, String> {
+/// Starts the run the form describes and returns its name: `boxdesk run` for a command, detached,
+/// or `boxdesk up` for a sandbox with none.
+pub(crate) fn start(boxdesk: &Path, form: &Form) -> Result<crate::RunName, String> {
     let name = if form.name.trim().is_empty() {
-        format!("app-{}", tormoni_record::now_ms())
+        format!("app-{}", boxdesk_record::now_ms())
     } else {
         form.name.trim().to_string()
     };
     let args = posture_args(form, &name)?;
     let command: Vec<&str> = form.command.split_whitespace().collect();
     if command.is_empty() {
-        let out = Command::new(tormoni)
+        let out = Command::new(boxdesk)
             .arg("up")
             .args(&args)
             .stdin(Stdio::null())
             .output()
-            .map_err(|e| format!("run {}: {e}", tormoni.display()))?;
+            .map_err(|e| format!("run {}: {e}", boxdesk.display()))?;
         if !out.status.success() {
             return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
         }
         return Ok(crate::RunName::started(name));
     }
-    let child = Command::new(tormoni)
+    let child = Command::new(boxdesk)
         .args(run_argv(&args, &command))
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
-        .map_err(|e| format!("run {}: {e}", tormoni.display()))?;
+        .map_err(|e| format!("run {}: {e}", boxdesk.display()))?;
     reap(child);
     // The record is written before the VM boots, so a short wait is all the list needs.
     std::thread::sleep(std::time::Duration::from_millis(300));
@@ -211,12 +211,12 @@ pub(crate) fn start(tormoni: &Path, form: &Form) -> Result<crate::RunName, Strin
 }
 
 /// Stops the run named `name`.
-pub(crate) fn stop(tormoni: &Path, name: &str) -> Result<String, String> {
-    let out = Command::new(tormoni)
+pub(crate) fn stop(boxdesk: &Path, name: &str) -> Result<String, String> {
+    let out = Command::new(boxdesk)
         .args(["stop", name])
         .stdin(Stdio::null())
         .output()
-        .map_err(|e| format!("run tormoni: {e}"))?;
+        .map_err(|e| format!("run boxdesk: {e}"))?;
     if out.status.success() {
         Ok(format!("stopped {name}"))
     } else {
@@ -224,11 +224,11 @@ pub(crate) fn stop(tormoni: &Path, name: &str) -> Result<String, String> {
     }
 }
 
-/// Opens the operator's terminal on a shell in the run named `name`: `tormoni exec --tty`.
-pub(crate) fn open_shell(tormoni: &Path, name: &str) -> Result<String, String> {
+/// Opens the operator's terminal on a shell in the run named `name`: `boxdesk exec --tty`.
+pub(crate) fn open_shell(boxdesk: &Path, name: &str) -> Result<String, String> {
     let terminal = terminal().ok_or_else(no_terminal)?;
     let shown = terminal.shown();
-    let mut cmd = terminal.command(tormoni, name)?;
+    let mut cmd = terminal.command(boxdesk, name)?;
     let child = cmd
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -272,12 +272,12 @@ impl Terminal {
     }
 
     /// The command that opens a shell on `name`.
-    fn command(&self, tormoni: &Path, name: &str) -> Result<Command, String> {
+    fn command(&self, boxdesk: &Path, name: &str) -> Result<Command, String> {
         match self {
             Self::Direct { program, before } => {
                 let mut cmd = Command::new(program);
                 cmd.args(*before);
-                cmd.arg(tormoni)
+                cmd.arg(boxdesk)
                     .args(["exec", "--tty", name, "--", "/bin/sh"]);
                 Ok(cmd)
             }
@@ -286,10 +286,10 @@ impl Terminal {
             // itself first thing, so a launch that never happens leaves the OS to clean one file
             // out of its own temporary directory rather than leaving one behind on every click.
             Self::TerminalApp => {
-                let script = std::env::temp_dir().join(format!("tormoni-shell-{name}.command"));
+                let script = std::env::temp_dir().join(format!("boxdesk-shell-{name}.command"));
                 let body = format!(
                     "#!/bin/sh\nrm -f -- \"$0\"\nexec {} exec --tty {} -- /bin/sh\n",
-                    shell_quote(&tormoni.display().to_string()),
+                    shell_quote(&boxdesk.display().to_string()),
                     shell_quote(name)
                 );
                 std::fs::write(&script, body).map_err(|e| format!("write {script:?}: {e}"))?;
@@ -430,22 +430,22 @@ mod tests {
     #[test]
     fn a_bundled_app_finds_the_cli_in_resources() {
         assert_eq!(
-            near(Path::new("/A/Tormoni.app/Contents/MacOS/Tormoni")),
+            near(Path::new("/A/Boxdesk.app/Contents/MacOS/Boxdesk")),
             [
-                PathBuf::from("/A/Tormoni.app/Contents/MacOS/tormoni"),
-                PathBuf::from("/A/Tormoni.app/Contents/Resources/tormoni"),
+                PathBuf::from("/A/Boxdesk.app/Contents/MacOS/boxdesk"),
+                PathBuf::from("/A/Boxdesk.app/Contents/Resources/boxdesk"),
             ]
         );
         assert_eq!(
-            near(Path::new("/t/debug/Tormoni"))[0],
-            PathBuf::from("/t/debug/tormoni")
+            near(Path::new("/t/debug/Boxdesk"))[0],
+            PathBuf::from("/t/debug/boxdesk")
         );
     }
 
-    /// Only a regular file with an execute bit counts as a found `tormoni`.
+    /// Only a regular file with an execute bit counts as a found `boxdesk`.
     #[test]
     fn only_an_executable_file_counts_as_found() {
-        let dir = tormoni_test_support::ScratchDir::created("app-probe");
+        let dir = boxdesk_test_support::ScratchDir::created("app-probe");
         let plain = dir.path().join("plain");
         std::fs::write(&plain, b"#!/bin/sh\n").expect("written");
         std::fs::set_permissions(&plain, PermissionsExt::from_mode(0o644)).expect("chmod");
@@ -458,7 +458,7 @@ mod tests {
     use std::os::unix::fs::PermissionsExt;
 
     /// A direct terminal is handed the command as arguments, after whatever that terminal needs
-    /// first, and the shell is the last word: `wezterm start -- tormoni exec --tty NAME -- /bin/sh`.
+    /// first, and the shell is the last word: `wezterm start -- boxdesk exec --tty NAME -- /bin/sh`.
     #[test]
     fn a_direct_terminal_is_handed_the_command() {
         let term = Terminal::Direct {
@@ -466,7 +466,7 @@ mod tests {
             before: &["start", "--"],
         };
         let cmd = term
-            .command(Path::new("/usr/local/bin/tormoni"), "vm1")
+            .command(Path::new("/usr/local/bin/boxdesk"), "vm1")
             .expect("built");
         let args: Vec<String> = cmd
             .get_args()
@@ -477,7 +477,7 @@ mod tests {
             [
                 "start",
                 "--",
-                "/usr/local/bin/tormoni",
+                "/usr/local/bin/boxdesk",
                 "exec",
                 "--tty",
                 "vm1",
@@ -494,7 +494,7 @@ mod tests {
     #[test]
     fn terminal_app_is_opened_on_a_script_that_runs_the_shell() {
         let cmd = Terminal::TerminalApp
-            .command(Path::new("/usr/local/bin/tormoni"), "vm-two")
+            .command(Path::new("/usr/local/bin/boxdesk"), "vm-two")
             .expect("built");
         let args: Vec<String> = cmd
             .get_args()
@@ -520,8 +520,8 @@ mod tests {
     #[test]
     fn a_quoted_word_survives_a_space_and_a_quote() {
         assert_eq!(
-            shell_quote("/Volumes/My Disk/tormoni"),
-            "'/Volumes/My Disk/tormoni'"
+            shell_quote("/Volumes/My Disk/boxdesk"),
+            "'/Volumes/My Disk/boxdesk'"
         );
         assert_eq!(shell_quote("it's"), r"'it'\''s'");
     }
@@ -616,7 +616,7 @@ mod tests {
         assert!(posture_args(&form, "x").is_err());
     }
 
-    /// The bridge starts a run through the built `tormoni` and the record appears under the runs
+    /// The bridge starts a run through the built `boxdesk` and the record appears under the runs
     /// directory it was given, then stops it and the record ends `stopped`. Needs /dev/kvm and
     /// the guest tree, and skips with the reason otherwise.
     #[test]
@@ -626,35 +626,35 @@ mod tests {
             .nth(2)
             .expect("the workspace")
             .to_path_buf();
-        let tormoni = root.join("target/debug/tormoni");
+        let boxdesk = root.join("target/debug/boxdesk");
         let guest = root.join("artifacts/rootfs-guest");
-        if let Some(why) = tormoni_test_support::hypervisor_unusable() {
+        if let Some(why) = boxdesk_test_support::hypervisor_unusable() {
             println!("SKIPPED the_bridge_starts_and_stops_a_run_the_record_shows: {why}");
             return;
         }
-        if !tormoni.is_file() || !guest.is_dir() {
+        if !boxdesk.is_file() || !guest.is_dir() {
             println!(
                 "SKIPPED the_bridge_starts_and_stops_a_run_the_record_shows: no {} or {}",
-                tormoni.display(),
+                boxdesk.display(),
                 guest.display()
             );
             return;
         }
-        let dir = tormoni_test_support::ScratchDir::created("app-bridge");
+        let dir = boxdesk_test_support::ScratchDir::created("app-bridge");
         let runs = dir.path().join("runs");
         let rt = dir.path().join("rt");
         std::fs::create_dir(&rt).expect("a runtime dir");
         std::fs::set_permissions(&rt, std::fs::Permissions::from_mode(0o700)).expect("private");
         // The CLI reads the runs directory and the runtime directory from the environment, which
-        // a test must not set for its own process: a wrapper script sets them for `tormoni` alone.
-        let wrapper = dir.path().join("tormoni");
+        // a test must not set for its own process: a wrapper script sets them for `boxdesk` alone.
+        let wrapper = dir.path().join("boxdesk");
         std::fs::write(
             &wrapper,
             format!(
-                "#!/bin/sh\nexport TORMONI_RUNS_DIR={}\nexport XDG_RUNTIME_DIR={}\nunset DISPLAY WAYLAND_DISPLAY\nexec {} \"$@\"\n",
+                "#!/bin/sh\nexport BOXDESK_RUNS_DIR={}\nexport XDG_RUNTIME_DIR={}\nunset DISPLAY WAYLAND_DISPLAY\nexec {} \"$@\"\n",
                 runs.display(),
                 rt.display(),
-                tormoni.display()
+                boxdesk.display()
             ),
         )
         .expect("the wrapper");
@@ -669,14 +669,14 @@ mod tests {
         };
         let name = start(&wrapper, &form).expect("started");
         assert_eq!(name.as_str(), "bridged");
-        let store = tormoni_record::Store::at(runs.clone()).expect("the store");
+        let store = boxdesk_record::Store::at(runs.clone()).expect("the store");
         let open = store
             .open_run("bridged")
             .expect("read")
             .expect("an open record");
-        assert_eq!(open.verb, tormoni_record::Verb::Up);
+        assert_eq!(open.verb, boxdesk_record::Verb::Up);
         stop(&wrapper, "bridged").expect("stopped");
         let ended = store.find("bridged").expect("read").expect("still there");
-        assert_eq!(ended.end, Some(tormoni_record::End::Stopped));
+        assert_eq!(ended.end, Some(boxdesk_record::End::Stopped));
     }
 }

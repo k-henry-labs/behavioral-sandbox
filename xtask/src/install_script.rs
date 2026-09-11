@@ -1,9 +1,9 @@
-//! `install.sh`, held in the gate: the script `curl -fsSL https://raw.githubusercontent.com/kendricklawton/tormoni/main/install.sh | sh`
+//! `install.sh`, held in the gate: the script `curl -fsSL https://raw.githubusercontent.com/kendricklawton/boxdesk/main/install.sh | sh`
 //! runs, which the release job uploads beside the artifacts.
 //!
 //! - **`sh -n` everywhere, `shellcheck` where it is.** The gate needs no tool it cannot name a
 //!   package for; a host without shellcheck says so rather than passing quietly.
-//! - **A dry run is the test.** `TORMONI_INSTALL_DRY_RUN=1` makes the script print every command
+//! - **A dry run is the test.** `BOXDESK_INSTALL_DRY_RUN=1` makes the script print every command
 //!   that would change the machine and run none, downloads included, so the tests below drive
 //!   it with a fake `uname` on `PATH` and read the plan back. What they cannot reach is said in
 //!   `docs/running.md`: the terminal prompt, sudo, and the real install on each host.
@@ -49,7 +49,7 @@ pub(crate) fn check(root: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tormoni_test_support::ScratchDir;
+    use boxdesk_test_support::ScratchDir;
 
     /// One dry run of the script on a pretend host: what it printed, and how it exited.
     struct DryRun {
@@ -80,7 +80,7 @@ mod tests {
                 .env("HOME", home)
                 .env("FAKE_OS", os)
                 .env("FAKE_ARCH", arch)
-                .env("TORMONI_INSTALL_DRY_RUN", "1");
+                .env("BOXDESK_INSTALL_DRY_RUN", "1");
             for (key, value) in env {
                 cmd.env(key, value);
             }
@@ -109,29 +109,29 @@ mod tests {
         let run = DryRun::on("Darwin", "arm64", home.path(), &[]);
         assert!(run.status.success(), "{}", run.output);
         assert!(
-            run.line_with("releases/latest/download/Tormoni-macos-aarch64.zip"),
+            run.line_with("releases/latest/download/Boxdesk-macos-aarch64.zip"),
             "{}",
             run.output
         );
         assert!(
-            run.line_with("+ mv ") && run.line_with("/Applications/Tormoni.app"),
+            run.line_with("+ mv ") && run.line_with("/Applications/Boxdesk.app"),
             "{}",
             run.output
         );
         assert!(
             run.line_with(
-                "+ ln -sf /Applications/Tormoni.app/Contents/Resources/tormoni /usr/local/bin/tormoni"
+                "+ ln -sf /Applications/Boxdesk.app/Contents/Resources/boxdesk /usr/local/bin/boxdesk"
             ),
             "{}",
             run.output
         );
-        let root = home.path().join(".local/share/tormoni/rootfs");
+        let root = home.path().join(".local/share/boxdesk/rootfs");
         assert!(
             run.line_with("+ tar -xzf") && run.line_with(&root.display().to_string()),
             "{}",
             run.output
         );
-        assert!(run.line_with("+ open -a Tormoni"), "{}", run.output);
+        assert!(run.line_with("+ open -a Boxdesk"), "{}", run.output);
         assert!(!root.exists(), "a dry run unpacked a tree");
     }
 
@@ -141,7 +141,7 @@ mod tests {
         let home = ScratchDir::created("install-linux");
         let run = DryRun::on("Linux", "x86_64", home.path(), &[]);
         assert!(run.status.success(), "{}", run.output);
-        assert!(run.line_with("tormoni-linux-x86_64.tgz"), "{}", run.output);
+        assert!(run.line_with("boxdesk-linux-x86_64.tgz"), "{}", run.output);
         assert!(
             run.line_with("tar -xzf") && run.line_with("-C /usr/local"),
             "{}",
@@ -182,7 +182,7 @@ mod tests {
                 "Darwin",
                 "arm64",
                 home.path(),
-                &[("TORMONI_VERSION", version)],
+                &[("BOXDESK_VERSION", version)],
             );
             assert!(run.status.success(), "{}", run.output);
             assert!(run.line_with("releases/download/v0.0.5/"), "{}", run.output);
@@ -190,11 +190,11 @@ mod tests {
     }
 
     /// A guest tree the installer did not write is kept, since it may be one `cargo xtask init`
-    /// or a person built; `TORMONI_REPLACE_ROOTFS=1` is the way to say otherwise.
+    /// or a person built; `BOXDESK_REPLACE_ROOTFS=1` is the way to say otherwise.
     #[test]
     fn a_tree_the_installer_did_not_write_is_kept() {
         let home = ScratchDir::created("install-kept");
-        let root = home.path().join(".local/share/tormoni/rootfs");
+        let root = home.path().join(".local/share/boxdesk/rootfs");
         for marker in ["bin", "usr"] {
             std::fs::create_dir_all(root.join(marker)).unwrap();
         }
@@ -207,7 +207,7 @@ mod tests {
             "Darwin",
             "arm64",
             home.path(),
-            &[("TORMONI_REPLACE_ROOTFS", "1")],
+            &[("BOXDESK_REPLACE_ROOTFS", "1")],
         );
         assert!(
             replaced.line_with(&format!("+ rm -rf {}", root.display())),

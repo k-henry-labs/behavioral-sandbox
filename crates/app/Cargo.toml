@@ -1,5 +1,5 @@
 [package]
-name = "tormoni-app"
+name = "boxdesk-app"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -7,21 +7,21 @@ rust-version.workspace = true
 repository.workspace = true
 authors.workspace = true
 publish = false
-description = "The Tormoni GUI application (`Tormoni`): the notebook."
+description = "The Boxdesk GUI application (`Boxdesk`): the notebook."
 
 [[bin]]
-name = "tormoni-app"
+name = "boxdesk-app"
 path = "src/main.rs"
 
 [dependencies]
 # The mapping of a leased display's memfd (`SharedFrames`) and the pixel formats it names.
-tormoni-krun = { path = "../krun" }
+boxdesk-krun = { path = "../krun" }
 # The reports the window's keyboard and pointer become, and the lines they travel as.
-tormoni-input = { path = "../input" }
+boxdesk-input = { path = "../input" }
 # The notebook's records, read straight from the runs directory.
-tormoni-record = { path = "../record" }
+boxdesk-record = { path = "../record" }
 # The control socket a display is leased over.
-tormoni-supervisor = { path = "../supervisor" }
+boxdesk-supervisor = { path = "../supervisor" }
 clap = { workspace = true }
 iced = { workspace = true }
 # The console's answer to a sign-in, `/v1/account`, is the one JSON this reads.
@@ -39,7 +39,7 @@ objc2-app-kit = { version = "0.2", features = ["NSResponder", "NSToolbar", "NSVi
 objc2-foundation = { version = "0.2", features = ["NSProcessInfo", "NSString"] }
 
 [dev-dependencies]
-tormoni-test-support = { path = "../test-support" }
+boxdesk-test-support = { path = "../test-support" }
 ttf-parser = "0.25.1"
 
 [lints]

@@ -1,23 +1,23 @@
 # Building guest images
 
-Tormoni uses minimal Alpine Linux guest images containing only the components
+Boxdesk uses minimal Alpine Linux guest images containing only the components
 required to run workloads and the static guest agent. Guest rootfs trees are built without root
 privileges, and `--verify` builds one twice and compares the two trees byte for byte.
 
 ## A tree to boot right away (`cargo xtask init`)
 
-`cargo xtask init` puts the pinned Alpine minirootfs and the static guest agent where `tormoni` resolves
-a root (`--root`, then `$TORMONI_GUEST_ROOT`, then `~/.local/share/tormoni/rootfs`), with the `/results`
+`cargo xtask init` puts the pinned Alpine minirootfs and the static guest agent where `boxdesk` resolves
+a root (`--root`, then `$BOXDESK_GUEST_ROOT`, then `~/.local/share/boxdesk/rootfs`), with the `/results`
 mount point and a resolver beside them. It runs on either platform: the base is a tarball and the
 agent is a static musl build, so neither step needs `apk`.
 
 ```console
-cargo xtask init                      # this host's arch, into tormoni's default root
+cargo xtask init                      # this host's arch, into boxdesk's default root
 cargo xtask init --root DIR --force   # somewhere else, replacing a tree already there
 ```
 
 `cargo xtask dist` writes the same tree for this host's guest and packs it into the release
-artifact (`rootfs.tar.gz` under `Tormoni.app/Contents/Resources`, or under `share/tormoni` in the
+artifact (`rootfs.tar.gz` under `Boxdesk.app/Contents/Resources`, or under `share/boxdesk` in the
 Linux tarball), which `install.sh` unpacks to that default root. A release is whole without a
 checkout.
 
@@ -70,8 +70,8 @@ The desktop sandbox image adds graphical and terminal session support for `--dis
 - **`seatd` and `eudev`**: Seat management and device node creation inside the guest.
 - **`xkeyboard-config` and `font-dejavu`**: The keymaps xkbcommon reads, and one font. No Mesa
   driver: the session renders with pixman.
-- **`tormoni-session`**: Not a package but a program the build writes to
-  `/usr/local/bin/tormoni-session`, which launches `seatd`, starts `cage`, and runs `foot` in it.
+- **`boxdesk-session`**: Not a package but a program the build writes to
+  `/usr/local/bin/boxdesk-session`, which launches `seatd`, starts `cage`, and runs `foot` in it.
 
 ### ML guest closure (`artifacts/rootfs-ml`)
 

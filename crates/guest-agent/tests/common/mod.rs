@@ -15,8 +15,8 @@ use std::os::unix::net::UnixStream;
 use std::path::Path;
 use std::thread::JoinHandle;
 
-use tormoni_channel::{ClientConnection, Request, Response};
-use tormoni_guest_agent::AgentError;
+use boxdesk_channel::{ClientConnection, Request, Response};
+use boxdesk_guest_agent::AgentError;
 
 /// The deadline every test that is not *about* the deadline sends: long enough that a slow machine
 /// never trips it, so a `TimedOut` in those tests is a real finding.
@@ -102,16 +102,16 @@ pub struct Agent {
 }
 
 impl Agent {
-    /// An agent on a fresh per-run working dir ([`tormoni_guest_agent::serve`]).
+    /// An agent on a fresh per-run working dir ([`boxdesk_guest_agent::serve`]).
     pub fn start() -> Self {
-        Self::spawn(tormoni_guest_agent::serve)
+        Self::spawn(boxdesk_guest_agent::serve)
     }
 
-    /// An agent on the caller's stable session dir ([`tormoni_guest_agent::serve_session`]), the
+    /// An agent on the caller's stable session dir ([`boxdesk_guest_agent::serve_session`]), the
     /// state-across-connections path.
     pub fn start_in(dir: &Path) -> Self {
         let dir = dir.to_path_buf();
-        Self::spawn(move |guest| tormoni_guest_agent::serve_session(guest, &dir))
+        Self::spawn(move |guest| boxdesk_guest_agent::serve_session(guest, &dir))
     }
 
     /// An agent running `serve` on its own thread, for a caller that must wrap the call (a test

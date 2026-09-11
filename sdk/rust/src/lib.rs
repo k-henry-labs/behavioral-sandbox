@@ -1,23 +1,23 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
-//! The Rust SDK for [Tormoni], which runs untrusted code inside a hardware-isolated virtual
+//! The Rust SDK for [Boxdesk], which runs untrusted code inside a hardware-isolated virtual
 //! machine on your own machine.
 //!
 //! This crate implements no virtualization and speaks no HTTP. It calls the same
-//! [`execute_sandbox`] the `tormoni` binary calls, in this process, so a run started here leaves
+//! [`execute_sandbox`] the `boxdesk` binary calls, in this process, so a run started here leaves
 //! the record a run started at a keyboard leaves — there is one run path, not two that agree
 //! today.
 //!
 //! ```no_run
-//! use tormoni::{Sandbox, Tormoni};
+//! use boxdesk::{Sandbox, Boxdesk};
 //!
-//! let outcome = Tormoni::new().run(Sandbox::new(["echo", "hi"]))?;
+//! let outcome = Boxdesk::new().run(Sandbox::new(["echo", "hi"]))?;
 //! println!("{}", outcome.stdout()?);
-//! # Ok::<(), tormoni::Error>(())
+//! # Ok::<(), boxdesk::Error>(())
 //! ```
 //!
-//! [Tormoni]: https://github.com/kendricklawton/tormoni
+//! [Boxdesk]: https://github.com/kendricklawton/boxdesk
 
 use std::ffi::OsString;
 use std::num::{NonZeroU8, NonZeroU32};
@@ -26,10 +26,10 @@ use std::path::{Path, PathBuf};
 // Named one by one rather than glob-re-exported. Two `pub use ...::*` lines put every item of two
 // crates into this namespace, so anything either adds later lands in this SDK's public API without
 // anybody deciding it should.
-pub use tormoni_record::{
+pub use boxdesk_record::{
     DisplayMode, End, Mount, Network, Posture, Record, Rootfs, RunDir, Share, Verb,
 };
-pub use tormoni_supervisor::{Net, RootFs};
+pub use boxdesk_supervisor::{Net, RootFs};
 
 /// What went wrong. A guest command exiting non-zero is **not** one of these: that is an
 /// [`Outcome`] whose [`ok`](Outcome::ok) is false.
@@ -70,7 +70,7 @@ impl From<std::io::Error> for Error {
 /// The posture to run under: what the sandbox may touch, and with how much.
 ///
 /// Every field is optional and unset means the CLI's own default, so this adds no defaults of its
-/// own. It is the argument to [`Tormoni::run`].
+/// own. It is the argument to [`Boxdesk::run`].
 #[derive(Debug, Clone, Default)]
 pub struct Sandbox {
     command: Vec<String>,
@@ -111,7 +111,7 @@ impl Sandbox {
         self
     }
 
-    /// The guest root tree. Unset: `$TORMONI_GUEST_ROOT`, then the per-user data directory.
+    /// The guest root tree. Unset: `$BOXDESK_GUEST_ROOT`, then the per-user data directory.
     #[must_use]
     pub fn root(mut self, root: impl Into<PathBuf>) -> Self {
         self.root = Some(root.into());
@@ -188,7 +188,7 @@ impl Sandbox {
     ///
     /// A run is ephemeral by default: its output comes back in the [`Outcome`] and the directory
     /// it worked in goes with it. Keep it to read what the guest wrote to `/results`, or to reach
-    /// the run again with [`Tormoni::show`].
+    /// the run again with [`Boxdesk::show`].
     #[must_use]
     pub fn keep(mut self) -> Self {
         self.keep = true;
@@ -220,7 +220,7 @@ pub struct Outcome {
     pub record: Record,
     /// The run's directory, when [`Sandbox::keep`] filed one.
     pub dir: Option<RunDir>,
-    /// The guest command's own exit status, which is what `tormoni run` exits with.
+    /// The guest command's own exit status, which is what `boxdesk run` exits with.
     pub code: u8,
 }
 
@@ -262,11 +262,11 @@ impl Outcome {
     }
 }
 
-/// A handle on the Tormoni core.
+/// A handle on the Boxdesk core.
 #[derive(Debug, Clone, Copy, Default)]
-pub struct Tormoni;
+pub struct Boxdesk;
 
-impl Tormoni {
+impl Boxdesk {
     /// A new handle. It holds nothing; the run store is opened per call.
     #[must_use]
     pub fn new() -> Self {
@@ -276,7 +276,7 @@ impl Tormoni {
     /// Boot a fresh sandbox, run the command, wait, and return what it left.
     ///
     /// A non-zero guest exit is not an error: it is an [`Outcome`] whose [`ok`](Outcome::ok) is
-    /// false. Only a failure of Tormoni itself is an [`Error`].
+    /// false. Only a failure of Boxdesk itself is an [`Error`].
     pub fn run(&self, sandbox: Sandbox) -> Result<Outcome, Error> {
         self.execute(sandbox, false)
     }
@@ -288,7 +288,7 @@ impl Tormoni {
 
     /// One filed run, by id or by name.
     pub fn show(&self, key: &str) -> Result<Outcome, Error> {
-        let store = tormoni_record::Store::open()?;
+        let store = boxdesk_record::Store::open()?;
         let record = store
             .find(key)?
             .ok_or_else(|| Error::Sandbox(format!("no run {key:?} in the run store")))?;
@@ -303,7 +303,7 @@ impl Tormoni {
 
     /// The filed runs, newest first. Without `all`, only the ones still open.
     pub fn runs(&self, all: bool) -> Result<Vec<Record>, Error> {
-        let store = tormoni_record::Store::open()?;
+        let store = boxdesk_record::Store::open()?;
         Ok(store
             .list()?
             .into_iter()
@@ -317,12 +317,12 @@ impl Tormoni {
                 "command is empty: pass at least the program to run".to_string(),
             ));
         };
-        let root = tormoni_core::resolve_root(sandbox.root.as_deref().map(Path::new))
+        let root = boxdesk_core::resolve_root(sandbox.root.as_deref().map(Path::new))
             .map_err(Error::Posture)?;
 
-        let mut cfg = tormoni_supervisor::VmConfig::new(root, program);
+        let mut cfg = boxdesk_supervisor::VmConfig::new(root, program);
         cfg.args = rest.iter().map(OsString::from).collect();
-        // The whole entry goes to the guest; `tormoni_core::posture_of` is what cuts it down to a
+        // The whole entry goes to the guest; `boxdesk_core::posture_of` is what cuts it down to a
         // name for the record, so this SDK never holds both halves.
         cfg.env = sandbox.env;
         cfg.workdir = sandbox.workdir;
@@ -343,7 +343,7 @@ impl Tormoni {
             cfg.rootfs = r;
         }
 
-        let opts = tormoni_core::SandboxOptions {
+        let opts = boxdesk_core::SandboxOptions {
             name: sandbox
                 .name
                 .unwrap_or_else(|| format!("run-{}", std::process::id())),
@@ -356,7 +356,7 @@ impl Tormoni {
             // well would put guest bytes into the host program's own streams.
             quiet: true,
         };
-        let (record, dir, code) = tormoni_core::execute_sandbox(opts).map_err(Error::Sandbox)?;
+        let (record, dir, code) = boxdesk_core::execute_sandbox(opts).map_err(Error::Sandbox)?;
         Ok(Outcome { record, dir, code })
     }
 }

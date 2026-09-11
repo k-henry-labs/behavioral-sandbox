@@ -1,35 +1,35 @@
 #!/bin/sh
-# install.sh: `curl -fsSL https://raw.githubusercontent.com/kendricklawton/tormoni/main/install.sh | sh`
+# install.sh: `curl -fsSL https://raw.githubusercontent.com/kendricklawton/boxdesk/main/install.sh | sh`
 #
 # Installs the release `cargo xtask dist` built for this host. macOS on ARM64 gets
-# /Applications/Tormoni.app and /usr/local/bin/tormoni pointing into it; Linux on x86_64 gets
-# bin/tormoni, bin/Tormoni and share/... under the first of /usr/local, /usr, / whose bin is on
-# PATH. Both then unpack the guest tree to where `tormoni` looks for one, and offer the package
+# /Applications/Boxdesk.app and /usr/local/bin/boxdesk pointing into it; Linux on x86_64 gets
+# bin/boxdesk, bin/Boxdesk and share/... under the first of /usr/local, /usr, / whose bin is on
+# PATH. Both then unpack the guest tree to where `boxdesk` looks for one, and offer the package
 # manager's libkrun, which no release can carry.
 #
 # The body is one function called on the last line, so a truncated download runs nothing.
 #
 # Environment:
-#   TORMONI_VERSION=0.0.5       that tag's assets rather than the latest release
-#   TORMONI_INSTALL_YES=1       run the libkrun package-manager line without asking (also --yes)
-#   TORMONI_NO_START=1          do not open the app afterwards (macOS)
-#   TORMONI_REPLACE_ROOTFS=1    replace a guest tree this script did not write
-#   TORMONI_INSTALL_DRY_RUN=1   print each command that would change this machine, run none (also --dry-run)
+#   BOXDESK_VERSION=0.0.5       that tag's assets rather than the latest release
+#   BOXDESK_INSTALL_YES=1       run the libkrun package-manager line without asking (also --yes)
+#   BOXDESK_NO_START=1          do not open the app afterwards (macOS)
+#   BOXDESK_REPLACE_ROOTFS=1    replace a guest tree this script did not write
+#   BOXDESK_INSTALL_DRY_RUN=1   print each command that would change this machine, run none (also --dry-run)
 
 set -eu
 
-REPO="kendricklawton/tormoni"
-APP="Tormoni"
+REPO="kendricklawton/boxdesk"
+APP="Boxdesk"
 APP_DIR="/Applications/$APP.app"
-CLI_IN_APP="Contents/Resources/tormoni"
+CLI_IN_APP="Contents/Resources/boxdesk"
 ROOTFS_IN_APP="Contents/Resources/rootfs.tar.gz"
 # The release binary names libkrun by the install name Homebrew gave it and loads libkrunfw from
 # this prefix's lib, so a boot needs these two files, not "libkrun somewhere".
 BREW_PREFIX="/opt/homebrew"
 BREW_LINE="brew tap slp/krun && brew trust slp/krun && brew install libkrun libkrunfw"
 
-DRY_RUN="${TORMONI_INSTALL_DRY_RUN:-}"
-YES="${TORMONI_INSTALL_YES:-}"
+DRY_RUN="${BOXDESK_INSTALL_DRY_RUN:-}"
+YES="${BOXDESK_INSTALL_YES:-}"
 MISSING_LIBKRUN=
 SUDO=
 
@@ -136,25 +136,25 @@ obtain() {
     verify "$ASSET"
 }
 
-# Where `tormoni` looks for a guest tree when no flag names one, in its own order:
-# $TORMONI_GUEST_ROOT, else $XDG_DATA_HOME/tormoni/rootfs, else ~/.local/share/tormoni/rootfs.
+# Where `boxdesk` looks for a guest tree when no flag names one, in its own order:
+# $BOXDESK_GUEST_ROOT, else $XDG_DATA_HOME/boxdesk/rootfs, else ~/.local/share/boxdesk/rootfs.
 # Under sudo the person's home is read from passwd, and XDG_DATA_HOME is root's, so it is not used.
 guest_root() {
-    if [ -n "${TORMONI_GUEST_ROOT:-}" ]; then
-        echo "$TORMONI_GUEST_ROOT"
+    if [ -n "${BOXDESK_GUEST_ROOT:-}" ]; then
+        echo "$BOXDESK_GUEST_ROOT"
         return
     fi
     if [ "$(id -u)" -eq 0 ] && [ -n "${SUDO_USER:-}" ]; then
         home=$(getent passwd "$SUDO_USER" 2>/dev/null | cut -d: -f6)
-        echo "${home:-/home/$SUDO_USER}/.local/share/tormoni/rootfs"
+        echo "${home:-/home/$SUDO_USER}/.local/share/boxdesk/rootfs"
         return
     fi
-    echo "${XDG_DATA_HOME:-$HOME/.local/share}/tormoni/rootfs"
+    echo "${XDG_DATA_HOME:-$HOME/.local/share}/boxdesk/rootfs"
 }
 
 # Unpacks the guest tree the release carries. rootfs.sha256 beside the tree records which archive
 # wrote it: the same archive is skipped, a different one replaces the tree, and a tree with no
-# record (`cargo xtask init`, or a hand-made one) is kept unless TORMONI_REPLACE_ROOTFS says so.
+# record (`cargo xtask init`, or a hand-made one) is kept unless BOXDESK_REPLACE_ROOTFS says so.
 install_rootfs() {
     archive="$1"
     root=$(guest_root)
@@ -169,8 +169,8 @@ install_rootfs() {
         return 0
     fi
     if [ -d "$root" ] && [ -n "$(ls -A "$root")" ]; then
-        if [ ! -f "$record" ] && [ -z "${TORMONI_REPLACE_ROOTFS:-}" ]; then
-            warning "$root holds a guest tree this installer did not write; keeping it (TORMONI_REPLACE_ROOTFS=1 replaces it)"
+        if [ ! -f "$record" ] && [ -z "${BOXDESK_REPLACE_ROOTFS:-}" ]; then
+            warning "$root holds a guest tree this installer did not write; keeping it (BOXDESK_REPLACE_ROOTFS=1 replaces it)"
             return 0
         fi
         if [ ! -d "$root/bin" ] || [ ! -d "$root/usr" ]; then
@@ -284,10 +284,10 @@ install_macos() {
     as_admin mv "$TEMP_DIR/$APP.app" "$APP_DIR"
 
     target="$APP_DIR/$CLI_IN_APP"
-    if [ "$(readlink /usr/local/bin/tormoni 2>/dev/null || true)" != "$target" ]; then
-        status "Adding 'tormoni' to PATH as /usr/local/bin/tormoni"
+    if [ "$(readlink /usr/local/bin/boxdesk 2>/dev/null || true)" != "$target" ]; then
+        status "Adding 'boxdesk' to PATH as /usr/local/bin/boxdesk"
         as_admin mkdir -p /usr/local/bin
-        as_admin ln -sf "$target" /usr/local/bin/tormoni
+        as_admin ln -sf "$target" /usr/local/bin/boxdesk
     fi
 
     install_rootfs "$APP_DIR/$ROOTFS_IN_APP"
@@ -296,10 +296,10 @@ install_macos() {
     if [ "$(sysctl -n kern.hv_support 2>/dev/null || echo 0)" != 1 ]; then
         warning "kern.hv_support is not 1: Hypervisor.framework will not start a sandbox on this machine"
     fi
-    if [ -z "${TORMONI_NO_START:-}" ]; then
+    if [ -z "${BOXDESK_NO_START:-}" ]; then
         run open -a "$APP"
     fi
-    status "Install complete. Run 'tormoni' from the command line, or open $APP."
+    status "Install complete. Run 'boxdesk' from the command line, or open $APP."
 }
 
 install_linux() {
@@ -325,17 +325,17 @@ install_linux() {
 
     obtain
     stop_app
-    status "Installing under $INSTALL_DIR: bin/tormoni, bin/$APP, share/applications, share/icons, share/tormoni"
-    as_root rm -rf "$INSTALL_DIR/share/tormoni"
+    status "Installing under $INSTALL_DIR: bin/boxdesk, bin/$APP, share/applications, share/icons, share/boxdesk"
+    as_root rm -rf "$INSTALL_DIR/share/boxdesk"
     # root's tar takes ownership and mode from the archive by default, so an archive naming a
     # setuid file would be obeyed. The release carries none; these say so rather than trust it.
     as_root tar --no-same-owner --no-same-permissions -xzf "$TEMP_DIR/$ASSET" -C "$INSTALL_DIR"
-    as_root chmod 0755 "$BINDIR/tormoni" "$BINDIR/$APP"
+    as_root chmod 0755 "$BINDIR/boxdesk" "$BINDIR/$APP"
     if available update-desktop-database; then
         as_root update-desktop-database "$INSTALL_DIR/share/applications" 2>/dev/null || true
     fi
 
-    install_rootfs "$INSTALL_DIR/share/tormoni/rootfs.tar.gz"
+    install_rootfs "$INSTALL_DIR/share/boxdesk/rootfs.tar.gz"
     ensure_libkrun_linux
 
     if ! kvm_usable; then
@@ -343,7 +343,7 @@ install_linux() {
         warning "/dev/kvm is not readable and writable by $who: a sandbox will not boot."
         warning "That usually means membership of the kvm group: sudo usermod -aG kvm $who, then a new login."
     fi
-    status "Install complete. Run 'tormoni' from the command line, or start $APP from the desktop's launcher."
+    status "Install complete. Run 'boxdesk' from the command line, or start $APP from the desktop's launcher."
 }
 
 cleanup() { rm -rf "$TEMP_DIR"; }
@@ -361,12 +361,12 @@ main() {
     OS=$(uname -s)
     ARCH=$(uname -m)
     case "$OS/$ARCH" in
-        Darwin/arm64) ASSET="Tormoni-macos-aarch64.zip" ;;
-        Linux/x86_64) ASSET="tormoni-linux-x86_64.tgz" ;;
-        *) error "tormoni has a release for macOS on ARM64 (Apple silicon) and for Linux on x86_64; this is $OS on $ARCH" ;;
+        Darwin/arm64) ASSET="Boxdesk-macos-aarch64.zip" ;;
+        Linux/x86_64) ASSET="boxdesk-linux-x86_64.tgz" ;;
+        *) error "boxdesk has a release for macOS on ARM64 (Apple silicon) and for Linux on x86_64; this is $OS on $ARCH" ;;
     esac
 
-    VERSION="${TORMONI_VERSION:-}"
+    VERSION="${BOXDESK_VERSION:-}"
     if [ -n "$VERSION" ]; then
         BASE_URL="https://github.com/$REPO/releases/download/v${VERSION#v}"
     else
@@ -382,7 +382,7 @@ main() {
     esac
 
     if [ -n "$MISSING_LIBKRUN" ]; then
-        warning "The binaries are installed, but libkrun is not, so no sandbox boots yet. Run the line above, then 'tormoni run -- uname -a'."
+        warning "The binaries are installed, but libkrun is not, so no sandbox boots yet. Run the line above, then 'boxdesk run -- uname -a'."
         exit 1
     fi
 }

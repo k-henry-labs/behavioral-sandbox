@@ -3,14 +3,14 @@ requires = ["maturin>=1.5,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "tormoni"
+name = "boxdesk"
 dynamic = ["version"]
-description = "The Python SDK for Tormoni: run untrusted code in a hardware-isolated VM"
+description = "The Python SDK for Boxdesk: run untrusted code in a hardware-isolated VM"
 readme = "README.md"
 requires-python = ">=3.9"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
-keywords = ["tormoni", "sandbox", "vm", "libkrun", "isolation", "untrusted-code"]
+keywords = ["boxdesk", "sandbox", "vm", "libkrun", "isolation", "untrusted-code"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -35,7 +35,7 @@ dev = ["pytest>=7.0", "mypy>=1.0", "ruff>=0.6"]
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
-module-name = "tormoni._tormoni_core"
+module-name = "boxdesk._boxdesk_core"
 python-source = "src"
 
 [tool.mypy]

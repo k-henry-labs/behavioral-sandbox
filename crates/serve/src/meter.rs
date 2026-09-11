@@ -193,7 +193,7 @@ impl Meter {
         let units = self.allocation.over(now.duration_since(self.since));
         self.since = now;
         self.ledger
-            .append(&self.run_id, tormoni_record::now_ms(), units)?;
+            .append(&self.run_id, boxdesk_record::now_ms(), units)?;
         Ok(units)
     }
 }
@@ -201,7 +201,7 @@ impl Meter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tormoni_test_support::ScratchDir;
+    use boxdesk_test_support::ScratchDir;
 
     /// **Allocated, not used.** A sandbox that sat idle held what it was given, and the number
     /// comes from the allocation alone, so it is reproducible from the record's `limits` line

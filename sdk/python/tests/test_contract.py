@@ -13,14 +13,14 @@ import tempfile
 
 import pytest
 
-from tormoni import Tormoni
+from boxdesk import Boxdesk
 
 SECRET = "s3cret-value-nobody-should-see"
 
 
 @pytest.fixture
-def tormoni():
-    return Tormoni()
+def boxdesk():
+    return Boxdesk()
 
 
 @pytest.fixture
@@ -33,14 +33,14 @@ def root():
 class TestEnvironmentAsymmetry:
     """A value goes out whole; only the NAME comes back."""
 
-    def test_only_names_come_back(self, tormoni, root):
-        run = tormoni.dry_run(
+    def test_only_names_come_back(self, boxdesk, root):
+        run = boxdesk.dry_run(
             ["env"], root=root, env={"API_KEY": SECRET, "DEBUG": "1"}
         )
         assert run.posture.env == ["API_KEY", "DEBUG"]
 
-    def test_no_field_of_the_record_holds_the_value(self, tormoni, root):
-        run = tormoni.dry_run(["env"], root=root, env={"API_KEY": SECRET})
+    def test_no_field_of_the_record_holds_the_value(self, boxdesk, root):
+        run = boxdesk.dry_run(["env"], root=root, env={"API_KEY": SECRET})
         # Every readable attribute, RECURSIVELY: a field added later that carried the value
         # would slip past an assertion listing today's.
         #
@@ -50,14 +50,14 @@ class TestEnvironmentAsymmetry:
         # green, which is how that was found.
         assert SECRET not in _flatten(run), _flatten(run)
 
-    def test_a_value_holding_an_equals_sign_keeps_its_name(self, tormoni, root):
-        run = tormoni.dry_run(["env"], root=root, env={"TOKEN": "a=b=c"})
+    def test_a_value_holding_an_equals_sign_keeps_its_name(self, boxdesk, root):
+        run = boxdesk.dry_run(["env"], root=root, env={"TOKEN": "a=b=c"})
         assert run.posture.env == ["TOKEN"]
 
 
 class TestPosture:
-    def test_it_is_the_one_that_was_asked_for(self, tormoni, root):
-        run = tormoni.dry_run(
+    def test_it_is_the_one_that_was_asked_for(self, boxdesk, root):
+        run = boxdesk.dry_run(
             ["true"],
             root=root,
             vcpus=2,
@@ -74,10 +74,10 @@ class TestPosture:
         assert run.posture.mounts == [("/mnt", root)]
         assert run.posture.shares == [("tag", root)]
 
-    def test_the_defaults_are_the_clis_own(self, tormoni, root):
+    def test_the_defaults_are_the_clis_own(self, boxdesk, root):
         """Unset means the CLI's default. This SDK adds none of its own, and one that drifted
         would hand a caller a sandbox the documentation does not describe."""
-        run = tormoni.dry_run(["true"], root=root)
+        run = boxdesk.dry_run(["true"], root=root)
         assert run.posture.vcpus == 1
         assert run.posture.mem_mib == 512
         assert run.posture.network == "none"
@@ -89,34 +89,34 @@ class TestBoundaryRefusals:
     """``NonZeroU8`` and ``NonZeroU32`` are the core's types. Zero is refused HERE, with a
     sentence, rather than silently becoming the default on the way through."""
 
-    def test_zero_vcpus_is_refused(self, tormoni, root):
+    def test_zero_vcpus_is_refused(self, boxdesk, root):
         with pytest.raises(ValueError, match="at least 1"):
-            tormoni.dry_run(["true"], root=root, vcpus=0)
+            boxdesk.dry_run(["true"], root=root, vcpus=0)
 
-    def test_zero_memory_is_refused(self, tormoni, root):
+    def test_zero_memory_is_refused(self, boxdesk, root):
         with pytest.raises(ValueError, match="at least 1"):
-            tormoni.dry_run(["true"], root=root, mem_mib=0)
+            boxdesk.dry_run(["true"], root=root, mem_mib=0)
 
-    def test_an_unknown_posture_word_is_refused(self, tormoni, root):
+    def test_an_unknown_posture_word_is_refused(self, boxdesk, root):
         # The dangerous version of this bug is silent: "writeable" falling through to read-only
         # gives a caller a sandbox they did not ask for and no sign of it.
         with pytest.raises(ValueError, match="read-only"):
-            tormoni.dry_run(["true"], root=root, rootfs="writeable")
+            boxdesk.dry_run(["true"], root=root, rootfs="writeable")
         with pytest.raises(ValueError, match="none"):
-            tormoni.dry_run(["true"], root=root, net="host")
+            boxdesk.dry_run(["true"], root=root, net="host")
 
-    def test_an_empty_command_is_refused(self, tormoni, root):
+    def test_an_empty_command_is_refused(self, boxdesk, root):
         with pytest.raises(ValueError, match="empty"):
-            tormoni.dry_run([], root=root)
+            boxdesk.dry_run([], root=root)
 
-    def test_a_missing_guest_root_is_refused(self, tormoni):
+    def test_a_missing_guest_root_is_refused(self, boxdesk):
         with pytest.raises(RuntimeError):
-            tormoni.dry_run(["true"], root="/definitely/not/a/guest/root")
+            boxdesk.dry_run(["true"], root="/definitely/not/a/guest/root")
 
 
 class TestDryRun:
-    def test_it_has_no_end_and_no_directory(self, tormoni, root):
-        run = tormoni.dry_run(["echo", "hi"], root=root)
+    def test_it_has_no_end_and_no_directory(self, boxdesk, root):
+        run = boxdesk.dry_run(["echo", "hi"], root=root)
         assert run.command == ["echo", "hi"]
         assert run.verb == "run"
         assert run.end_kind is None
@@ -124,26 +124,26 @@ class TestDryRun:
         assert run.dir is None
         assert run.ok is False
 
-    def test_a_non_zero_exit_is_not_an_exception(self, tormoni, root):
+    def test_a_non_zero_exit_is_not_an_exception(self, boxdesk, root):
         """The heart of the contract. A guest command's own status says nothing about whether
-        Tormoni worked, so `ok` is the field to branch on and nothing raises for it.
+        Boxdesk worked, so `ok` is the field to branch on and nothing raises for it.
 
         A dry run cannot produce a non-zero end, so this asserts the shape that decides it:
         `ok` is false for anything that is not a clean zero exit."""
-        run = tormoni.dry_run(["false"], root=root)
+        run = boxdesk.dry_run(["false"], root=root)
         assert run.ok is False
         assert run.end_code is None
 
 
 class TestStore:
-    def test_a_missing_run_names_what_was_asked_for(self, tormoni):
+    def test_a_missing_run_names_what_was_asked_for(self, boxdesk):
         with pytest.raises(KeyError, match="no run"):
-            tormoni.show("1-definitely-not-a-run")
+            boxdesk.show("1-definitely-not-a-run")
 
-    def test_listing_runs_does_not_raise(self, tormoni):
+    def test_listing_runs_does_not_raise(self, boxdesk):
         # `runs` and `show` threw "not supported in FFI yet" for a while. That they answer at all
         # is the assertion; what is in the store depends on the machine.
-        assert isinstance(tormoni.runs(all=True), list)
+        assert isinstance(boxdesk.runs(all=True), list)
 
 
 def _flatten(value, depth: int = 0) -> str:

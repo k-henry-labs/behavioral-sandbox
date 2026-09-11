@@ -1,8 +1,8 @@
-// Copyright 2026 The Tormoni Authors. All rights reserved.
+// Copyright 2026 The Boxdesk Authors. All rights reserved.
 // Use of this source code is governed by the Apache-2.0 license that can be
 // found in the LICENSE file.
 
-package tormoni
+package boxdesk
 
 import (
 	"errors"
@@ -10,18 +10,18 @@ import (
 	"strings"
 )
 
-// ErrNotFound is returned when the tormoni binary cannot be located. Test for
+// ErrNotFound is returned when the boxdesk binary cannot be located. Test for
 // it with errors.Is.
-var ErrNotFound = errors.New("tormoni: binary not found")
+var ErrNotFound = errors.New("boxdesk: binary not found")
 
-// Error is an operational failure: Tormoni itself did not work. The binary
+// Error is an operational failure: Boxdesk itself did not work. The binary
 // missing, the guest root being absent, the hypervisor not answering — those
 // are Errors.
 //
 // A guest command exiting non-zero is not an Error. It is a *Run with EndKind
 // EndExit and a non-zero EndCode.
 //
-// Stderr is Tormoni's own message, written for a person and reproduced
+// Stderr is Boxdesk's own message, written for a person and reproduced
 // verbatim. This package never rewords it.
 type Error struct {
 	// Verb is the CLI verb that failed: "run", "show" or "ls".
@@ -29,7 +29,7 @@ type Error struct {
 
 	// Args is the argument list passed to the binary, without the binary
 	// itself, and with the value of every --env entry replaced by
-	// "<redacted>". Tormoni deliberately never writes an environment value to
+	// "<redacted>". Boxdesk deliberately never writes an environment value to
 	// a record, and an error from this package must not undo that by spilling
 	// one into a log. The names are left intact.
 	Args []string
@@ -37,7 +37,7 @@ type Error struct {
 	// Stdout is whatever the binary wrote to stdout, unparsed.
 	Stdout string
 
-	// Stderr is Tormoni's message, verbatim.
+	// Stderr is Boxdesk's message, verbatim.
 	Stderr string
 
 	// ExitCode is the binary's exit status, or -1 if it never ran to
@@ -49,19 +49,19 @@ type Error struct {
 	Err error
 }
 
-// Error returns Tormoni's own stderr when there is any, so upstream's wording
+// Error returns Boxdesk's own stderr when there is any, so upstream's wording
 // reaches the caller untouched.
 func (e *Error) Error() string {
-	// Only the trailing newline goes; whatever Tormoni wrote inside the
+	// Only the trailing newline goes; whatever Boxdesk wrote inside the
 	// message is its own. Stderr that is nothing but whitespace is no message
 	// at all, and falls through to something a reader can act on.
 	if strings.TrimSpace(e.Stderr) != "" {
 		return strings.TrimRight(e.Stderr, "\n")
 	}
 	if e.Err != nil {
-		return fmt.Sprintf("tormoni %s: %v", e.Verb, e.Err)
+		return fmt.Sprintf("boxdesk %s: %v", e.Verb, e.Err)
 	}
-	return fmt.Sprintf("tormoni %s: exited %d without writing a JSON document", e.Verb, e.ExitCode)
+	return fmt.Sprintf("boxdesk %s: exited %d without writing a JSON document", e.Verb, e.ExitCode)
 }
 
 // Unwrap returns the underlying cause, so errors.Is reaches context.Canceled,
@@ -74,7 +74,7 @@ const redactionMarker = "<redacted>"
 
 // redactEnvValues copies args with the value of every --env entry replaced, so
 // that an *Error can be logged or serialised without spilling a secret the
-// caller passed in. Tormoni deliberately never writes an environment value to
+// caller passed in. Boxdesk deliberately never writes an environment value to
 // a record; an error from this package must not undo that.
 //
 // Only flags are considered: everything after the bare "--" is the guest's

@@ -5,7 +5,7 @@
 //! module-private rather than in a separate `-sys` package means the safe wrapper beside them is
 //! the *only* way to reach libkrun: a `pub` crate of raw declarations is one `Cargo.toml` line away
 //! from being bypassed. It also keeps the `#![forbid(unsafe_code)]` exemption to this crate and
-//! `tormoni-app`'s window chrome, which `every_crate_forbids_unsafe` asserts as an equality.
+//! `boxdesk-app`'s window chrome, which `every_crate_forbids_unsafe` asserts as an equality.
 //!
 //! **Nothing here is checked.** Each function returns libkrun's own `int32_t`: zero or a positive
 //! value on success, a negative errno on failure. Turning that into a typed error and encoding the

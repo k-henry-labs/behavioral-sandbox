@@ -1,9 +1,9 @@
-//! `tormoni run`: boot a sandbox, run one command in it, exit with the command's status.
+//! `boxdesk run`: boot a sandbox, run one command in it, exit with the command's status.
 //!
-//! The whole verb is a thin shape over the supervisor: build a [`tormoni_supervisor::VmConfig`], spawn
+//! The whole verb is a thin shape over the supervisor: build a [`boxdesk_supervisor::VmConfig`], spawn
 //! the helper that becomes the VM, wait, and translate how the helper ended into this process's
 //! exit code. The guest's output is this process's output because the helper inherits stdio, so
-//! `tormoni run -- make test 2>/dev/null` behaves like the command it wraps.
+//! `boxdesk run -- make test 2>/dev/null` behaves like the command it wraps.
 //!
 //! **Every `run` is a cold boot** (~300 ms on the development laptop, `scratch/ROADMAP.md` 2.9):
 //! libkrun has no snapshot surface, so there is no warm path to hide it. A sequence of commands
@@ -16,8 +16,8 @@ use std::process::ExitCode;
 
 use clap::Args;
 
-use tormoni_record::RESULTS_GUEST_PATH;
-use tormoni_supervisor::{Display, VmConfig};
+use boxdesk_record::RESULTS_GUEST_PATH;
+use boxdesk_supervisor::{Display, VmConfig};
 
 use crate::EXIT_OPERATIONAL;
 use crate::posture::{NetArg, RootFsArg};
@@ -42,13 +42,13 @@ pub(crate) fn parse_display(spec: &str) -> Result<Display, String> {
 #[derive(Args, Debug)]
 pub(crate) struct RunArgs {
     /// The guest root directory (a tree from `cargo xtask build-rootfs`). Falls back to
-    /// `$TORMONI_GUEST_ROOT`, then `~/.local/share/tormoni/rootfs`.
+    /// `$BOXDESK_GUEST_ROOT`, then `~/.local/share/boxdesk/rootfs`.
     #[arg(long, value_name = "DIR")]
     pub(crate) root: Option<PathBuf>,
-    /// vCPUs for this sandbox. Falls back to `$TORMONI_VCPUS`, then 1.
+    /// vCPUs for this sandbox. Falls back to `$BOXDESK_VCPUS`, then 1.
     #[arg(long, value_name = "N")]
     pub(crate) vcpus: Option<NonZeroU8>,
-    /// Guest RAM in MiB. Falls back to `$TORMONI_MEM_MIB`, then 512.
+    /// Guest RAM in MiB. Falls back to `$BOXDESK_MEM_MIB`, then 512.
     #[arg(long, value_name = "MIB")]
     pub(crate) mem: Option<NonZeroU32>,
     /// The guest working directory.
@@ -125,7 +125,7 @@ pub(crate) fn run(args: &RunArgs) -> ExitCode {
     match execute(args) {
         Ok(code) => ExitCode::from(code),
         Err(msg) => {
-            eprintln!("tormoni run: {msg}");
+            eprintln!("boxdesk run: {msg}");
             ExitCode::from(EXIT_OPERATIONAL)
         }
     }
@@ -133,7 +133,7 @@ pub(crate) fn run(args: &RunArgs) -> ExitCode {
 
 /// The verb's fallible body, one error path, one printer: the same shape as `shell`'s `session`.
 fn execute(args: &RunArgs) -> Result<u8, String> {
-    let root = tormoni::resolve_root(args.root.as_deref())?;
+    let root = boxdesk::resolve_root(args.root.as_deref())?;
     let cfg = to_config(args, root)?;
     let name = args
         .name
@@ -147,7 +147,7 @@ fn execute(args: &RunArgs) -> Result<u8, String> {
         return Ok(0);
     }
 
-    let opts = tormoni::SandboxOptions {
+    let opts = boxdesk::SandboxOptions {
         name: name.clone(),
         command: args.command.clone(),
         cfg,
@@ -157,7 +157,7 @@ fn execute(args: &RunArgs) -> Result<u8, String> {
         quiet: args.json,
     };
 
-    let (record, run_opt, exit_code) = tormoni::execute_sandbox(opts)?;
+    let (record, run_opt, exit_code) = boxdesk::execute_sandbox(opts)?;
 
     if args.json {
         let mut value = if let Some(run) = run_opt {
@@ -218,7 +218,7 @@ pub(crate) fn print_posture(
         writeln!(
             out,
             "env      {} is set in the guest",
-            tormoni_record::env_key(&entry.to_string_lossy())
+            boxdesk_record::env_key(&entry.to_string_lossy())
         )?;
     }
     if let Some(display) = cfg.display {
@@ -252,7 +252,7 @@ pub(crate) fn print_posture(
     writeln!(out, "exec     {}", cfg.exec.display())
 }
 
-/// A resource limit from its flag, else its `TORMONI_*` variable, else `None` (the supervisor's
+/// A resource limit from its flag, else its `BOXDESK_*` variable, else `None` (the supervisor's
 /// default). The same flag-then-env order as the guest root, with the config-file layer still
 /// deferred with it.
 pub(crate) fn resolve_limit<T: std::str::FromStr>(
@@ -323,10 +323,10 @@ fn to_config(args: &RunArgs, root: PathBuf) -> Result<VmConfig, String> {
         args.screenshot.as_deref(),
         args.frame_log.as_deref(),
     )?;
-    if let Some(v) = resolve_limit(args.vcpus, "TORMONI_VCPUS")? {
+    if let Some(v) = resolve_limit(args.vcpus, "BOXDESK_VCPUS")? {
         cfg.vcpus = v;
     }
-    if let Some(m) = resolve_limit(args.mem, "TORMONI_MEM_MIB")? {
+    if let Some(m) = resolve_limit(args.mem, "BOXDESK_MEM_MIB")? {
         cfg.mem_mib = m;
     }
     cfg.workdir = args.workdir.clone();
@@ -370,11 +370,11 @@ mod tests {
     use super::*;
     use crate::{Cli, Cmd};
 
-    /// The roadmap's own example, `tormoni run -- echo hello`, must parse with the command intact and
+    /// The roadmap's own example, `boxdesk run -- echo hello`, must parse with the command intact and
     /// hyphens in the command untouched, since everything after `--` belongs to the guest.
     #[test]
     fn the_command_after_the_separator_is_taken_verbatim() {
-        let cli = Cli::parse_from(["tormoni", "run", "--", "sh", "-c", "echo hi"]);
+        let cli = Cli::parse_from(["boxdesk", "run", "--", "sh", "-c", "echo hi"]);
         let Cmd::Run(args) = cli.cmd else {
             panic!("run must parse");
         };
@@ -387,7 +387,7 @@ mod tests {
     #[test]
     fn the_flags_land_in_the_config_fields_they_name() {
         let cli = Cli::parse_from([
-            "tormoni",
+            "boxdesk",
             "run",
             "--vcpus",
             "2",
@@ -430,23 +430,23 @@ mod tests {
         let flag = NonZeroU8::new(4);
         let env = Some(OsString::from("2"));
         assert_eq!(
-            resolve_limit_from(flag, "TORMONI_VCPUS", env.clone()).expect("the flag wins"),
+            resolve_limit_from(flag, "BOXDESK_VCPUS", env.clone()).expect("the flag wins"),
             flag
         );
         assert_eq!(
-            resolve_limit_from::<NonZeroU8>(None, "TORMONI_VCPUS", env).expect("the env fills in"),
+            resolve_limit_from::<NonZeroU8>(None, "BOXDESK_VCPUS", env).expect("the env fills in"),
             NonZeroU8::new(2)
         );
         assert_eq!(
-            resolve_limit_from::<NonZeroU8>(None, "TORMONI_VCPUS", None)
+            resolve_limit_from::<NonZeroU8>(None, "BOXDESK_VCPUS", None)
                 .expect("unset means unset"),
             None
         );
         for bad in ["zero-is-not-a-machine", "0", "-1", ""] {
             let err =
-                resolve_limit_from::<NonZeroU8>(None, "TORMONI_VCPUS", Some(OsString::from(bad)))
+                resolve_limit_from::<NonZeroU8>(None, "BOXDESK_VCPUS", Some(OsString::from(bad)))
                     .expect_err("a set-but-broken limit must refuse");
-            assert!(err.contains("TORMONI_VCPUS"), "names the variable: {err}");
+            assert!(err.contains("BOXDESK_VCPUS"), "names the variable: {err}");
         }
     }
 
@@ -455,7 +455,7 @@ mod tests {
     /// `every_posture_defaults_closed_and_crosses_to_its_own_variant`, beside the enum.
     #[test]
     fn the_net_posture_defaults_to_none() {
-        let cli = Cli::parse_from(["tormoni", "run", "--", "true"]);
+        let cli = Cli::parse_from(["boxdesk", "run", "--", "true"]);
         let Cmd::Run(args) = cli.cmd else {
             panic!("run must parse");
         };
@@ -466,13 +466,13 @@ mod tests {
     /// from, and the config it builds carries that posture through.
     #[test]
     fn the_root_posture_defaults_to_read_only() {
-        let cli = Cli::parse_from(["tormoni", "run", "--", "true"]);
+        let cli = Cli::parse_from(["boxdesk", "run", "--", "true"]);
         let Cmd::Run(args) = cli.cmd else {
             panic!("run must parse");
         };
         assert_eq!(args.rootfs, RootFsArg::ReadOnly);
         let cfg = to_config(&args, PathBuf::from("/r")).expect("a well-formed config");
-        assert_eq!(cfg.rootfs, tormoni_supervisor::RootFs::ReadOnly);
+        assert_eq!(cfg.rootfs, boxdesk_supervisor::RootFs::ReadOnly);
     }
 
     /// The posture print names every way into and out of the sandbox, each with its direction,
@@ -481,7 +481,7 @@ mod tests {
     #[test]
     fn the_posture_print_names_every_shared_thing_and_its_direction() {
         let cli = Cli::parse_from([
-            "tormoni",
+            "boxdesk",
             "run",
             "--rootfs",
             "writable",
@@ -522,7 +522,7 @@ mod tests {
     #[test]
     fn an_env_value_reaches_the_guest_and_never_the_record_or_the_posture_print() {
         let cli = Cli::parse_from([
-            "tormoni",
+            "boxdesk",
             "run",
             "--env",
             "AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI",
@@ -544,11 +544,11 @@ mod tests {
             "the guest is given the whole entry"
         );
 
-        let posture = tormoni::posture_of(&cfg, false);
+        let posture = boxdesk::posture_of(&cfg, false);
         assert_eq!(posture.env, ["AWS_SECRET_ACCESS_KEY", "CI"]);
-        let record = tormoni_record::Record::begin(
+        let record = boxdesk_record::Record::begin(
             "vm-under-test",
-            tormoni_record::Verb::Run,
+            boxdesk_record::Verb::Run,
             vec!["true".to_string()],
             posture,
         );
@@ -630,7 +630,7 @@ mod tests {
     /// A malformed share is refused here, before a VM is spawned to die on it.
     #[test]
     fn a_malformed_share_is_refused_before_spawn() {
-        let cli = Cli::parse_from(["tormoni", "run", "--share", "nopath", "--", "true"]);
+        let cli = Cli::parse_from(["boxdesk", "run", "--share", "nopath", "--", "true"]);
         let Cmd::Run(args) = cli.cmd else {
             panic!("run must parse");
         };

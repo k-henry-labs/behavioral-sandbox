@@ -1,5 +1,5 @@
-//! `tormoni export`: a record store to a tar file, with no guest booted. The suite plants a record
-//! with `tormoni-record` and runs the built binary against a scratch `$TORMONI_RUNS_DIR`.
+//! `boxdesk export`: a record store to a tar file, with no guest booted. The suite plants a record
+//! with `boxdesk-record` and runs the built binary against a scratch `$BOXDESK_RUNS_DIR`.
 
 // A test binary: `expect` is the idiomatic assertion in helpers outside `#[test]`.
 #![allow(clippy::expect_used)]
@@ -7,22 +7,22 @@
 use std::path::Path;
 use std::process::Command;
 
-use tormoni_test_support::ScratchDir;
+use boxdesk_test_support::ScratchDir;
 
-fn tormoni(runs: &Path) -> Command {
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_tormoni"));
-    cmd.env("TORMONI_RUNS_DIR", runs);
+fn boxdesk(runs: &Path) -> Command {
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_boxdesk"));
+    cmd.env("BOXDESK_RUNS_DIR", runs);
     cmd
 }
 
 /// A run to export: a record with one captured output file.
-fn planted(runs: &Path) -> tormoni_record::Record {
-    let store = tormoni_record::Store::at(runs.to_path_buf()).expect("a store");
-    let mut record = tormoni_record::Record::begin(
+fn planted(runs: &Path) -> boxdesk_record::Record {
+    let store = boxdesk_record::Store::at(runs.to_path_buf()).expect("a store");
+    let mut record = boxdesk_record::Record::begin(
         "exportee",
-        tormoni_record::Verb::Run,
+        boxdesk_record::Verb::Run,
         vec!["true".into()],
-        tormoni_record::Posture::new(
+        boxdesk_record::Posture::new(
             "/img".into(),
             std::num::NonZeroU8::MIN,
             std::num::NonZeroU32::new(512).expect("non-zero"),
@@ -46,7 +46,7 @@ fn json_is_one_document_and_the_keys_a_client_binds_to() {
     let record = planted(&runs);
 
     let parse = |args: &[&str]| -> serde_json::Value {
-        let out = tormoni(&runs).args(args).output().expect("the binary runs");
+        let out = boxdesk(&runs).args(args).output().expect("the binary runs");
         assert!(
             out.status.success(),
             "{args:?}: {}",
@@ -95,7 +95,7 @@ fn a_run_is_ephemeral_unless_it_is_told_to_keep() {
     let runs = scratch.path().join("runs");
 
     // The parser's side: `--keep` is a flag on `run`, and absent means ephemeral.
-    let out = tormoni(&runs)
+    let out = boxdesk(&runs)
         .args(["run", "--keep", "--dry-run", "--json", "--", "true"])
         .output()
         .expect("the binary runs");
@@ -124,7 +124,7 @@ fn an_ephemeral_run_reports_no_directory_and_a_kept_one_does() {
     let runs = scratch.path().join("runs");
     let record = planted(&runs);
 
-    let out = tormoni(&runs)
+    let out = boxdesk(&runs)
         .args(["show", "--json", &record.id])
         .output()
         .expect("the binary runs");
@@ -146,17 +146,17 @@ fn export_writes_a_tar_where_asked_and_prints_only_the_path() {
     let dest = scratch.path().join("dest");
     std::fs::create_dir(&dest).expect("a dest dir");
 
-    let out = tormoni(&runs)
+    let out = boxdesk(&runs)
         .args(["export", &record.id, "--to"])
         .arg(&dest)
         .output()
-        .expect("tormoni ran");
+        .expect("boxdesk ran");
     assert!(
         out.status.success(),
         "{}",
         String::from_utf8_lossy(&out.stderr)
     );
-    let expected = dest.join(format!("tormoni-{}.tar", record.id));
+    let expected = dest.join(format!("boxdesk-{}.tar", record.id));
     assert_eq!(
         String::from_utf8_lossy(&out.stdout),
         format!("{}\n", expected.display()),
@@ -180,22 +180,22 @@ fn export_writes_a_tar_where_asked_and_prints_only_the_path() {
 
     let cwd = scratch.path().join("cwd");
     std::fs::create_dir(&cwd).expect("a cwd");
-    let out = tormoni(&runs)
+    let out = boxdesk(&runs)
         .args(["export", "exportee"])
         .current_dir(&cwd)
         .output()
-        .expect("tormoni ran");
+        .expect("boxdesk ran");
     assert!(
         out.status.success(),
         "{}",
         String::from_utf8_lossy(&out.stderr)
     );
     assert!(
-        cwd.join(format!("tormoni-{}.tar", record.id)).is_file(),
+        cwd.join(format!("boxdesk-{}.tar", record.id)).is_file(),
         "by name, into the current directory"
     );
 
-    let out = tormoni(&runs)
+    let out = boxdesk(&runs)
         .args(["export", "nobody"])
         .output()
         .expect("ran");

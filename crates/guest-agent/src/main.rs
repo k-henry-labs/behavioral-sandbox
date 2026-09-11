@@ -5,7 +5,7 @@
 //!   a **unix socket** (`unix:<path>`), which makes the whole exec path runnable with no VM. Only the
 //!   listener differs, since `serve` takes any `Read`+`Write`.
 //! - **Streams.** `tracing` goes to stderr. Exactly one line goes to **stdout**, the readiness
-//!   sentinel ([`GUEST_READY_MARKER`](tormoni_channel::GUEST_READY_MARKER)) emitted once the vsock
+//!   sentinel ([`GUEST_READY_MARKER`](boxdesk_channel::GUEST_READY_MARKER)) emitted once the vsock
 //!   listener is bound, because the guest's stdout is the serial console the host scans.
 //! - **One session per process.** Every connection serves from the same working directory, so
 //!   repeated execs against one VM compose into a **stateful session**.
@@ -21,7 +21,7 @@ fn main() -> ExitCode {
     listen::main()
 }
 
-/// The agent serves a Linux guest and `tormoni-guest-agent` compiles to nothing off Linux, so the
+/// The agent serves a Linux guest and `boxdesk-guest-agent` compiles to nothing off Linux, so the
 /// binary a host build produces there exists to say so rather than to be run.
 #[cfg(not(target_os = "linux"))]
 fn main() -> ExitCode {

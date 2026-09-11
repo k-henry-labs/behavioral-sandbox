@@ -260,6 +260,118 @@ dependencies = [
 ]
 
 [[package]]
+name = "boxdesk"
+version = "0.0.1"
+dependencies = [
+ "axum",
+ "boxdesk-channel",
+ "boxdesk-input",
+ "boxdesk-krun",
+ "boxdesk-record",
+ "boxdesk-serve",
+ "boxdesk-supervisor",
+ "boxdesk-test-support",
+ "clap",
+ "rustix 1.1.4",
+ "serde_json",
+ "softbuffer",
+ "tokio",
+ "winit",
+]
+
+[[package]]
+name = "boxdesk-app"
+version = "0.0.1"
+dependencies = [
+ "boxdesk-input",
+ "boxdesk-krun",
+ "boxdesk-record",
+ "boxdesk-supervisor",
+ "boxdesk-test-support",
+ "clap",
+ "iced",
+ "objc2 0.5.2",
+ "objc2-app-kit",
+ "objc2-foundation 0.2.2",
+ "rustix 1.1.4",
+ "ttf-parser",
+ "zeroize",
+]
+
+[[package]]
+name = "boxdesk-channel"
+version = "0.0.1"
+dependencies = [
+ "boxdesk-test-support",
+ "zeroize",
+]
+
+[[package]]
+name = "boxdesk-guest-agent"
+version = "0.0.1"
+dependencies = [
+ "boxdesk-channel",
+ "boxdesk-test-support",
+ "rustix 1.1.4",
+ "tracing",
+ "tracing-subscriber",
+ "vsock",
+]
+
+[[package]]
+name = "boxdesk-input"
+version = "0.0.1"
+dependencies = [
+ "boxdesk-krun",
+]
+
+[[package]]
+name = "boxdesk-krun"
+version = "0.0.1"
+dependencies = [
+ "rustix 1.1.4",
+]
+
+[[package]]
+name = "boxdesk-record"
+version = "0.0.1"
+dependencies = [
+ "boxdesk-test-support",
+]
+
+[[package]]
+name = "boxdesk-serve"
+version = "0.0.1"
+dependencies = [
+ "axum",
+ "boxdesk-record",
+ "boxdesk-supervisor",
+ "boxdesk-test-support",
+ "futures-core",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "boxdesk-supervisor"
+version = "0.0.1"
+dependencies = [
+ "boxdesk-krun",
+ "boxdesk-test-support",
+ "rustix 1.1.4",
+]
+
+[[package]]
+name = "boxdesk-test-support"
+version = "0.0.1"
+dependencies = [
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "bumpalo"
 version = "3.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2981,118 +3093,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tormoni"
-version = "0.0.1"
-dependencies = [
- "axum",
- "clap",
- "rustix 1.1.4",
- "serde_json",
- "softbuffer",
- "tokio",
- "tormoni-channel",
- "tormoni-input",
- "tormoni-krun",
- "tormoni-record",
- "tormoni-serve",
- "tormoni-supervisor",
- "tormoni-test-support",
- "winit",
-]
-
-[[package]]
-name = "tormoni-app"
-version = "0.0.1"
-dependencies = [
- "clap",
- "iced",
- "objc2 0.5.2",
- "objc2-app-kit",
- "objc2-foundation 0.2.2",
- "rustix 1.1.4",
- "tormoni-input",
- "tormoni-krun",
- "tormoni-record",
- "tormoni-supervisor",
- "tormoni-test-support",
- "ttf-parser",
- "zeroize",
-]
-
-[[package]]
-name = "tormoni-channel"
-version = "0.0.1"
-dependencies = [
- "tormoni-test-support",
- "zeroize",
-]
-
-[[package]]
-name = "tormoni-guest-agent"
-version = "0.0.1"
-dependencies = [
- "rustix 1.1.4",
- "tormoni-channel",
- "tormoni-test-support",
- "tracing",
- "tracing-subscriber",
- "vsock",
-]
-
-[[package]]
-name = "tormoni-input"
-version = "0.0.1"
-dependencies = [
- "tormoni-krun",
-]
-
-[[package]]
-name = "tormoni-krun"
-version = "0.0.1"
-dependencies = [
- "rustix 1.1.4",
-]
-
-[[package]]
-name = "tormoni-record"
-version = "0.0.1"
-dependencies = [
- "tormoni-test-support",
-]
-
-[[package]]
-name = "tormoni-serve"
-version = "0.0.1"
-dependencies = [
- "axum",
- "futures-core",
- "serde",
- "serde_json",
- "tokio",
- "tormoni-record",
- "tormoni-supervisor",
- "tormoni-test-support",
- "tracing",
-]
-
-[[package]]
-name = "tormoni-supervisor"
-version = "0.0.1"
-dependencies = [
- "rustix 1.1.4",
- "tormoni-krun",
- "tormoni-test-support",
-]
-
-[[package]]
-name = "tormoni-test-support"
-version = "0.0.1"
-dependencies = [
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "tower"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3986,12 +3986,12 @@ name = "xtask"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "boxdesk-channel",
+ "boxdesk-krun",
+ "boxdesk-test-support",
  "clap",
  "oxifont-subset",
  "rustix 1.1.4",
- "tormoni-channel",
- "tormoni-krun",
- "tormoni-test-support",
 ]
 
 [[package]]

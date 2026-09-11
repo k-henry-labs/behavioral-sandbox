@@ -1,7 +1,7 @@
 //! `--json`: one run, as a machine reads it.
 //!
 //! - **The record is the model, not a second one.** Every key here is a field of
-//!   `tormoni_record::Record` or of its posture. Nothing is invented for the wire, so there is one
+//!   `boxdesk_record::Record` or of its posture. Nothing is invented for the wire, so there is one
 //!   vocabulary for a run whether it is read here or pulled back from a console.
 //! - **The same keys the console serves.** `posture`, `command`, `end_kind`, `end_code`,
 //!   `stdout_bytes`, `stderr_bytes`, `output_truncated` and `files` are spelled as the run store
@@ -14,8 +14,8 @@
 //!   makes `run(...).stdout` work in a client. `output_truncated` says when the cap cut it, so a
 //!   short string is never mistaken for the whole of one.
 
+use boxdesk_record::{End, Record, RunDir};
 use serde_json::{Value, json};
-use tormoni_record::{End, Record, RunDir};
 
 /// One run with its captured output, for `run --json` and `show --json`.
 pub(crate) fn run_json(record: &Record, dir: &RunDir) -> Value {
@@ -66,7 +66,7 @@ pub(crate) fn record_json(record: &Record) -> Value {
 }
 
 /// The posture, spelled as the run store spells it so one type reads both.
-fn posture_json(p: &tormoni_record::Posture) -> Value {
+fn posture_json(p: &boxdesk_record::Posture) -> Value {
     json!({
         "root": p.root.display().to_string(),
         "rootfs": p.rootfs.as_word(),
@@ -114,7 +114,7 @@ mod tests {
     use std::num::{NonZeroU8, NonZeroU32};
 
     fn record() -> Record {
-        let mut posture = tormoni_record::Posture::new(
+        let mut posture = boxdesk_record::Posture::new(
             "/img".into(),
             NonZeroU8::MIN,
             NonZeroU32::new(512).expect("non-zero"),
@@ -123,7 +123,7 @@ mod tests {
         posture.env = vec!["CI".to_string()];
         let mut record = Record::begin(
             "shaped",
-            tormoni_record::Verb::Run,
+            boxdesk_record::Verb::Run,
             vec!["sh".into(), "-c".into(), "echo hi".into()],
             posture,
         );

@@ -1,4 +1,4 @@
-//! `tormoni ls`, `tormoni exec` and `tormoni stop`: the verbs for a VM this process did not start.
+//! `boxdesk ls`, `boxdesk exec` and `boxdesk stop`: the verbs for a VM this process did not start.
 //!
 //! **There is no daemon.** A VM exists because its helper is listening on a control socket in the
 //! runtime directory, and it stops existing when that helper does, so these verbs are a directory
@@ -8,11 +8,11 @@
 //! - **`ls` is a point-in-time answer.** A VM can end between the scan and the print, which no
 //!   design without a supervising daemon avoids, and which a caller has to handle anyway because
 //!   it is equally true of a VM it started itself.
-//! - **`stop` is a power cut**, the same one [`Vm::stop`](tormoni_supervisor::Vm::stop) is: libkrun's
+//! - **`stop` is a power cut**, the same one [`Vm::stop`](boxdesk_supervisor::Vm::stop) is: libkrun's
 //!   only graceful surface is efi-only and returns `-ENOTSUP`, so there is nothing gentler to ask
 //!   for. The VM ends itself, rather than being signalled by pid, so there is no window in which
 //!   the number could name somebody else.
-//! - **`exec` needs an agent**, which means a VM started by `tormoni up`. A VM booted straight into a
+//! - **`exec` needs an agent**, which means a VM started by `boxdesk up`. A VM booted straight into a
 //!   workload has nothing listening to ask.
 //! - **The record is kept in step here.** `exec` appends what it printed to the sandbox's
 //!   record, `stop` writes the end, and `ls --all` marks a run whose socket is dead and whose
@@ -25,10 +25,10 @@ use std::time::{Duration, Instant};
 
 use clap::Args;
 
-use tormoni_channel::Response;
-use tormoni_record::{End, Store};
-use tormoni_supervisor::control::{self, Channel, Info};
-use tormoni_supervisor::{discover, socket};
+use boxdesk_channel::Response;
+use boxdesk_record::{End, Store};
+use boxdesk_supervisor::control::{self, Channel, Info};
+use boxdesk_supervisor::{discover, socket};
 
 use crate::EXIT_OPERATIONAL;
 
@@ -71,7 +71,7 @@ pub(crate) struct ExportArgs {
     /// The run's id, or a VM name (the newest run of that name).
     #[arg(value_name = "ID|NAME")]
     pub(crate) key: String,
-    /// Where to write: a directory (which gets `tormoni-<ID>.tar` inside), or the file itself.
+    /// Where to write: a directory (which gets `boxdesk-<ID>.tar` inside), or the file itself.
     /// Defaults to the current directory.
     #[arg(long, value_name = "PATH")]
     pub(crate) to: Option<PathBuf>,
@@ -88,7 +88,7 @@ pub(crate) struct RmArgs {
 /// Run a command in a sandbox that is already up.
 #[derive(Args, Debug)]
 pub(crate) struct ExecArgs {
-    /// The VM's name, as `tormoni ls` lists it.
+    /// The VM's name, as `boxdesk ls` lists it.
     #[arg(value_name = "NAME")]
     pub(crate) name: String,
     /// A `KEY=VALUE` entry for the command's environment. Repeatable.
@@ -97,7 +97,7 @@ pub(crate) struct ExecArgs {
     /// Send this process's stdin to the command, read to end of input before it starts.
     #[arg(long = "stdin", short = 'i')]
     pub(crate) stdin: bool,
-    /// Run the command on a pty in the guest with this terminal attached, as `tormoni shell` does
+    /// Run the command on a pty in the guest with this terminal attached, as `boxdesk shell` does
     /// on a fresh sandbox: keystrokes and the terminal's size go in until the command exits.
     #[arg(long = "tty", short = 't', conflicts_with = "stdin")]
     pub(crate) tty: bool,
@@ -109,7 +109,7 @@ pub(crate) struct ExecArgs {
 /// Stop a running sandbox.
 #[derive(Args, Debug)]
 pub(crate) struct StopArgs {
-    /// The VM's name, as `tormoni ls` lists it.
+    /// The VM's name, as `boxdesk ls` lists it.
     #[arg(value_name = "NAME")]
     pub(crate) name: String,
 }
@@ -118,7 +118,7 @@ pub(crate) fn ls(args: &LsArgs) -> ExitCode {
     match list(args, &mut std::io::stdout()) {
         Ok(()) => ExitCode::SUCCESS,
         Err(msg) => {
-            eprintln!("tormoni ls: {msg}");
+            eprintln!("boxdesk ls: {msg}");
             ExitCode::from(EXIT_OPERATIONAL)
         }
     }
@@ -128,7 +128,7 @@ pub(crate) fn exec(args: &ExecArgs) -> ExitCode {
     match run_in(args) {
         Ok(code) => ExitCode::from(code),
         Err(msg) => {
-            eprintln!("tormoni exec: {msg}");
+            eprintln!("boxdesk exec: {msg}");
             ExitCode::from(EXIT_OPERATIONAL)
         }
     }
@@ -142,7 +142,7 @@ pub(crate) fn show(args: &ShowArgs) -> ExitCode {
                 ExitCode::SUCCESS
             }
             Err(msg) => {
-                eprintln!("tormoni show: {msg}");
+                eprintln!("boxdesk show: {msg}");
                 ExitCode::from(EXIT_OPERATIONAL)
             }
         };
@@ -150,7 +150,7 @@ pub(crate) fn show(args: &ShowArgs) -> ExitCode {
     match describe(&args.key, &mut std::io::stdout()) {
         Ok(()) => ExitCode::SUCCESS,
         Err(msg) => {
-            eprintln!("tormoni show: {msg}");
+            eprintln!("boxdesk show: {msg}");
             ExitCode::from(EXIT_OPERATIONAL)
         }
     }
@@ -163,7 +163,7 @@ pub(crate) fn export(args: &ExportArgs) -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(msg) => {
-            eprintln!("tormoni export: {msg}");
+            eprintln!("boxdesk export: {msg}");
             ExitCode::from(EXIT_OPERATIONAL)
         }
     }
@@ -176,7 +176,7 @@ pub(crate) fn rm(args: &RmArgs) -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(msg) => {
-            eprintln!("tormoni rm: {msg}");
+            eprintln!("boxdesk rm: {msg}");
             ExitCode::from(EXIT_OPERATIONAL)
         }
     }
@@ -189,7 +189,7 @@ pub(crate) fn stop(args: &StopArgs) -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(msg) => {
-            eprintln!("tormoni stop: {msg}");
+            eprintln!("boxdesk stop: {msg}");
             ExitCode::from(EXIT_OPERATIONAL)
         }
     }
@@ -197,7 +197,7 @@ pub(crate) fn stop(args: &StopArgs) -> ExitCode {
 
 /// The columns, in order, with the width each is padded to: one definition, so a header cannot
 /// name a different column than the rows below it. A long name pushes the row out rather than
-/// truncating, since a truncated name is not one `tormoni exec` takes back.
+/// truncating, since a truncated name is not one `boxdesk exec` takes back.
 const COLUMNS: [(&str, usize); CELLS + 1] = [
     ("NAME", 16),
     ("PID", 8),
@@ -222,7 +222,7 @@ fn list(args: &LsArgs, out: &mut impl Write) -> Result<(), String> {
     if args.reap {
         let removed = discover::reap_stale().map_err(|e| e.to_string())?;
         if removed > 0 {
-            eprintln!("tormoni ls: removed {removed} socket(s) left by VMs that had ended");
+            eprintln!("boxdesk ls: removed {removed} socket(s) left by VMs that had ended");
         }
     }
     let found = discover::live().map_err(|e| e.to_string())?;
@@ -235,7 +235,7 @@ fn list(args: &LsArgs, out: &mut impl Write) -> Result<(), String> {
         let cells = match control::info(&vm.socket) {
             Ok(info) => cells_of(&info),
             Err(e) => {
-                eprintln!("tormoni ls: {}: {e}", vm.name);
+                eprintln!("boxdesk ls: {}: {e}", vm.name);
                 [UNKNOWN; CELLS].map(str::to_string)
             }
         };
@@ -288,14 +288,14 @@ fn list_past(out: &mut impl Write) -> Result<(), String> {
     for record in ended {
         let took = record
             .ended_ms
-            .map(|e| tormoni_record::format_duration(e.saturating_sub(record.started_ms)))
+            .map(|e| boxdesk_record::format_duration(e.saturating_sub(record.started_ms)))
             .unwrap_or_default();
         writeln!(
             out,
             "{:<16}  {:<10}  {:<20}  {:<8}  {}",
             record.name,
             record.end.map(|e| e.to_string()).unwrap_or_default(),
-            tormoni_record::format_time(record.started_ms),
+            boxdesk_record::format_time(record.started_ms),
             took,
             record.id
         )
@@ -309,8 +309,8 @@ fn list_past(out: &mut impl Write) -> Result<(), String> {
 ///
 /// **A name is reusable**, and its socket says only that *some* VM answers under it, so the
 /// newest open run of a name is the one that VM is: the rule
-/// [`Store::open_run`](tormoni_record::Store::open_run) already reads a name by.
-pub(crate) fn settle_gone(store: &Store) -> Result<Vec<tormoni_record::Record>, String> {
+/// [`Store::open_run`](boxdesk_record::Store::open_run) already reads a name by.
+pub(crate) fn settle_gone(store: &Store) -> Result<Vec<boxdesk_record::Record>, String> {
     settle_gone_with(store, |name| {
         socket::path_for(name).is_ok_and(|p| socket::is_live(&p))
     })
@@ -321,7 +321,7 @@ pub(crate) fn settle_gone(store: &Store) -> Result<Vec<tormoni_record::Record>, 
 fn settle_gone_with(
     store: &Store,
     answers: impl Fn(&str) -> bool,
-) -> Result<Vec<tormoni_record::Record>, String> {
+) -> Result<Vec<boxdesk_record::Record>, String> {
     let mut ended = Vec::new();
     // `Store::list` is newest first, which is what makes `claimed` the *newest* open run of each
     // name rather than an arbitrary one.
@@ -343,10 +343,10 @@ fn settle_gone_with(
 ///
 /// The three verbs that take an `ID|NAME` share it, so a run that `show` finds is one `export`
 /// and `rm` find, and the refusal is one sentence rather than three that can drift apart.
-pub(crate) fn find_run(key: &str) -> Result<(Store, tormoni_record::Record), String> {
+pub(crate) fn find_run(key: &str) -> Result<(Store, boxdesk_record::Record), String> {
     let store = Store::open().map_err(|e| e.to_string())?;
     let record = store.find(key).map_err(|e| e.to_string())?.ok_or_else(|| {
-        format!("no run named or numbered {key:?} (`tormoni ls --all` lists them)")
+        format!("no run named or numbered {key:?} (`boxdesk ls --all` lists them)")
     })?;
     Ok((store, record))
 }
@@ -394,7 +394,7 @@ fn forget(key: &str) -> Result<String, String> {
     let (store, record) = find_run(key)?;
     if record.is_open() && socket::path_for(&record.name).is_ok_and(|p| socket::is_live(&p)) {
         return Err(format!(
-            "the run {} is still running; `tormoni stop {}` ends it first",
+            "the run {} is still running; `boxdesk stop {}` ends it first",
             record.id, record.name
         ));
     }
@@ -430,7 +430,7 @@ fn live_socket(name: &str) -> Result<std::path::PathBuf, String> {
     let path = socket::path_for(name).map_err(|e| e.to_string())?;
     if !socket::is_live(&path) {
         return Err(format!(
-            "no VM named {name:?} is running (`tormoni ls` lists the ones that are)"
+            "no VM named {name:?} is running (`boxdesk ls` lists the ones that are)"
         ));
     }
     Ok(path)
@@ -442,7 +442,7 @@ fn run_in(args: &ExecArgs) -> Result<u8, String> {
     if info.channel != Channel::Present {
         return Err(format!(
             "the VM {:?} has no agent channel, so there is nothing in it to ask; \
-             `tormoni up` starts one that has",
+             `boxdesk up` starts one that has",
             args.name
         ));
     }
@@ -484,7 +484,7 @@ fn run_in(args: &ExecArgs) -> Result<u8, String> {
         let _ = writeln!(
             log,
             "# {} {}",
-            tormoni_record::now_ms(),
+            boxdesk_record::now_ms(),
             args.command.join(" ")
         );
     }
@@ -542,7 +542,7 @@ fn run_in(args: &ExecArgs) -> Result<u8, String> {
 fn read_stdin() -> Result<Vec<u8>, String> {
     let mut reader = std::io::stdin()
         .lock()
-        .take(u64::try_from(tormoni_channel::MAX_PAYLOAD).unwrap_or(u64::MAX));
+        .take(u64::try_from(boxdesk_channel::MAX_PAYLOAD).unwrap_or(u64::MAX));
     let mut buf = Vec::new();
     let mut chunk = [0u8; 8192];
     loop {
@@ -615,7 +615,7 @@ mod tests {
 
     use std::num::{NonZeroU8, NonZeroU32};
 
-    use tormoni_supervisor::{Net, RootFs};
+    use boxdesk_supervisor::{Net, RootFs};
 
     use super::{CELLS, COLUMNS, Channel, Info, UNKNOWN, cells_of, row, settle_gone_with};
 
@@ -624,8 +624,8 @@ mod tests {
     /// lists and `prune` never removes, because pruning is of ended runs.
     #[test]
     fn an_open_run_whose_name_was_taken_again_is_marked_gone() {
-        use tormoni_record::{Posture, Record, Store, Verb};
-        let dir = tormoni_test_support::ScratchDir::created("settle-gone");
+        use boxdesk_record::{Posture, Record, Store, Verb};
+        let dir = boxdesk_test_support::ScratchDir::created("settle-gone");
         let store = Store::at(dir.path().join("runs")).expect("a store");
         let posture = Posture::new(
             std::path::PathBuf::from("/img"),
@@ -656,7 +656,7 @@ mod tests {
         for id in [&abandoned.id, &orphan.id] {
             assert_eq!(
                 store.read(id).expect("read").end,
-                Some(tormoni_record::End::Gone),
+                Some(boxdesk_record::End::Gone),
                 "{id} is written back as gone"
             );
         }

@@ -1,10 +1,10 @@
 use pyo3::prelude::*;
-use tormoni_record::{End, Record, RunDir};
+use boxdesk_record::{End, Record, RunDir};
 
 // `skip_from_py_object`: these cross the boundary outward only. PyO3 0.29 deprecated the
 // automatic `FromPyObject` on a `Clone` pyclass, and a record is something this SDK hands
 // back, never something a caller passes in.
-#[pyclass(module = "tormoni.models", get_all, skip_from_py_object)]
+#[pyclass(module = "boxdesk.models", get_all, skip_from_py_object)]
 #[derive(Clone)]
 pub struct PyPosture {
     pub root: String,
@@ -21,14 +21,14 @@ pub struct PyPosture {
     pub mem_mib: u32,
 }
 
-#[pyclass(module = "tormoni.models", get_all, skip_from_py_object)]
+#[pyclass(module = "boxdesk.models", get_all, skip_from_py_object)]
 #[derive(Clone)]
 pub struct PyFile {
     pub path: String,
     pub size_bytes: u64,
 }
 
-#[pyclass(module = "tormoni.models", get_all, skip_from_py_object)]
+#[pyclass(module = "boxdesk.models", get_all, skip_from_py_object)]
 #[derive(Clone)]
 pub struct PyRun {
     pub run_id: String,

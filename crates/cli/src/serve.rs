@@ -1,24 +1,24 @@
-//! `tormoni serve`: the verb that turns this installed copy into a box.
+//! `boxdesk serve`: the verb that turns this installed copy into a box.
 //!
 //! - **It refuses before it listens.** No hypervisor, no token, a token anybody can read: each is
 //!   a sentence naming the thing to fix, and nothing binds.
 //! - **Loopback unless told otherwise**, and a wider bind is said out loud at startup.
-//! - **Everything past this lives in `tormoni-serve`.** This module is the flags and the refusals.
+//! - **Everything past this lives in `boxdesk-serve`.** This module is the flags and the refusals.
 
 use std::process::ExitCode;
 
+use boxdesk_serve::config::{self, Config};
 use clap::Args;
-use tormoni_serve::config::{self, Config};
 
 use crate::EXIT_OPERATIONAL;
 
 #[derive(Args)]
 pub(crate) struct ServeArgs {
     /// Where to listen: `PORT`, `127.0.0.1:PORT` or `0.0.0.0:PORT`. A bare port is loopback.
-    /// Falls back to `$TORMONI_SERVE_BIND`, then loopback on 8420.
+    /// Falls back to `$BOXDESK_SERVE_BIND`, then loopback on 8420.
     #[arg(long, value_name = "ADDR")]
     bind: Option<String>,
-    /// Where this server keeps its ledger. Falls back to `$TORMONI_SERVE_DATA`, then the runs
+    /// Where this server keeps its ledger. Falls back to `$BOXDESK_SERVE_DATA`, then the runs
     /// directory's parent.
     #[arg(long, value_name = "DIR")]
     data: Option<std::path::PathBuf>,
@@ -31,7 +31,7 @@ pub(crate) fn run(args: &ServeArgs) -> ExitCode {
     match serve(args) {
         Ok(()) => ExitCode::SUCCESS,
         Err(why) => {
-            eprintln!("tormoni serve: {why}");
+            eprintln!("boxdesk serve: {why}");
             ExitCode::from(EXIT_OPERATIONAL)
         }
     }
@@ -60,15 +60,15 @@ fn serve(args: &ServeArgs) -> Result<(), config::Refusal> {
         concurrency: args.concurrency.unwrap_or(config::DEFAULT_CONCURRENCY),
     };
 
-    let state = tormoni_serve::http::Serve::new(config.clone())?;
-    eprintln!("tormoni serve: listening on http://{}", config.bind);
+    let state = boxdesk_serve::http::Serve::new(config.clone())?;
+    eprintln!("boxdesk serve: listening on http://{}", config.bind);
     eprintln!(
-        "tormoni serve: usage counts at {}",
+        "boxdesk serve: usage counts at {}",
         state.ledger_path().display()
     );
     if config::is_public(&config.bind) {
         eprintln!(
-            "tormoni serve: this reaches past the machine. Anyone who can reach {} and holds the \
+            "boxdesk serve: this reaches past the machine. Anyone who can reach {} and holds the \
              token can run code here.",
             config.bind
         );
@@ -82,7 +82,7 @@ fn serve(args: &ServeArgs) -> Result<(), config::Refusal> {
         let listener = tokio::net::TcpListener::bind(config.bind)
             .await
             .map_err(|e| config::Refusal::Local(format!("bind {}: {e}", config.bind)))?;
-        axum::serve(listener, tormoni_serve::http::router(state))
+        axum::serve(listener, boxdesk_serve::http::router(state))
             .with_graceful_shutdown(async {
                 let _ = tokio::signal::ctrl_c().await;
             })
@@ -93,7 +93,7 @@ fn serve(args: &ServeArgs) -> Result<(), config::Refusal> {
 
 /// Beside the runs, because that is where this machine already keeps what a sandbox left.
 fn default_data() -> std::path::PathBuf {
-    tormoni_record::runs_dir()
+    boxdesk_record::runs_dir()
         .ok()
         .and_then(|runs| runs.parent().map(std::path::Path::to_path_buf))
         .unwrap_or_else(|| std::path::PathBuf::from("."))

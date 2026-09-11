@@ -1,8 +1,8 @@
-// Copyright 2026 The Tormoni Authors. All rights reserved.
+// Copyright 2026 The Boxdesk Authors. All rights reserved.
 // Use of this source code is governed by the Apache-2.0 license that can be
 // found in the LICENSE file.
 
-package tormoni_test
+package boxdesk_test
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	tormoni "github.com/kendricklawton/tormoni/sdk/go"
+	boxdesk "github.com/kendricklawton/boxdesk/sdk/go"
 )
 
 // TestDecodeRecord checks every field of the contract's own document.
@@ -42,7 +42,7 @@ func TestDecodeRecord(t *testing.T) {
 	if run.EndedMS == nil || *run.EndedMS != 1789085063833 {
 		t.Errorf("EndedMS = %v", run.EndedMS)
 	}
-	if run.EndKind != tormoni.EndExit {
+	if run.EndKind != boxdesk.EndExit {
 		t.Errorf("EndKind = %q", run.EndKind)
 	}
 	if run.EndCode == nil || *run.EndCode != 0 {
@@ -63,11 +63,11 @@ func TestDecodeRecord(t *testing.T) {
 	if run.OutputTruncated {
 		t.Error("OutputTruncated = true, want false")
 	}
-	wantFiles := []tormoni.File{{Path: "note.txt", SizeBytes: 5}}
+	wantFiles := []boxdesk.File{{Path: "note.txt", SizeBytes: 5}}
 	if !reflect.DeepEqual(run.Files, wantFiles) {
 		t.Errorf("Files = %+v, want %+v", run.Files, wantFiles)
 	}
-	if run.Dir != "/home/you/.local/share/tormoni/runs/1789085063489-run-81523" {
+	if run.Dir != "/home/you/.local/share/boxdesk/runs/1789085063489-run-81523" {
 		t.Errorf("Dir = %q", run.Dir)
 	}
 	if run.Live != nil {
@@ -78,13 +78,13 @@ func TestDecodeRecord(t *testing.T) {
 	}
 
 	p := run.Posture
-	if p.Root != "/home/you/.local/share/tormoni/rootfs" {
+	if p.Root != "/home/you/.local/share/boxdesk/rootfs" {
 		t.Errorf("Posture.Root = %q", p.Root)
 	}
 	if p.Rootfs != "read-only" {
 		t.Errorf("Posture.Rootfs = %q", p.Rootfs)
 	}
-	wantMounts := []tormoni.Mount{{Guest: "/mnt", Host: "/home/you/project"}}
+	wantMounts := []boxdesk.Mount{{Guest: "/mnt", Host: "/home/you/project"}}
 	if !reflect.DeepEqual(p.Mounts, wantMounts) {
 		t.Errorf("Posture.Mounts = %+v, want %+v", p.Mounts, wantMounts)
 	}
@@ -114,7 +114,7 @@ func TestDecodeRecord(t *testing.T) {
 // TestRecordRoundTrips checks the pair fields marshal back to the wire shape
 // the CLI wrote, so a decoded record can be re-encoded without drifting.
 func TestRecordRoundTrips(t *testing.T) {
-	var run tormoni.Run
+	var run boxdesk.Run
 	if err := json.Unmarshal([]byte(sampleDoc), &run); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -141,7 +141,7 @@ func TestRecordRoundTrips(t *testing.T) {
 func TestPairsRoundTrip(t *testing.T) {
 	const doc = `{"posture":{"mounts":[["/mnt","/home/you/project"],["/data","/var/data"]],
 	              "shares":[["models","/opt/models"]]}}`
-	var run tormoni.Run
+	var run boxdesk.Run
 	if err := json.Unmarshal([]byte(doc), &run); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -175,7 +175,7 @@ func TestShareDecoding(t *testing.T) {
 	if err != nil {
 		t.Fatalf("show: %v", err)
 	}
-	want := []tormoni.Share{{Tag: "models", Host: "/opt/models"}, {Tag: "cache", Host: "/var/cache"}}
+	want := []boxdesk.Share{{Tag: "models", Host: "/opt/models"}, {Tag: "cache", Host: "/var/cache"}}
 	if !reflect.DeepEqual(run.Posture.Shares, want) {
 		t.Errorf("Shares = %+v, want %+v", run.Posture.Shares, want)
 	}
@@ -200,9 +200,9 @@ func TestMalformedPairs(t *testing.T) {
 			if err == nil {
 				t.Fatal("err = nil, want a decode failure")
 			}
-			var tErr *tormoni.Error
+			var tErr *boxdesk.Error
 			if !errors.As(err, &tErr) {
-				t.Fatalf("err = %#v, want *tormoni.Error", err)
+				t.Fatalf("err = %#v, want *boxdesk.Error", err)
 			}
 			if !strings.Contains(tErr.Err.Error(), tt.want) {
 				t.Errorf("cause = %q, want it to mention %q", tErr.Err, tt.want)
@@ -266,11 +266,11 @@ func TestOutputTruncated(t *testing.T) {
 // TestOKOnAValue checks OK is callable on a Run that has no address, which a
 // pointer receiver would have made a compile error.
 func TestOKOnAValue(t *testing.T) {
-	if !(tormoni.Run{EndKind: tormoni.EndExit, EndCode: ptr(0)}).OK() {
+	if !(boxdesk.Run{EndKind: boxdesk.EndExit, EndCode: ptr(0)}).OK() {
 		t.Error("OK() = false on a clean exit")
 	}
-	byValue := map[string]tormoni.Run{
-		"failed": {EndKind: tormoni.EndExit, EndCode: ptr(1)},
+	byValue := map[string]boxdesk.Run{
+		"failed": {EndKind: boxdesk.EndExit, EndCode: ptr(1)},
 	}
 	if byValue["failed"].OK() {
 		t.Error("OK() = true on a non-zero exit")
@@ -286,7 +286,7 @@ func TestJSONTags(t *testing.T) {
 		want map[string]string // Go field -> json tag
 	}{
 		{
-			typ: reflect.TypeOf(tormoni.Run{}),
+			typ: reflect.TypeOf(boxdesk.Run{}),
 			want: map[string]string{
 				"RunID": "run_id", "Name": "name", "Verb": "verb", "Command": "command",
 				"Posture": "posture", "StartedMS": "started_ms", "EndedMS": "ended_ms",
@@ -297,7 +297,7 @@ func TestJSONTags(t *testing.T) {
 			},
 		},
 		{
-			typ: reflect.TypeOf(tormoni.Posture{}),
+			typ: reflect.TypeOf(boxdesk.Posture{}),
 			want: map[string]string{
 				"Root": "root", "Rootfs": "rootfs", "Mounts": "mounts", "Shares": "shares",
 				"Network": "network", "Display": "display", "Sound": "sound", "GPU": "gpu",
@@ -305,7 +305,7 @@ func TestJSONTags(t *testing.T) {
 			},
 		},
 		{
-			typ:  reflect.TypeOf(tormoni.File{}),
+			typ:  reflect.TypeOf(boxdesk.File{}),
 			want: map[string]string{"Path": "path", "SizeBytes": "size_bytes"},
 		},
 	}

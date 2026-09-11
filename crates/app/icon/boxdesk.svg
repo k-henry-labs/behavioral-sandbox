@@ -1,5 +1,5 @@
 <svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <title>Tormoni</title>
+  <title>Boxdesk</title>
   <!-- The tile is inset to 824, because a shipped icon draws to 835..856 px of 1024 and a
        full-bleed one stands taller than its neighbours (Maps, Notes and Ollama, macOS 26.6.2). -->
   <rect x="100" y="100" width="824" height="824" rx="190" fill="#09090b"/>

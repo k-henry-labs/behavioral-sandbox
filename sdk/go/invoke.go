@@ -1,8 +1,8 @@
-// Copyright 2026 The Tormoni Authors. All rights reserved.
+// Copyright 2026 The Boxdesk Authors. All rights reserved.
 // Use of this source code is governed by the Apache-2.0 license that can be
 // found in the LICENSE file.
 
-package tormoni
+package boxdesk
 
 import (
 	"bytes"
@@ -16,7 +16,7 @@ import (
 // waitDelay bounds how long waiting on the subprocess may hang after the
 // process itself is gone or the caller's context has ended, on stdout and
 // stderr pipes that some grandchild of the CLI is still holding open. Without
-// it, cancelling a context kills the tormoni process but the call can still
+// it, cancelling a context kills the boxdesk process but the call can still
 // block indefinitely, which would make cancellation a promise this package
 // does not keep.
 //
@@ -35,8 +35,8 @@ type invocation struct {
 
 // invoke runs the binary to completion. It returns an error only when the
 // binary could not be located: a binary that ran and failed is still an
-// invocation, because `tormoni run` exits with the guest command's own status
-// and so its exit status says nothing about whether Tormoni worked.
+// invocation, because `boxdesk run` exits with the guest command's own status
+// and so its exit status says nothing about whether Boxdesk worked.
 func (c *Client) invoke(ctx context.Context, args []string) (*invocation, error) {
 	bin, err := c.binary()
 	if err != nil {
@@ -45,7 +45,7 @@ func (c *Client) invoke(ctx context.Context, args []string) (*invocation, error)
 
 	cmd := exec.CommandContext(ctx, bin, args...)
 	// The environment is inherited on purpose: the CLI reads its own settings
-	// from it, TORMONI_GUEST_ROOT among them. Stdin is left nil, so the guest
+	// from it, BOXDESK_GUEST_ROOT among them. Stdin is left nil, so the guest
 	// gets no input and a CLI that asks for some sees EOF rather than hanging.
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

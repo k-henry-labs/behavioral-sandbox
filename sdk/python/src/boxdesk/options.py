@@ -1,4 +1,4 @@
-"""The options ``tormoni run`` accepts, one field per flag.
+"""The options ``boxdesk run`` accepts, one field per flag.
 
 Every field maps onto exactly one flag from the CLI's table.  This package
 adds no options of its own and supplies no defaults of its own: a field left
@@ -73,8 +73,8 @@ def _canonical(value: Optional[Pairs], option: str) -> Optional[Tuple[str, ...]]
 
 @dataclass(frozen=True)
 class RunOptions:
-    """Options for :meth:`tormoni.Tormoni.run` and
-    :meth:`tormoni.Tormoni.dry_run`."""
+    """Options for :meth:`boxdesk.Boxdesk.run` and
+    :meth:`boxdesk.Boxdesk.dry_run`."""
 
     root: Optional[str] = None
     """``--root DIR``: the guest root tree."""
@@ -108,7 +108,7 @@ class RunOptions:
     directory it worked in goes with it, so :attr:`Run.files` is empty and
     :attr:`Run.dir` is ``None``.  Keep it when you mean to read what the guest
     wrote to ``/results``, or to reach the run again with
-    :meth:`tormoni.Tormoni.show`."""
+    :meth:`boxdesk.Boxdesk.show`."""
     gpu: bool = False
     """``--gpu``. Refused by a host whose libkrun was built without it."""
     sound: bool = False

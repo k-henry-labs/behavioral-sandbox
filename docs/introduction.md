@@ -1,6 +1,6 @@
 # Introduction
 
-**Tormoni** is a local-first desktop sandbox for running untrusted code in
+**Boxdesk** is a local-first desktop sandbox for running untrusted code in
 hardware isolation. Untrusted code runs inside a virtual machine, so the isolation boundary is the
 CPU's, enforced by hardware virtualization: KVM on Linux, Hypervisor.framework on macOS. What a
 sandbox can reach is settled before it starts, on the host side of that boundary.
@@ -12,33 +12,33 @@ does, and no sandbox needs it.
 
 ## What it does today
 
-Tormoni runs on [libkrun](https://github.com/libkrun/libkrun), a library that makes the calling
+Boxdesk runs on [libkrun](https://github.com/libkrun/libkrun), a library that makes the calling
 process the virtual machine monitor. `krun_start_enter` never returns, so a VM **is** a process:
 every sandbox is a helper this project spawned, tracked and reaped.
 
-- **Run something.** `tormoni run` runs one command in a fresh sandbox and exits with its status,
-  `tormoni shell` opens a session on a pty inside the guest, and `tormoni up` starts a sandbox that
+- **Run something.** `boxdesk run` runs one command in a fresh sandbox and exits with its status,
+  `boxdesk shell` opens a session on a pty inside the guest, and `boxdesk up` starts a sandbox that
   outlives the command that started it, reached afterwards by name with `ls`, `exec` and `stop`.
 - **See it.** `--display WIDTHxHEIGHT` gives the guest a virtio-gpu scanout shown in a window, and
   that window's keyboard and pointer reach the guest as two virtio-input devices. The desktop image
   boots to a terminal in a Wayland session under it, and `--sound` asks for a virtio-snd card where
   libkrun was built with one, which no measured host has been.
 - **Keep it.** Every run leaves a record: the posture as settled, the captured output, and the
-  directory the guest saw as `/results`. `tormoni ls --all`, `show`, `rm` and `export` read, remove and
+  directory the guest saw as `/results`. `boxdesk ls --all`, `show`, `rm` and `export` read, remove and
   package them, one ustar file per run.
-- **Drive it from a window.** `Tormoni` is the notebook of those runs, live and past: a sidebar over
+- **Drive it from a window.** `Boxdesk` is the notebook of those runs, live and past: a sidebar over
   the list, one run's record with its display and output, a start form that shows a sandbox's
   posture before it boots, and a shell in your own terminal. Its palette, interface scale and
   landing screen persist across launches.
 
 Both platforms run the same sandboxes: KVM on Linux, and Hypervisor.framework on macOS ARM64, where
-the tree also signs itself (`cargo xtask sign`) and bundles as `Tormoni.app` (`cargo xtask bundle`).
+the tree also signs itself (`cargo xtask sign`) and bundles as `Boxdesk.app` (`cargo xtask bundle`).
 
 **Status.** Pre-release: one maintainer, no external review. A release installs with
-`curl -fsSL https://raw.githubusercontent.com/kendricklawton/tormoni/main/install.sh | sh` on macOS ARM64 and Linux x86_64; [Running a
+`curl -fsSL https://raw.githubusercontent.com/kendricklawton/boxdesk/main/install.sh | sh` on macOS ARM64 and Linux x86_64; [Running a
 sandbox](./running.md#installing) says what that does and cannot do. macOS's
 libkrun builds neither the `--sound` nor the guest input backend, so a display there is viewed in
-`Tormoni`. `--gpu` offers a guest the 3D path where libkrun reports the feature, but no host
+`Boxdesk`. `--gpu` offers a guest the 3D path where libkrun reports the feature, but no host
 measured so far carries a Venus-built renderer, so guest acceleration is unproven.
 
 This book is short, and deliberately so: it describes the rules the project is built to, the crates

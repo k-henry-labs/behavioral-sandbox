@@ -1,6 +1,6 @@
 //! The listener: a posture and a command in, a record out.
 //!
-//! - **A job is run by the binary this is.** `serve` re-executes its own `tormoni` with the flags
+//! - **A job is run by the binary this is.** `serve` re-executes its own `boxdesk` with the flags
 //!   a person would have typed, rather than driving the supervisor itself. That is the whole
 //!   reason a served record is byte for byte a local one: there is one run path, not two that
 //!   agree today.
@@ -35,8 +35,8 @@ pub struct Serve {
     ledger: Ledger,
     /// The bound on how many sandboxes run at once, held as a permit for the life of each.
     running: Arc<Semaphore>,
-    /// The `tormoni` this process is, which is what actually boots anything.
-    tormoni: PathBuf,
+    /// The `boxdesk` this process is, which is what actually boots anything.
+    boxdesk: PathBuf,
 }
 
 impl Serve {
@@ -44,13 +44,13 @@ impl Serve {
     pub fn new(config: Config) -> Result<Arc<Self>, config::Refusal> {
         let ledger = Ledger::at(config.data.join("usage.jsonl"))
             .map_err(|e| config::Refusal::Local(format!("open the ledger: {e}")))?;
-        let tormoni = std::env::current_exe()
+        let boxdesk = std::env::current_exe()
             .map_err(|e| config::Refusal::Local(format!("find this binary: {e}")))?;
         Ok(Arc::new(Self {
             running: Arc::new(Semaphore::new(config.concurrency)),
             config,
             ledger,
-            tormoni,
+            boxdesk,
         }))
     }
 
@@ -112,7 +112,7 @@ impl Job {
     fn argv(&self, verb: &str, name: &str) -> Vec<String> {
         let mut argv = vec![verb.to_string(), "--name".to_string(), name.to_string()];
         // A run is ephemeral at a keyboard, and a served one cannot be: the archive lane hands
-        // back the bytes `tormoni export` writes, and there is nothing to export from a directory
+        // back the bytes `boxdesk export` writes, and there is nothing to export from a directory
         // the run took with it. The box sweeps its own after a caller has had them.
         if verb == "run" {
             argv.push("--keep".to_string());
@@ -206,9 +206,9 @@ async fn run_job(
     let name = job
         .name
         .clone()
-        .unwrap_or_else(|| format!("job-{}", tormoni_record::now_ms()));
+        .unwrap_or_else(|| format!("job-{}", boxdesk_record::now_ms()));
     let argv = job.argv("run", &name);
-    let mut child = match tokio::process::Command::new(&state.tormoni)
+    let mut child = match tokio::process::Command::new(&state.boxdesk)
         .args(&argv)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -230,7 +230,7 @@ async fn run_job(
     let err = child.stderr.take();
     let allocation = job.allocation();
     let ledger = state.ledger.clone();
-    let tormoni = state.tormoni.clone();
+    let boxdesk = state.boxdesk.clone();
 
     tokio::spawn(async move {
         // The permit is held for the whole of the run and dropped with this task, so the bound
@@ -277,7 +277,7 @@ async fn run_job(
         let _ = pumping_err.await;
         let units = meter.tick().unwrap_or_else(|_| crate::meter::Units::none());
 
-        let record = show(&tormoni, &name).await;
+        let record = show(&boxdesk, &name).await;
         let _ = sender
             .send(Ok(line(&json!({
                 "event": "ended",
@@ -302,7 +302,7 @@ async fn run_job(
         .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response())
 }
 
-/// `GET /v1/runs/{id}/archive` — the ustar `tormoni export` writes, unchanged.
+/// `GET /v1/runs/{id}/archive` — the ustar `boxdesk export` writes, unchanged.
 ///
 /// Written by the binary itself into a scratch file and handed back whole: this must be the same
 /// bytes a person would have got at a keyboard, so nothing here assembles an archive of its own.
@@ -322,7 +322,7 @@ async fn archive(
             format!("This box could not make room to export a run: {e}"),
         );
     }
-    let out = tokio::process::Command::new(&state.tormoni)
+    let out = tokio::process::Command::new(&state.boxdesk)
         .arg("export")
         .arg(&id)
         .arg("--to")
@@ -388,7 +388,7 @@ async fn start_sandbox(
     if let Some(at) = argv.iter().position(|a| a == "--") {
         argv.truncate(at);
     }
-    match tokio::process::Command::new(&state.tormoni)
+    match tokio::process::Command::new(&state.boxdesk)
         .args(&argv)
         .output()
         .await
@@ -430,7 +430,7 @@ async fn exec_in(
     }
     let mut argv = vec!["exec".to_string(), name, "--".to_string()];
     argv.extend(job.command.iter().cloned());
-    match tokio::process::Command::new(&state.tormoni)
+    match tokio::process::Command::new(&state.boxdesk)
         .args(&argv)
         .output()
         .await
@@ -461,7 +461,7 @@ async fn stop_sandbox(
     if let Some(refusal) = authorize(&state, &headers) {
         return refusal;
     }
-    match tokio::process::Command::new(&state.tormoni)
+    match tokio::process::Command::new(&state.boxdesk)
         .args(["stop", &name])
         .output()
         .await
@@ -481,8 +481,8 @@ async fn stop_sandbox(
 }
 
 /// The run as the binary's own `--json` describes it, or null where it could not be read.
-async fn show(tormoni: &std::path::Path, name: &str) -> Value {
-    let out = tokio::process::Command::new(tormoni)
+async fn show(boxdesk: &std::path::Path, name: &str) -> Value {
+    let out = tokio::process::Command::new(boxdesk)
         .args(["show", "--json", name])
         .output()
         .await;

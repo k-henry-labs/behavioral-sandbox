@@ -1,31 +1,31 @@
-# tormoni-python
+# boxdesk-python
 
-The Python SDK for Tormoni.
+The Python SDK for Boxdesk.
 
-Tormoni runs untrusted code inside a **hardware-isolated virtual machine** on your own machine —
+Boxdesk runs untrusted code inside a **hardware-isolated virtual machine** on your own machine —
 KVM on Linux, Hypervisor.framework on macOS, via libkrun. It is not a container. Every run leaves
 a record: the posture it was given, its captured output, and whatever it wrote to `/results`.
 
-This package is a thin, faithful wrapper around the `tormoni` CLI. It spawns the binary with
+This package is a thin, faithful wrapper around the `boxdesk` CLI. It spawns the binary with
 `--json`, parses the one document the binary prints, and hands it back. No HTTP client, no async
 runtime, no third-party dependencies — the standard library only.
 
 ## Install
 
 ```bash
-pip install tormoni
+pip install boxdesk
 ```
 
-You also need the `tormoni` CLI itself. The SDK looks for it on `PATH`, honours the `TORMONI_CLI`
-environment variable (the same one Tormoni's desktop app uses), and takes an explicit path:
-`Tormoni(executable="/opt/tormoni/bin/tormoni")`.
+You also need the `boxdesk` CLI itself. The SDK looks for it on `PATH`, honours the `BOXDESK_CLI`
+environment variable (the same one Boxdesk's desktop app uses), and takes an explicit path:
+`Boxdesk(executable="/opt/boxdesk/bin/boxdesk")`.
 
 ## Three lines
 
 ```python
-import tormoni
+import boxdesk
 
-run = tormoni.Tormoni().run(["python3", "-c", "print(6*7)"])
+run = boxdesk.Boxdesk().run(["python3", "-c", "print(6*7)"])
 print(run.stdout)   # "42\n"
 print(run.ok)       # True
 ```
@@ -34,12 +34,12 @@ print(run.ok)       # True
 
 This is the one thing to understand about the API.
 
-`tormoni run` exits with the *guest command's* own exit status, so the process exit code says
-nothing about whether Tormoni worked. The SDK draws the line where the CLI does:
+`boxdesk run` exits with the *guest command's* own exit status, so the process exit code says
+nothing about whether Boxdesk worked. The SDK draws the line where the CLI does:
 
 - **The guest command exited non-zero.** Not an exception. You get a `Run` whose `ok` is false and
   whose `end_code` carries the status.
-- **Tormoni itself failed** — binary missing, guest root absent, hypervisor not answering. That
+- **Boxdesk itself failed** — binary missing, guest root absent, hypervisor not answering. That
   raises, carrying the CLI's own message unchanged.
 
 ```python
@@ -54,19 +54,19 @@ Never parse a single string to learn how a run ended. `end_kind` is one of `"exi
 `end_code` carries a number only for `"exit"` and `"signal"`.
 
 ```python
-import tormoni
+import boxdesk
 
 try:
-    run = tormoni.Tormoni().run(["cargo", "build"], mounts={"/src": "/home/you/project"})
-except tormoni.TormoniNotFound as error:
+    run = boxdesk.Boxdesk().run(["cargo", "build"], mounts={"/src": "/home/you/project"})
+except boxdesk.BoxdeskNotFound as error:
     ...                 # the CLI is not installed
-except tormoni.TormoniError as error:
-    print(error.stderr) # Tormoni's own words, never reworded here
+except boxdesk.BoxdeskError as error:
+    print(error.stderr) # Boxdesk's own words, never reworded here
     print(error.exit_code)
 ```
 
 A document that parses but is not a run record — a missing `run_id`, a `posture` of the wrong
-shape — is also a `TormoniError`. Tormoni failing to hold up its end of the contract is an
+shape — is also a `BoxdeskError`. Boxdesk failing to hold up its end of the contract is an
 operational failure like any other, so nothing raw (`KeyError`, `TypeError`) ever escapes the SDK.
 
 Nothing is retried. A failure is an answer.
@@ -88,7 +88,7 @@ leave one unset and the CLI's default stands.
 
 | Option | Flag | Meaning |
 |---|---|---|
-| `root` | `--root DIR` | Guest root tree. Default `$TORMONI_GUEST_ROOT`, then `~/.local/share/tormoni/rootfs` |
+| `root` | `--root DIR` | Guest root tree. Default `$BOXDESK_GUEST_ROOT`, then `~/.local/share/boxdesk/rootfs` |
 | `vcpus` | `--vcpus N` | vCPUs. Default 1 |
 | `mem_mib` | `--mem MIB` | Guest RAM in MiB. Default 512 |
 | `workdir` | `--workdir DIR` | Guest working directory |
@@ -135,7 +135,7 @@ run.posture.env   # ["API_KEY"]
 ## The rest of the API
 
 ```python
-client = tormoni.Tormoni()
+client = boxdesk.Boxdesk()
 
 # Settle and inspect the posture without booting anything.
 plan = client.dry_run(["cargo", "build"], vcpus=4, net="tsi")
@@ -157,14 +157,14 @@ an empty stdout; call `show()` for the full record.
 Options can also be gathered up and reused:
 
 ```python
-from tormoni import RunOptions
+from boxdesk import RunOptions
 
 build = RunOptions(vcpus=4, mem_mib=2048, mounts={"/src": "/home/you/project"}, workdir="/src")
 client.run_with(["cargo", "build"], build)
 client.run_with(["cargo", "test"], build)
 ```
 
-`Sandbox` is an alias for `Tormoni`, for when it reads better at a call site.
+`Sandbox` is an alias for `Boxdesk`, for when it reads better at a call site.
 
 ## Development
 
@@ -174,12 +174,12 @@ pytest          # no hypervisor, no network, no /dev/kvm
 mypy --strict
 ```
 
-The suite never boots a VM. It writes a stub `tormoni` binary to a temporary directory, puts it at
+The suite never boots a VM. It writes a stub `boxdesk` binary to a temporary directory, puts it at
 the front of `PATH`, and asserts the exact argv the client built and how it reads the document that
 comes back. One integration test uses a real install and is skipped unless you ask for it:
 
 ```bash
-TORMONI_INTEGRATION=1 pytest tests/test_integration.py
+BOXDESK_INTEGRATION=1 pytest tests/test_integration.py
 ```
 
 ## License

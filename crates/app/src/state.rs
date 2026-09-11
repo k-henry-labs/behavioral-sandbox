@@ -33,7 +33,7 @@ fn beside(runs: &Path) -> PathBuf {
 
 /// The saved picks; a file that is absent, unreadable or a later format is nothing saved.
 pub(crate) fn load() -> Saved {
-    tormoni_record::runs_dir()
+    boxdesk_record::runs_dir()
         .ok()
         .and_then(|runs| std::fs::read_to_string(beside(&runs)).ok())
         .map(|text| parse(&text))
@@ -42,7 +42,7 @@ pub(crate) fn load() -> Saved {
 
 /// Saves every pick, whole: the temporary is renamed over the file, never left.
 pub(crate) fn save(saved: &Saved) -> io::Result<()> {
-    save_at(&beside(&tormoni_record::runs_dir()?), saved)
+    save_at(&beside(&boxdesk_record::runs_dir()?), saved)
 }
 
 fn save_at(path: &Path, saved: &Saved) -> io::Result<()> {
@@ -144,12 +144,12 @@ mod tests {
         assert_eq!(parse("state 1\nscale huge\n").scale, None);
     }
 
-    /// The file sits beside the runs directory, so `$TORMONI_RUNS_DIR` isolation carries over.
+    /// The file sits beside the runs directory, so `$BOXDESK_RUNS_DIR` isolation carries over.
     #[test]
     fn the_state_file_sits_beside_the_runs_directory() {
         assert_eq!(
-            beside(Path::new("/x/tormoni/runs")),
-            Path::new("/x/tormoni/app-state")
+            beside(Path::new("/x/boxdesk/runs")),
+            Path::new("/x/boxdesk/app-state")
         );
         assert_eq!(
             beside(Path::new("/")),
@@ -161,7 +161,7 @@ mod tests {
     /// A pick lands whole under the final name, with no temporary left.
     #[test]
     fn a_pick_is_saved_whole_with_no_tmp_left() {
-        let dir = tormoni_test_support::ScratchDir::created("app-state");
+        let dir = boxdesk_test_support::ScratchDir::created("app-state");
         let path = dir.path().join(FILE);
         save_at(&path, &every_pick()).expect("saved");
         assert_eq!(

@@ -1,13 +1,13 @@
 import os
 from typing import Any, List, Optional, Sequence, Tuple
 
-from .exceptions import TormoniError, TormoniNotFound
+from .exceptions import BoxdeskError, BoxdeskNotFound
 from .models import Run
 from .options import Pairs, RunOptions, _entries
 
-__all__ = ["Tormoni", "Sandbox"]
+__all__ = ["Boxdesk", "Sandbox"]
 
-class Tormoni:
+class Boxdesk:
     def __init__(self, executable: Optional[str] = None) -> None:
         pass
 
@@ -20,7 +20,7 @@ class Tormoni:
         return self.run_with(command, options, dry_run=True)
 
     def run_with(self, command: Sequence[str], options: Optional[RunOptions] = None, *, dry_run: bool = False) -> Run:
-        import tormoni._tormoni_core as core
+        import boxdesk._boxdesk_core as core
         opts = options or RunOptions()
         
         def split_pair(p: str) -> Tuple[str, str]:
@@ -55,23 +55,23 @@ class Tormoni:
             )
         except RuntimeError as e:
             if "No such file or directory" in str(e):
-                raise TormoniNotFound(str(e))
-            raise TormoniError(str(e), None)
+                raise BoxdeskNotFound(str(e))
+            raise BoxdeskError(str(e), None)
 
     def show(self, id: str) -> Run:
-        import tormoni._tormoni_core as core
+        import boxdesk._boxdesk_core as core
         try:
             return core.show(id)
         except RuntimeError as e:
             if "No such file or directory" in str(e) or "not found" in str(e):
-                raise TormoniNotFound(str(e))
-            raise TormoniError(str(e), None)
+                raise BoxdeskNotFound(str(e))
+            raise BoxdeskError(str(e), None)
 
     def runs(self, all: bool = False) -> List[Run]:
-        import tormoni._tormoni_core as core
+        import boxdesk._boxdesk_core as core
         try:
             return core.runs(all)
         except RuntimeError as e:
-            raise TormoniError(str(e), None)
+            raise BoxdeskError(str(e), None)
 
-Sandbox = Tormoni
+Sandbox = Boxdesk

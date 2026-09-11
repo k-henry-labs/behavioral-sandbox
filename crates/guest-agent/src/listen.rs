@@ -10,7 +10,7 @@ use std::time::Duration;
 
 use vsock::{VMADDR_CID_ANY, VsockListener};
 
-use tormoni_guest_agent::serve_session;
+use boxdesk_guest_agent::serve_session;
 
 /// Read/write deadline on each served connection: with one set, a dead-or-stalled host surfaces as
 /// a typed timeout in `serve` instead of hanging the agent. Generous, because a real host reads
@@ -22,8 +22,8 @@ const IO_TIMEOUT: Duration = Duration::from_secs(30);
 const EXIT_OPERATIONAL: u8 = 2;
 
 /// The listen-spec scheme tokens, shared by the parser and the readiness announcement. The vsock
-/// one comes from [`tormoni_channel`], which the rootfs build also writes into the guest's init line.
-use tormoni_channel::VSOCK_SCHEME;
+/// one comes from [`boxdesk_channel`], which the rootfs build also writes into the guest's init line.
+use boxdesk_channel::VSOCK_SCHEME;
 const UNIX_SCHEME: &str = "unix";
 
 pub(crate) fn main() -> ExitCode {
@@ -31,9 +31,9 @@ pub(crate) fn main() -> ExitCode {
 
     let spec = std::env::args()
         .nth(1)
-        .or_else(|| std::env::var("TORMONI_GUEST_LISTEN").ok());
+        .or_else(|| std::env::var("BOXDESK_GUEST_LISTEN").ok());
     let Some(spec) = spec else {
-        eprintln!("usage: guest-agent <vsock:<port>|unix:<path>>   (or set TORMONI_GUEST_LISTEN)");
+        eprintln!("usage: guest-agent <vsock:<port>|unix:<path>>   (or set BOXDESK_GUEST_LISTEN)");
         return ExitCode::from(EXIT_OPERATIONAL);
     };
 
@@ -110,7 +110,7 @@ fn serve_incoming<S, E>(
     incoming: impl Iterator<Item = Result<S, E>>,
     set_deadlines: impl Fn(&S) -> std::io::Result<()>,
 ) where
-    S: tormoni_guest_agent::SplitStream + 'static,
+    S: boxdesk_guest_agent::SplitStream + 'static,
     E: std::fmt::Display,
 {
     for conn in incoming {
@@ -127,15 +127,15 @@ fn serve_incoming<S, E>(
 /// The one working directory every connection this process serves runs in: one agent per VM, so
 /// the VM **is** the session. The pid in the name separates dev-transport agents sharing `/tmp`.
 fn session_dir() -> std::path::PathBuf {
-    std::env::temp_dir().join(format!("tormoni-session-{}", std::process::id()))
+    std::env::temp_dir().join(format!("boxdesk-session-{}", std::process::id()))
 }
 
 /// Serves one connection, logging rather than propagating a failure so one bad peer never ends the
 /// loop. `serve_session` emits its own `exec` span, so only failures need a line here.
-fn serve_one<S: tormoni_guest_agent::SplitStream + 'static>(stream: S) {
+fn serve_one<S: boxdesk_guest_agent::SplitStream + 'static>(stream: S) {
     // One thread per connection, so a session wedged without cgroup v2 cannot block `accept`.
     let spawned = std::thread::Builder::new()
-        .name("tormoni-session".to_string())
+        .name("boxdesk-session".to_string())
         .spawn(move || {
             match serve_session(stream, &session_dir()) {
                 Ok(_) => {}
@@ -159,7 +159,7 @@ fn announce_ready(port: u32) {
     let _ = writeln!(
         out,
         "{} {VSOCK_SCHEME}:{port}",
-        tormoni_channel::GUEST_READY_MARKER
+        boxdesk_channel::GUEST_READY_MARKER
     );
     let _ = out.flush();
 }
@@ -180,11 +180,11 @@ fn parse_listen(spec: &str) -> Result<Listen<'_>, String> {
     }
 }
 
-/// stderr logging, filter from `TORMONI_LOG` else `info`. `info` rather than the CLI's `warn`, because
+/// stderr logging, filter from `BOXDESK_LOG` else `info`. `info` rather than the CLI's `warn`, because
 /// the agent's per-command `exec` span is the guest's operational trace, captured off the serial
 /// console. `try_init` plus a fallback, so a bad filter or a double-init never panics the run.
 fn init_tracing() {
-    let filter = std::env::var("TORMONI_LOG").unwrap_or_else(|_| "info".to_string());
+    let filter = std::env::var("BOXDESK_LOG").unwrap_or_else(|_| "info".to_string());
     let env_filter = tracing_subscriber::EnvFilter::try_new(&filter)
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
     let _ = tracing_subscriber::fmt()

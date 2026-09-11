@@ -1,5 +1,5 @@
 [package]
-name = "tormoni-input"
+name = "boxdesk-input"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -11,7 +11,7 @@ description = "The guest's keyboard and pointer: the devices, their reports, and
 
 [dependencies]
 # The device builders and the event type the senders take.
-tormoni-krun = { path = "../krun" }
+boxdesk-krun = { path = "../krun" }
 
 [lints]
 workspace = true

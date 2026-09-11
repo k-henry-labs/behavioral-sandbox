@@ -47,7 +47,7 @@ export interface JsRun {
   ok: boolean
 }
 export declare function runSandbox(name: string | undefined | null, command: Array<string>, root: string | undefined | null, vcpus: number | undefined | null, memMib: number | undefined | null, workdir: string | undefined | null, mounts: Array<Array<string>>, shares: Array<Array<string>>, net: string | undefined | null, rootfs: string | undefined | null, env: Array<string>, noResults: boolean, keep: boolean, dryRun: boolean, gpu: boolean, sound: boolean): JsRun
-/** One filed run, by id or by name — the lookup `tormoni show` makes. */
+/** One filed run, by id or by name — the lookup `boxdesk show` makes. */
 export declare function show(id: string): JsRun
 /** The filed runs, newest first. Without `all`, only the ones still open. */
 export declare function runs(all?: boolean | undefined | null): Array<JsRun>

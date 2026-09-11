@@ -14,18 +14,18 @@
 //! The Python SDK's native half.
 //!
 //! **This file maps Python arguments onto a `VmConfig` and nothing else.** It does not build a
-//! posture, does not decide a guest root, and does not serialise a record: `tormoni_core` owns
+//! posture, does not decide a guest root, and does not serialise a record: `boxdesk_core` owns
 //! all three, and each of them was wrong here when this crate owned a copy. What crosses the
 //! boundary is a `#[pyclass]` built by `models::convert_record`, so a renamed field of
-//! `tormoni_record::Record` is a compile error rather than a key that quietly stops appearing.
+//! `boxdesk_record::Record` is a compile error rather than a key that quietly stops appearing.
 
 use pyo3::prelude::*;
 use std::ffi::OsString;
 use std::num::{NonZeroU8, NonZeroU32};
 use std::path::PathBuf;
-use tormoni_core::{SandboxOptions, execute_sandbox, resolve_root};
-use tormoni_record::Store;
-use tormoni_supervisor::{Net, RootFs, VmConfig};
+use boxdesk_core::{SandboxOptions, execute_sandbox, resolve_root};
+use boxdesk_record::Store;
+use boxdesk_supervisor::{Net, RootFs, VmConfig};
 
 mod models;
 use models::{PyFile, PyPosture, PyRun, convert_record};
@@ -62,7 +62,7 @@ fn run_sandbox(
         ));
     };
 
-    // The same order the CLI resolves in — the argument, then `$TORMONI_GUEST_ROOT`, then the
+    // The same order the CLI resolves in — the argument, then `$BOXDESK_GUEST_ROOT`, then the
     // per-user data directory — because a binding with a default of its own would look somewhere
     // `cargo xtask init` never writes.
     let root = resolve_root(root.as_ref().map(std::path::Path::new)).map_err(failed)?;
@@ -70,7 +70,7 @@ fn run_sandbox(
     let mut cfg = VmConfig::new(root, program);
     cfg.args = rest.iter().map(OsString::from).collect();
     // The whole `KEY=VALUE` entry goes to the guest. Only the NAME comes back, and the cut is
-    // made once in `tormoni_core::posture_of` rather than here.
+    // made once in `boxdesk_core::posture_of` rather than here.
     cfg.env = env.iter().map(OsString::from).collect();
     cfg.workdir = workdir.map(PathBuf::from);
     cfg.gpu = gpu;
@@ -135,7 +135,7 @@ fn run_sandbox(
     Ok(convert_record(&record, dir.as_ref(), None))
 }
 
-/// One filed run, by id or by name — the lookup `tormoni show` makes.
+/// One filed run, by id or by name — the lookup `boxdesk show` makes.
 #[pyfunction]
 fn show(id: String) -> PyResult<PyRun> {
     let store = Store::open().map_err(failed)?;
@@ -165,14 +165,14 @@ fn runs(all: bool) -> PyResult<Vec<PyRun>> {
         .map(|record| {
             let live = record.is_open();
             // No directory: reading every run's captured bytes to list them is a directory walk
-            // per row, which is the reason `tormoni ls` omits them too.
+            // per row, which is the reason `boxdesk ls` omits them too.
             convert_record(&record, None, Some(live))
         })
         .collect())
 }
 
 #[pymodule]
-fn _tormoni_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn _boxdesk_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(run_sandbox, m)?)?;
     m.add_function(wrap_pyfunction!(show, m)?)?;
     m.add_function(wrap_pyfunction!(runs, m)?)?;

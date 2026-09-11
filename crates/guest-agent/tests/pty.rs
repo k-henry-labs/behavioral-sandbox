@@ -12,8 +12,8 @@
 
 use std::os::unix::net::UnixStream;
 
-use tormoni_channel::{ClientConnection, Request, Response};
-use tormoni_guest_agent::serve;
+use boxdesk_channel::{ClientConnection, Request, Response};
+use boxdesk_guest_agent::serve;
 
 /// Runs one pty session and returns everything the terminal printed plus the exit code.
 /// `after_first_output` is sent once the first output frame arrives, which is what makes a

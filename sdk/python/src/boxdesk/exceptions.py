@@ -1,8 +1,8 @@
-"""Exception types raised by the Tormoni SDK.
+"""Exception types raised by the Boxdesk SDK.
 
 The dividing line these types encode is the one the CLI draws: a guest command
-that exits non-zero is *not* an error, it is a :class:`~tormoni.models.Run`
-with a non-zero ``end_code``.  Only a failure of Tormoni itself -- a missing
+that exits non-zero is *not* an error, it is a :class:`~boxdesk.models.Run`
+with a non-zero ``end_code``.  Only a failure of Boxdesk itself -- a missing
 binary, an absent guest root, a hypervisor that does not answer -- reaches
 here.
 """
@@ -10,11 +10,11 @@ here.
 from typing import Optional
 
 
-class TormoniException(Exception):
+class BoxdeskException(Exception):
     """Base class for every exception this package raises."""
 
 
-class TormoniNotFound(TormoniException, FileNotFoundError):
+class BoxdeskNotFound(BoxdeskException, FileNotFoundError):
     """A path the sandbox needs is not there -- most often the guest root.
 
     Also a :class:`FileNotFoundError`, so callers written against the earlier
@@ -22,7 +22,7 @@ class TormoniNotFound(TormoniException, FileNotFoundError):
     """
 
 
-class TormoniError(TormoniException, RuntimeError):
+class BoxdeskError(BoxdeskException, RuntimeError):
     """The sandbox itself failed: no hypervisor, a posture that cannot be met,
     a run store that cannot be opened.
 
@@ -37,9 +37,9 @@ class TormoniError(TormoniException, RuntimeError):
     ) -> None:
         self.stderr = stderr
         self.exit_code = exit_code
-        # Tormoni's own words win whenever it wrote any; `detail` only fills
+        # Boxdesk's own words win whenever it wrote any; `detail` only fills
         # the gap when it exited silently.
         silent = (
-            f"tormoni exited with status {exit_code} without printing a JSON document"
+            f"boxdesk exited with status {exit_code} without printing a JSON document"
         )
         super().__init__(stderr.strip() or detail or silent)

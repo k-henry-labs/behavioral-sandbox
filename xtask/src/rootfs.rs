@@ -28,9 +28,9 @@ const ROOTFS_BUDGET_MIB: u64 = 160;
 const DESKTOP_BUDGET_MIB: u64 = 320;
 
 /// The guest path this builder bakes the agent in at, shared with the host that boots it as a
-/// VM's workload (`tormoni shell`): the definition lives in `tormoni-channel` beside the port they also
+/// VM's workload (`boxdesk shell`): the definition lives in `boxdesk-channel` beside the port they also
 /// share. `verify_guest_contract` reads it back off the staged tree.
-use tormoni_channel::GUEST_AGENT_PATH;
+use boxdesk_channel::GUEST_AGENT_PATH;
 
 /// An absolute *guest* path resolved inside the staging tree. The leading `/` has to go, or
 /// `Path::join` would discard the staging root and address the build host's own filesystem.
@@ -74,7 +74,7 @@ const ML_PACKAGES: &[&str] = &[
 const ML_BUDGET_MIB: u64 = 512;
 
 /// Where the desktop image carries its session program, on the guest's default `PATH`.
-const SESSION_PATH: &str = "/usr/local/bin/tormoni-session";
+const SESSION_PATH: &str = "/usr/local/bin/boxdesk-session";
 
 /// One guest image: its name under `artifacts/`, what goes into it beyond the base and the agent,
 /// and the ceiling it is held to.
@@ -111,14 +111,14 @@ pub(crate) const GUEST: ImageSpec = ImageSpec {
     lock_stem: "rootfs-packages",
 };
 
-/// The desktop image: `tormoni run --display WxH --root artifacts/rootfs-desktop -- tormoni-session`
+/// The desktop image: `boxdesk run --display WxH --root artifacts/rootfs-desktop -- boxdesk-session`
 /// boots to a terminal in a Wayland session.
 pub(crate) const DESKTOP: ImageSpec = ImageSpec {
     name: "rootfs-desktop",
     flags: &["--desktop"],
     repos: &["main", "community"],
     packages: DESKTOP_PACKAGES,
-    programs: &[(SESSION_PATH, include_str!("../guest/tormoni-session"))],
+    programs: &[(SESSION_PATH, include_str!("../guest/boxdesk-session"))],
     required: &[
         "/usr/bin/cage",
         "/usr/bin/foot",
@@ -237,7 +237,7 @@ pub(crate) fn apk_tools_artifact() -> Result<Artifact> {
     let dir = artifacts_dir();
     match std::env::consts::ARCH {
         "x86_64" => Ok(Artifact {
-            url: "https://github.com/kendricklawton/tormoni/releases/download/build-inputs/\
+            url: "https://github.com/kendricklawton/boxdesk/releases/download/build-inputs/\
                   apk-tools-static-3.0.7-r0.tgz"
                 .to_string(),
             sha256: "ed1c5e82177844249b7c4ecc2653b78eed096be20496b7fb860a9e165b2e5ce1",
@@ -302,7 +302,7 @@ fn assemble_rootfs(image: &ImageSpec, out_dir: &Path, arch: GuestArch) -> Result
         set_mode_0755(&dest)?;
     }
 
-    // The mount point every run's results directory lands on (`tormoni_record::RESULTS_GUEST_PATH`):
+    // The mount point every run's results directory lands on (`boxdesk_record::RESULTS_GUEST_PATH`):
     // the root is read-only, so a directory the mount preamble needs has to be in the image.
     std::fs::create_dir_all(in_staging(&staging, "/results"))?;
 
@@ -443,7 +443,7 @@ fn verify_guest_contract(image: &ImageSpec, staging: &Path) -> Result<()> {
     if !in_staging(staging, setsid).exists() {
         bail!(
             "guest-image contract: {setsid} is missing from the staged rootfs (the agent's pty \
-             sessions spawn through it; `tormoni shell` would get a refusal for every command)"
+             sessions spawn through it; `boxdesk shell` would get a refusal for every command)"
         );
     }
     for path in image.required {
@@ -718,7 +718,7 @@ enum ApkSource<'a> {
 }
 
 /// Installs [`GUEST_PACKAGES`] into the staging root with the pinned `apk.static`: no chroot, no
-/// root, no host `apk`. Offline from the vendored cache with `TORMONI_VENDOR_DIR` set. The tool is
+/// root, no host `apk`. Offline from the vendored cache with `BOXDESK_VENDOR_DIR` set. The tool is
 /// extracted to a scratch dir and removed; the packages are the product.
 fn install_guest_packages(image: &ImageSpec, staging: &Path, arch: GuestArch) -> Result<()> {
     if image.packages.is_empty() {
@@ -1078,8 +1078,8 @@ mod tests {
     }
 
     /// A per-test scratch tree, removed on drop so a failing assertion can't leave one behind.
-    fn temp_dir(name: &str) -> tormoni_test_support::ScratchDir {
-        tormoni_test_support::ScratchDir::created(&format!("contract-{name}"))
+    fn temp_dir(name: &str) -> boxdesk_test_support::ScratchDir {
+        boxdesk_test_support::ScratchDir::created(&format!("contract-{name}"))
     }
 
     /// A staging tree that satisfies the contract: the agent at 0755. Each negative test breaks

@@ -1,9 +1,9 @@
 #![forbid(unsafe_code)]
 
+use boxdesk_record::{End, Posture, Record, RunDir, Store, Verb};
+use boxdesk_supervisor::{Console, Exit, Vm, VmConfig};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
-use tormoni_record::{End, Posture, Record, RunDir, Store, Verb};
-use tormoni_supervisor::{Console, Exit, Vm, VmConfig};
 
 pub struct SandboxOptions {
     pub name: String,
@@ -17,28 +17,28 @@ pub struct SandboxOptions {
 
 /// The record's spelling of a config's root posture.
 ///
-/// The two enums are separate because `tormoni-record` is dependency-free and cannot name a type
+/// The two enums are separate because `boxdesk-record` is dependency-free and cannot name a type
 /// from the crate that links libkrun; `the_record_and_the_config_spell_the_posture_alike` holds
 /// them in step, and the wildcard is what `#[non_exhaustive]` requires of a match from another
 /// crate.
-fn record_rootfs(rootfs: tormoni_supervisor::RootFs) -> tormoni_record::Rootfs {
+fn record_rootfs(rootfs: boxdesk_supervisor::RootFs) -> boxdesk_record::Rootfs {
     match rootfs {
-        tormoni_supervisor::RootFs::Writable => tormoni_record::Rootfs::Writable,
-        _ => tormoni_record::Rootfs::ReadOnly,
+        boxdesk_supervisor::RootFs::Writable => boxdesk_record::Rootfs::Writable,
+        _ => boxdesk_record::Rootfs::ReadOnly,
     }
 }
 
 /// The record's spelling of a config's network posture.
-fn record_network(net: tormoni_supervisor::Net) -> tormoni_record::Network {
+fn record_network(net: boxdesk_supervisor::Net) -> boxdesk_record::Network {
     match net {
-        tormoni_supervisor::Net::Tsi => tormoni_record::Network::Tsi,
-        _ => tormoni_record::Network::None,
+        boxdesk_supervisor::Net::Tsi => boxdesk_record::Network::Tsi,
+        _ => boxdesk_record::Network::None,
     }
 }
 
 /// The record's spelling of a config's display.
-fn record_display(display: tormoni_supervisor::Display) -> tormoni_record::DisplayMode {
-    let mode = tormoni_record::DisplayMode::new(display.width, display.height);
+fn record_display(display: boxdesk_supervisor::Display) -> boxdesk_record::DisplayMode {
+    let mode = boxdesk_record::DisplayMode::new(display.width, display.height);
     match display.refresh {
         Some(hz) => mode.with_refresh(hz),
         None => mode,
@@ -58,12 +58,12 @@ pub fn posture_of(cfg: &VmConfig, results: bool) -> Posture {
     p.mounts = cfg
         .mounts
         .iter()
-        .map(|(guest, host)| tormoni_record::Mount::new(guest.clone(), host.clone()))
+        .map(|(guest, host)| boxdesk_record::Mount::new(guest.clone(), host.clone()))
         .collect();
     p.shares = cfg
         .shares
         .iter()
-        .map(|(tag, host)| tormoni_record::Share::new(tag.clone(), host.clone()))
+        .map(|(tag, host)| boxdesk_record::Share::new(tag.clone(), host.clone()))
         .collect();
     p.network = record_network(cfg.net);
     p.display = cfg.display.map(record_display);
@@ -71,12 +71,12 @@ pub fn posture_of(cfg: &VmConfig, results: bool) -> Posture {
     p.gpu = cfg.gpu;
     p.results = results;
     // The names, never what they are set to: a value is the caller's secret often enough that
-    // the record is not the place for one. `tormoni_record::env_key` is the same cut the record
+    // the record is not the place for one. `boxdesk_record::env_key` is the same cut the record
     // writer makes.
     p.env = cfg
         .env
         .iter()
-        .map(|entry| tormoni_record::env_key(&entry.to_string_lossy()).to_string())
+        .map(|entry| boxdesk_record::env_key(&entry.to_string_lossy()).to_string())
         .collect();
     p
 }
@@ -94,7 +94,7 @@ pub fn execute_sandbox(mut opts: SandboxOptions) -> Result<(Record, Option<RunDi
 
     if opts.results {
         opts.cfg.mounts.push((
-            std::path::PathBuf::from(tormoni_record::RESULTS_GUEST_PATH),
+            std::path::PathBuf::from(boxdesk_record::RESULTS_GUEST_PATH),
             run.results(),
         ));
     }
@@ -153,7 +153,7 @@ pub fn execute_sandbox(mut opts: SandboxOptions) -> Result<(Record, Option<RunDi
     if !opts.keep
         && let Err(e) = store.remove(&record.id)
     {
-        eprintln!("tormoni run: {} was left behind: {e}", record.id);
+        eprintln!("boxdesk run: {} was left behind: {e}", record.id);
     }
 
     Ok((record, Some(run), code))
@@ -162,7 +162,7 @@ pub fn execute_sandbox(mut opts: SandboxOptions) -> Result<(Record, Option<RunDi
 fn tee(
     from: Option<impl std::io::Read + Send + 'static>,
     mut to: impl std::io::Write + Send + 'static,
-    mut keep: tormoni_record::Capped,
+    mut keep: boxdesk_record::Capped,
 ) -> std::thread::JoinHandle<()> {
     use std::io::Write;
     std::thread::spawn(move || {
@@ -181,13 +181,13 @@ fn tee(
     })
 }
 
-/// The guest root: the flag, else `$TORMONI_GUEST_ROOT`, else the per-user data directory. The same
+/// The guest root: the flag, else `$BOXDESK_GUEST_ROOT`, else the per-user data directory. The same
 /// order as every other layered knob here (flag, then env, then default), with the config file
 /// layer deliberately absent until phase 3's config work decides its shape.
 pub fn resolve_root(flag: Option<&Path>) -> Result<PathBuf, String> {
     resolve_root_from(
         flag.map(Path::to_path_buf),
-        std::env::var_os("TORMONI_GUEST_ROOT"),
+        std::env::var_os("BOXDESK_GUEST_ROOT"),
         std::env::var_os("XDG_DATA_HOME"),
         std::env::var_os("HOME"),
     )
@@ -204,11 +204,11 @@ fn resolve_root_from(
 ) -> Result<PathBuf, String> {
     let root = flag
         .or_else(|| env_root.map(PathBuf::from))
-        .or_else(|| data_dir(xdg_data, home).map(|d| d.join("tormoni/rootfs")));
+        .or_else(|| data_dir(xdg_data, home).map(|d| d.join("boxdesk/rootfs")));
     let Some(root) = root else {
         return Err(
-            "no guest root: pass --root, set TORMONI_GUEST_ROOT, or install a tree at \
-             ~/.local/share/tormoni/rootfs (a checkout puts one there with `cargo xtask init`, or \
+            "no guest root: pass --root, set BOXDESK_GUEST_ROOT, or install a tree at \
+             ~/.local/share/boxdesk/rootfs (a checkout puts one there with `cargo xtask init`, or \
              builds the full image on Linux with `cargo xtask build-rootfs`)"
                 .to_string(),
         );
@@ -252,22 +252,22 @@ mod tests {
         let err = resolve_root_from(None, None, None, None)
             .expect_err("nothing to resolve from is an error, not a guess");
         assert!(err.contains("--root"), "{err}");
-        assert!(err.contains("TORMONI_GUEST_ROOT"), "{err}");
+        assert!(err.contains("BOXDESK_GUEST_ROOT"), "{err}");
 
         let home = Some(OsString::from("/nonexistent-home"));
         let err = resolve_root_from(None, None, None, home)
             .expect_err("the derived default is still checked for existence");
-        assert!(err.contains(".local/share/tormoni/rootfs"), "{err}");
+        assert!(err.contains(".local/share/boxdesk/rootfs"), "{err}");
     }
 
     /// The record's posture words are the config's flag words. Two crates spell this vocabulary
-    /// because `tormoni-record` is dependency-free, so the pairing is asserted rather than assumed:
+    /// because `boxdesk-record` is dependency-free, so the pairing is asserted rather than assumed:
     /// a record saying `read-only` for a writable root would misreport what a sandbox could do.
     #[test]
     fn the_record_and_the_config_spell_the_posture_alike() {
         for rootfs in [
-            tormoni_supervisor::RootFs::ReadOnly,
-            tormoni_supervisor::RootFs::Writable,
+            boxdesk_supervisor::RootFs::ReadOnly,
+            boxdesk_supervisor::RootFs::Writable,
         ] {
             assert_eq!(
                 rootfs.as_flag(),
@@ -275,15 +275,15 @@ mod tests {
                 "{rootfs:?}"
             );
         }
-        for net in [tormoni_supervisor::Net::None, tormoni_supervisor::Net::Tsi] {
+        for net in [boxdesk_supervisor::Net::None, boxdesk_supervisor::Net::Tsi] {
             assert_eq!(net.as_flag(), record_network(net).as_word(), "{net:?}");
         }
         let hd = std::num::NonZeroU32::new(1920).expect("non-zero");
         let vd = std::num::NonZeroU32::new(1080).expect("non-zero");
         let hz = std::num::NonZeroU32::new(60).expect("non-zero");
         for display in [
-            tormoni_supervisor::Display::new(hd, vd),
-            tormoni_supervisor::Display::new(hd, vd).with_refresh(hz),
+            boxdesk_supervisor::Display::new(hd, vd),
+            boxdesk_supervisor::Display::new(hd, vd).with_refresh(hz),
         ] {
             assert_eq!(
                 display.as_spec(),

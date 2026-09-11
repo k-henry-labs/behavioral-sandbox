@@ -1,14 +1,14 @@
 //! The `.app` the window runs as, so macOS names it what a person calls it.
 //!
-//! - **The executable is named `Tormoni`, and the platform reads that name.** macOS names the
+//! - **The executable is named `Boxdesk`, and the platform reads that name.** macOS names the
 //!   menu bar, the About, Hide and Quit items under it, and the Dock from the executable's file
-//!   name (measured on this host, macOS 26.6.2, 2026-09-09), so a bare `target/debug/Tormoni`
+//!   name (measured on this host, macOS 26.6.2, 2026-09-09), so a bare `target/debug/Boxdesk`
 //!   reads right; the bundle adds what a file name cannot carry: the identifier and the icon.
 //!   `the_bundle_runs_the_binary_the_manifest_names` holds `CFBundleExecutable` to the
 //!   manifest's `[[bin]]`.
-//! - **The pair travels together, laid out as Ollama lays its own out.** `Tormoni` is the
-//!   executable under `Contents/MacOS`; `tormoni` sits under `Contents/Resources`, where
-//!   `tormoni_path` looks and where an installer's `/usr/local/bin/tormoni` symlink points.
+//! - **The pair travels together, laid out as Ollama lays its own out.** `Boxdesk` is the
+//!   executable under `Contents/MacOS`; `boxdesk` sits under `Contents/Resources`, where
+//!   `boxdesk_path` looks and where an installer's `/usr/local/bin/boxdesk` symlink points.
 //!   Finder starts the app with a login `PATH` no `cargo` layout is on, so the bundle is the one
 //!   place a double-clicked app can rely on.
 //! - **The CLI copy is signed first, then the bundle is sealed.** The seal hashes every file
@@ -29,42 +29,42 @@ use crate::{app_icon, artifacts_dir, cargo, sign, target_dir, workspace_root};
 /// A string the `Info.plist` carries, never a file name: a bundle is named by its plist, and the
 /// executable inside it can be called anything. `the_plist_is_what_names_a_bundled_app` measures
 /// that, and Zed and Ghostty ship the same way.
-pub(crate) const APP: &str = "Tormoni";
+pub(crate) const APP: &str = "Boxdesk";
 
 /// The bundle's own directory name, which Finder shows as the application's.
-const BUNDLE: &str = "Tormoni.app";
+const BUNDLE: &str = "Boxdesk.app";
 
 /// The command line binary, copied in beside the application. Its name is the command a person
 /// types, so it is also what cargo builds it as.
-const CLI: &str = "tormoni";
+const CLI: &str = "boxdesk";
 
 /// The application's executable, as cargo writes it and as the bundle ships it: no rename, so
 /// what a release carries is the file the build produced.
 ///
 /// It cannot be a case-variant of [`CLI`]: one target directory holds every binary of the
-/// workspace and macOS's default filesystem folds case, so a `Tormoni` built beside `tormoni`
+/// workspace and macOS's default filesystem folds case, so a `Boxdesk` built beside `boxdesk`
 /// would be one file and the release would carry whichever was linked last.
 /// `the_two_binaries_cannot_collide_in_one_directory` is the guard.
-pub(crate) const EXECUTABLE: &str = "tormoni-app";
+pub(crate) const EXECUTABLE: &str = "boxdesk-app";
 
 /// The icon inside the bundle, which the plist names.
-const ICON: &str = "Tormoni.icns";
+const ICON: &str = "Boxdesk.icns";
 
 /// The identifier the application registers under: the bundle's `CFBundleIdentifier`, the Linux
 /// window's app id, and the desktop entry's file name. `the_app_id_is_the_one_the_window_carries`
 /// holds it to the app's own copy.
-pub(crate) const APP_ID: &str = "ai.tormoni.app";
+pub(crate) const APP_ID: &str = "ai.boxdesk.app";
 
 /// The URL scheme this app answers to, which the console's connect page hands back to when a
 /// device is approved.
 ///
 /// **Nothing reads the URL.** The app is already polling the claim lane, so the only work a
-/// `tormoni://` link does is bring the window forward; the sign-in finishes on its own either
+/// `boxdesk://` link does is bring the window forward; the sign-in finishes on its own either
 /// way. Registering a scheme lets any page launch the app with any path, and ignoring the payload
 /// is what keeps that from being an input this app parses.
-pub(crate) const SCHEME: &str = "tormoni";
+pub(crate) const SCHEME: &str = "boxdesk";
 
-/// Assembles `artifacts/Tormoni.app` from the built binaries, or explains why there is
+/// Assembles `artifacts/Boxdesk.app` from the built binaries, or explains why there is
 /// nothing to do.
 pub(crate) fn bundle_app(release: bool) -> Result<()> {
     if !cfg!(target_os = "macos") {
@@ -183,7 +183,7 @@ fn info_plist(version: &str) -> String {
 /// copy inside one is what lends the process that identity while its output stays on the
 /// terminal, which `open` would take away.
 pub(crate) fn run_app(release: bool, args: &[String]) -> Result<()> {
-    let mut build = vec!["build", "-p", "tormoni-app", "-p", "tormoni"];
+    let mut build = vec!["build", "-p", "boxdesk-app", "-p", "boxdesk"];
     if release {
         build.push("--release");
     }
@@ -281,7 +281,7 @@ pub(crate) fn linux_layout() -> Vec<(String, Payload)> {
             format!("share/icons/hicolor/512x512/apps/{APP_ID}.png"),
             Payload::Icon,
         ),
-        ("share/tormoni/rootfs.tar.gz".to_string(), Payload::Rootfs),
+        ("share/boxdesk/rootfs.tar.gz".to_string(), Payload::Rootfs),
     ]
 }
 
@@ -300,7 +300,7 @@ mod tests {
     }
 
     /// **A bundle is named by its plist, not by the file inside it.** Measured on this host,
-    /// macOS 26.6.2, 2026-09-09: a bundle whose executable file was `tormoni-app` and whose
+    /// macOS 26.6.2, 2026-09-09: a bundle whose executable file was `boxdesk-app` and whose
     /// `CFBundleName` was `Zephyr` read `Zephyr` in the Dock and the menu bar. So the name and
     /// the executable are two different things here, and neither is renamed to match the other.
     #[test]
@@ -333,7 +333,7 @@ mod tests {
     /// The two binaries share one target directory, and the default macOS filesystem folds case,
     /// so names differing only in case would be one file: the release would carry the same
     /// program twice, and which one is a race between two linker runs. This is not theory; it
-    /// shipped a bundle whose `tormoni` was the notebook.
+    /// shipped a bundle whose `boxdesk` was the notebook.
     #[test]
     fn the_two_binaries_cannot_collide_in_one_directory() {
         assert_ne!(
@@ -369,7 +369,7 @@ mod tests {
     }
 
     /// The bundle claims the scheme the console's connect page hands a device back through, under
-    /// the identifier that owns it. Without this the platform resolves `tormoni://` to nothing and
+    /// the identifier that owns it. Without this the platform resolves `boxdesk://` to nothing and
     /// an approved device leaves the person on a web page.
     #[test]
     fn the_bundle_claims_the_scheme_the_console_hands_back_to() {
@@ -402,7 +402,7 @@ mod tests {
             "the plist does not name {ICON}"
         );
         let bytes = std::fs::read(crate::workspace_root().join(app_icon::ICNS))
-            .expect("crates/app/icon/Tormoni.icns: run `cargo xtask app-icon`");
+            .expect("crates/app/icon/Boxdesk.icns: run `cargo xtask app-icon`");
         assert_eq!(&bytes[..4], b"icns", "not an icns file");
         let png =
             std::fs::read(app_icon::png()).expect("the desktop icon: run `cargo xtask app-icon`");
@@ -414,8 +414,8 @@ mod tests {
     #[test]
     fn the_cli_sits_in_resources_as_ollama_keeps_its_own() {
         assert_eq!(
-            cli_in(Path::new("/tmp/Tormoni.app")),
-            Path::new("/tmp/Tormoni.app/Contents/Resources/tormoni")
+            cli_in(Path::new("/tmp/Boxdesk.app")),
+            Path::new("/tmp/Boxdesk.app/Contents/Resources/boxdesk")
         );
     }
 
@@ -473,16 +473,16 @@ mod tests {
     }
 
     /// The layout is Apple's: the executable sits under `Contents/MacOS`, which is where
-    /// `CFBundleExecutable` is resolved from and where `tormoni` lands beside it.
+    /// `CFBundleExecutable` is resolved from and where `boxdesk` lands beside it.
     #[test]
     fn the_executable_sits_where_macos_looks_for_it() {
-        let app = Path::new("/tmp/Tormoni.app");
+        let app = Path::new("/tmp/Boxdesk.app");
         assert_eq!(
             executable_in(app),
-            Path::new("/tmp/Tormoni.app/Contents/MacOS/tormoni-app")
+            Path::new("/tmp/Boxdesk.app/Contents/MacOS/boxdesk-app")
         );
         assert!(
-            bundle_path().ends_with("artifacts/Tormoni.app"),
+            bundle_path().ends_with("artifacts/Boxdesk.app"),
             "{:?}",
             bundle_path()
         );

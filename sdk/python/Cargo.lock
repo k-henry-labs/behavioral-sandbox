@@ -1809,7 +1809,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "tormoni"
+name = "boxdesk"
 version = "0.0.1"
 dependencies = [
  "axum",
@@ -1818,52 +1818,52 @@ dependencies = [
  "serde_json",
  "softbuffer",
  "tokio",
- "tormoni-channel",
- "tormoni-input",
- "tormoni-krun",
- "tormoni-record",
- "tormoni-serve",
- "tormoni-supervisor",
+ "boxdesk-channel",
+ "boxdesk-input",
+ "boxdesk-krun",
+ "boxdesk-record",
+ "boxdesk-serve",
+ "boxdesk-supervisor",
  "winit",
 ]
 
 [[package]]
-name = "tormoni-channel"
+name = "boxdesk-channel"
 version = "0.0.1"
 dependencies = [
  "zeroize",
 ]
 
 [[package]]
-name = "tormoni-input"
+name = "boxdesk-input"
 version = "0.0.1"
 dependencies = [
- "tormoni-krun",
+ "boxdesk-krun",
 ]
 
 [[package]]
-name = "tormoni-krun"
+name = "boxdesk-krun"
 version = "0.0.1"
 dependencies = [
  "rustix 1.1.4",
 ]
 
 [[package]]
-name = "tormoni-py"
+name = "boxdesk-py"
 version = "0.1.0"
 dependencies = [
  "pyo3",
- "tormoni",
- "tormoni-record",
- "tormoni-supervisor",
+ "boxdesk",
+ "boxdesk-record",
+ "boxdesk-supervisor",
 ]
 
 [[package]]
-name = "tormoni-record"
+name = "boxdesk-record"
 version = "0.0.1"
 
 [[package]]
-name = "tormoni-serve"
+name = "boxdesk-serve"
 version = "0.0.1"
 dependencies = [
  "axum",
@@ -1871,17 +1871,17 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
- "tormoni-record",
- "tormoni-supervisor",
+ "boxdesk-record",
+ "boxdesk-supervisor",
  "tracing",
 ]
 
 [[package]]
-name = "tormoni-supervisor"
+name = "boxdesk-supervisor"
 version = "0.0.1"
 dependencies = [
  "rustix 1.1.4",
- "tormoni-krun",
+ "boxdesk-krun",
 ]
 
 [[package]]

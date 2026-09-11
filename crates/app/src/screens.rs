@@ -3,7 +3,7 @@
 //! - **The posture is the layout.** A row shows what a run could touch before its name is read
 //!   twice; a run's pane spells it out; the form's sentence is `Posture::sentence`, generated
 //!   from the fields, so starting is confirming what the record will say (rule 2 as a screen).
-//! - **Nothing here is a verb.** Every button becomes a `tormoni` call or a file read; the CLI does
+//! - **Nothing here is a verb.** Every button becomes a `boxdesk` call or a file read; the CLI does
 //!   the same thing with the same words.
 
 use iced::widget::{
@@ -12,7 +12,7 @@ use iced::widget::{
 };
 use iced::{Element, Fill, Font, Length};
 
-use tormoni_record::{Record, Verb};
+use boxdesk_record::{Record, Verb};
 
 use crate::{App, Field, Form, Message, Stream, Switch, cli, icons};
 
@@ -48,11 +48,11 @@ fn status_colour(theme: &iced::Theme, record: &Record, live: bool) -> iced::Colo
         return palette.success.base.color;
     }
     match record.end {
-        Some(tormoni_record::End::Exit(0)) => palette.background.strong.text,
+        Some(boxdesk_record::End::Exit(0)) => palette.background.strong.text,
         Some(
-            tormoni_record::End::Exit(_)
-            | tormoni_record::End::Signal(_)
-            | tormoni_record::End::Failed,
+            boxdesk_record::End::Exit(_)
+            | boxdesk_record::End::Signal(_)
+            | boxdesk_record::End::Failed,
         ) => palette.danger.base.color,
         _ => palette.background.strong.text,
     }
@@ -382,13 +382,13 @@ fn muted_line<'a>(line: impl text::IntoFragment<'a>, size: f32) -> Element<'a, M
         .into()
 }
 
-/// Where the `tormoni` this window would spawn is, or what to set when it is nowhere.
-fn tormoni_line(app: &App) -> String {
+/// Where the `boxdesk` this window would spawn is, or what to set when it is nowhere.
+fn boxdesk_line(app: &App) -> String {
     let home = std::env::var("HOME").ok();
-    match &app.platform.tormoni {
+    match &app.platform.boxdesk {
         Some(path) => tilde(home.as_deref(), path),
         None => {
-            "Not found: set $TORMONI_CLI, or put tormoni beside Tormoni, in the bundle\'s Resources, or on PATH.".to_string()
+            "Not found: set $BOXDESK_CLI, or put boxdesk beside Boxdesk, in the bundle\'s Resources, or on PATH.".to_string()
         }
     }
 }
@@ -401,7 +401,7 @@ fn root_line(app: &App) -> String {
         cli::GuestRoot::Absent(path) => {
             format!("{} (nothing there yet)", tilde(home.as_deref(), path))
         }
-        cli::GuestRoot::Unset => "None: set $TORMONI_GUEST_ROOT.".to_string(),
+        cli::GuestRoot::Unset => "None: set $BOXDESK_GUEST_ROOT.".to_string(),
     }
 }
 
@@ -428,7 +428,7 @@ pub(crate) fn settings(app: &App) -> Element<'_, Message> {
     }))
     .spacing(6);
     let theme_note = if app.theme_overridden {
-        "Started with --theme or $TORMONI_THEME, which outranks this pick at the next launch."
+        "Started with --theme or $BOXDESK_THEME, which outranks this pick at the next launch."
     } else {
         "Light, dark, or whichever the desktop is showing."
     };
@@ -450,7 +450,7 @@ pub(crate) fn settings(app: &App) -> Element<'_, Message> {
     let mut body = column![
         setting(
             None,
-            "Tormoni",
+            "Boxdesk",
             format!("version {}", env!("CARGO_PKG_VERSION")),
             space().width(0)
         ),
@@ -478,7 +478,7 @@ pub(crate) fn settings(app: &App) -> Element<'_, Message> {
         setting(
             Some(icons::TERMINAL),
             "Command line",
-            tormoni_line(app),
+            boxdesk_line(app),
             space().width(0)
         ),
         setting(
@@ -737,7 +737,7 @@ fn card(theme: &iced::Theme) -> container::Style {
 /// The cookbook: runs worth trying, on shelves, each one press from a filled form.
 ///
 /// **A press fills the form and stops there.** Starting is the form's own button, so an entry from
-/// here is read before it boots like every other run. Each entry shows the `tormoni` line it is,
+/// here is read before it boots like every other run. Each entry shows the `boxdesk` line it is,
 /// built by [`crate::Example::cli`] from the same fields the form takes.
 pub(crate) fn cookbook(app: &App) -> Element<'_, Message> {
     let mut body = column![].spacing(20);
@@ -857,8 +857,8 @@ pub(crate) fn list(app: &App) -> Element<'_, Message> {
         rows = rows.push(
             column![
                 text(
-                    "No runs yet. Start one here, or with `tormoni run`, `tormoni shell` or \
-                     `tormoni up`."
+                    "No runs yet. Start one here, or with `boxdesk run`, `boxdesk shell` or \
+                     `boxdesk up`."
                 )
                 .size(BODY)
                 .style(|t| text::Style {
@@ -1049,8 +1049,8 @@ fn run_row<'a>(app: &'a App, record: &'a Record) -> Element<'a, Message> {
     let state = if live {
         format!(
             "running {}",
-            tormoni_record::format_duration(
-                tormoni_record::now_ms().saturating_sub(record.started_ms)
+            boxdesk_record::format_duration(
+                boxdesk_record::now_ms().saturating_sub(record.started_ms)
             )
         )
     } else {
@@ -1058,7 +1058,7 @@ fn run_row<'a>(app: &'a App, record: &'a Record) -> Element<'a, Message> {
         match record.ended_ms {
             Some(ended) => format!(
                 "{end} · {}",
-                tormoni_record::format_duration(ended.saturating_sub(record.started_ms))
+                boxdesk_record::format_duration(ended.saturating_sub(record.started_ms))
             ),
             None => end,
         }
@@ -1203,14 +1203,14 @@ fn posture_tags(record: &Record) -> String {
         parts.push(display.as_spec().replace('x', "\u{d7}"));
     }
     parts.push(
-        if p.network == tormoni_record::Network::Tsi {
+        if p.network == boxdesk_record::Network::Tsi {
             "network via host"
         } else {
             "no network"
         }
         .to_string(),
     );
-    if p.rootfs == tormoni_record::Rootfs::Writable {
+    if p.rootfs == boxdesk_record::Rootfs::Writable {
         parts.push("writable root".to_string());
     }
     // One share is worth naming; several are worth counting, or the line outgrows the card.
@@ -1231,7 +1231,7 @@ fn posture_tags(record: &Record) -> String {
         (m, sh) => parts.push(format!("{} host directories", m + sh)),
     }
     if p.results {
-        parts.push(tormoni_record::RESULTS_GUEST_PATH.to_string());
+        parts.push(boxdesk_record::RESULTS_GUEST_PATH.to_string());
     }
     if p.sound {
         parts.push("sound".to_string());
@@ -1449,7 +1449,7 @@ fn posture_lines(record: &Record, home: Option<&str>) -> Vec<(String, String)> {
     lines.push((
         "results".to_string(),
         if p.results {
-            tormoni_record::RESULTS_GUEST_PATH
+            boxdesk_record::RESULTS_GUEST_PATH
         } else {
             "off"
         }
@@ -1476,7 +1476,7 @@ fn run_lines(record: &Record, live: bool) -> Vec<(String, String)> {
         ("verb".to_string(), record.verb.as_word().to_string()),
         (
             "started".to_string(),
-            tormoni_record::format_time(record.started_ms),
+            boxdesk_record::format_time(record.started_ms),
         ),
     ];
     if !record.command.is_empty() {
@@ -1488,7 +1488,7 @@ fn run_lines(record: &Record, live: bool) -> Vec<(String, String)> {
     match (live, record.end, record.ended_ms) {
         (true, _, _) => lines.push(("state".to_string(), "running".to_string())),
         (false, Some(end), Some(ended)) => {
-            lines.push(("ended".to_string(), tormoni_record::format_time(ended)));
+            lines.push(("ended".to_string(), boxdesk_record::format_time(ended)));
             lines.push(("end".to_string(), end.to_string()));
         }
         (false, Some(end), None) => lines.push(("end".to_string(), end.to_string())),
@@ -1584,7 +1584,7 @@ pub(crate) fn new_run<'a>(app: &'a App, form: &'a Form) -> Element<'a, Message> 
             .style(check)
             .on_toggle(move |v| Message::Switch(which, v))
     };
-    let mut posture = tormoni_record::Posture::new(
+    let mut posture = boxdesk_record::Posture::new(
         std::path::PathBuf::from(form.root.trim()),
         form.vcpus.trim().parse().unwrap_or(crate::DEFAULT_VCPUS),
         form.mem_mib
@@ -1593,30 +1593,30 @@ pub(crate) fn new_run<'a>(app: &'a App, form: &'a Form) -> Element<'a, Message> 
             .unwrap_or(crate::DEFAULT_MEM_MIB),
     );
     posture.rootfs = if form.writable_root {
-        tormoni_record::Rootfs::Writable
+        boxdesk_record::Rootfs::Writable
     } else {
-        tormoni_record::Rootfs::ReadOnly
+        boxdesk_record::Rootfs::ReadOnly
     };
     posture.network = if form.network {
-        tormoni_record::Network::Tsi
+        boxdesk_record::Network::Tsi
     } else {
-        tormoni_record::Network::None
+        boxdesk_record::Network::None
     };
     posture.mounts = form
         .mounts
         .split_whitespace()
         .filter_map(|m| m.split_once('='))
-        .map(|(guest, host)| tormoni_record::Mount::new(guest.into(), host.into()))
+        .map(|(guest, host)| boxdesk_record::Mount::new(guest.into(), host.into()))
         .collect();
     posture.shares = form
         .shares
         .split_whitespace()
         .filter_map(|m| m.split_once('='))
-        .map(|(tag, host)| tormoni_record::Share::new(tag.to_string(), host.into()))
+        .map(|(tag, host)| boxdesk_record::Share::new(tag.to_string(), host.into()))
         .collect();
     posture.display = form
         .display
-        .then(|| tormoni_record::DisplayMode::parse(form.display_size.trim()))
+        .then(|| boxdesk_record::DisplayMode::parse(form.display_size.trim()))
         .flatten();
     posture.sound = form.sound;
     posture.gpu = form.gpu;
@@ -1845,11 +1845,11 @@ mod tests {
     }
 
     /// A value longer than its column keeps both ends, because a guest root's tail is the half
-    /// that says which root it is: `~/.local/share/tormoni/rootfs` and `~/.local/share/other/tree`
+    /// that says which root it is: `~/.local/share/boxdesk/rootfs` and `~/.local/share/other/tree`
     /// differ only past the point an end-truncation would cut.
     #[test]
     fn a_long_value_is_cut_in_the_middle_and_keeps_both_ends() {
-        let root = "~/.local/share/tormoni/rootfs, read-only";
+        let root = "~/.local/share/boxdesk/rootfs, read-only";
         let cut = elide(root, 30);
         assert_eq!(cut.chars().count(), 30, "{cut}");
         assert!(cut.starts_with("~/.local"), "the head is gone: {cut}");
@@ -1857,8 +1857,8 @@ mod tests {
         assert!(cut.contains('…'), "nothing says it was cut: {cut}");
 
         // Two roots differing only in their tail stay different, which end-truncation would not.
-        let a = elide("~/.local/share/tormoni/rootfs", 20);
-        let b = elide("~/.local/share/tormoni/other", 20);
+        let a = elide("~/.local/share/boxdesk/rootfs", 20);
+        let b = elide("~/.local/share/boxdesk/other", 20);
         assert_ne!(a, b, "both cut to the same string: {a}");
     }
 
@@ -1898,12 +1898,12 @@ mod tests {
     /// screen printed `/Users/<you>/.local/...` in a column two thirds of it wide.
     #[test]
     fn the_posture_pane_spells_a_path_the_way_settings_does() {
-        let mut posture = tormoni_record::Posture::new(
-            std::path::PathBuf::from("/Users/x/.local/share/tormoni/rootfs"),
+        let mut posture = boxdesk_record::Posture::new(
+            std::path::PathBuf::from("/Users/x/.local/share/boxdesk/rootfs"),
             std::num::NonZeroU8::MIN,
             std::num::NonZeroU32::new(512).expect("non-zero"),
         );
-        posture.shares.push(tormoni_record::Share::new(
+        posture.shares.push(boxdesk_record::Share::new(
             "work".to_string(),
             std::path::PathBuf::from("/Users/x/projects"),
         ));

@@ -1,3 +1,3 @@
-export { Tormoni, type TormoniConfig } from "./client";
-export { TormoniError, TormoniException, TormoniNotFoundError } from "./errors";
+export { Boxdesk, type BoxdeskConfig } from "./client";
+export { BoxdeskError, BoxdeskException, BoxdeskNotFoundError } from "./errors";
 export type { EndKind, Network, Posture, RootfsMode, Run, RunFile, RunOptions } from "./types";

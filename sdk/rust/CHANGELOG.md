@@ -8,19 +8,19 @@ All notable changes to this crate are documented here. The format follows
 
 ## [0.1.0]
 
-First release. Binds to the `tormoni` CLI's `--json` contract and nothing else.
+First release. Binds to the `boxdesk` CLI's `--json` contract and nothing else.
 
 ### Added
 
-- `Tormoni`, a client and builder in one. One builder method per `tormoni run` flag, no defaults
+- `Boxdesk`, a client and builder in one. One builder method per `boxdesk run` flag, no defaults
   of its own, reusable across calls.
-- `run`, `dry_run`, `show` and `runs`, covering `tormoni run`, `tormoni run --dry-run`,
-  `tormoni show` and `tormoni ls`.
+- `run`, `dry_run`, `show` and `runs`, covering `boxdesk run`, `boxdesk run --dry-run`,
+  `boxdesk show` and `boxdesk ls`.
 - `Run`, carrying every field of a run document, plus `ok()` and an `End` reconstructed from the
   `end_kind` / `end_code` pair — the raw pair stays available.
 - `Error` with `NotFound`, `Failed` and `Parse`. A guest command that exits non-zero is `Ok`, not
-  an error; Tormoni's own stderr text reaches the caller unchanged.
-- Binary resolution in order: `Tormoni::binary()`, then `$TORMONI_CLI`, then `tormoni` on `PATH`.
+  an error; Boxdesk's own stderr text reaches the caller unchanged.
+- Binary resolution in order: `Boxdesk::binary()`, then `$BOXDESK_CLI`, then `boxdesk` on `PATH`.
 
-[Unreleased]: https://github.com/tormoni/tormoni-rust/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/tormoni/tormoni-rust/releases/tag/v0.1.0
+[Unreleased]: https://github.com/boxdesk/boxdesk-rust/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/boxdesk/boxdesk-rust/releases/tag/v0.1.0

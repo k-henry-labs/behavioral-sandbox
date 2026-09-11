@@ -1,4 +1,4 @@
-//! `tormoni serve`: the refusals a box makes before it listens, and the one property that makes
+//! `boxdesk serve`: the refusals a box makes before it listens, and the one property that makes
 //! serving the same product as running.
 //!
 //! **A served archive is byte for byte a local one.** That test boots a real sandbox, so it is
@@ -12,16 +12,16 @@
 use std::path::Path;
 use std::process::Command;
 
-use tormoni_test_support::ScratchDir;
+use boxdesk_test_support::ScratchDir;
 
 /// The exit code every refusal in this file makes.
 const EXIT_OPERATIONAL: i32 = 2;
 
-fn tormoni(data: &Path) -> Command {
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_tormoni"));
-    cmd.env("TORMONI_SERVE_DATA", data)
-        .env_remove("TORMONI_SERVE_TOKEN")
-        .env_remove("TORMONI_SERVE_BIND");
+fn boxdesk(data: &Path) -> Command {
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_boxdesk"));
+    cmd.env("BOXDESK_SERVE_DATA", data)
+        .env_remove("BOXDESK_SERVE_TOKEN")
+        .env_remove("BOXDESK_SERVE_BIND");
     cmd
 }
 
@@ -45,7 +45,7 @@ fn a_box_with_nothing_to_check_a_caller_against_does_not_listen() {
     let scratch = ScratchDir::created("serve-no-token");
     let data = scratch.path().join("data");
     std::fs::create_dir_all(&data).expect("the data dir");
-    let out = tormoni(&data)
+    let out = boxdesk(&data)
         .args(["serve", "--bind", "0"])
         .output()
         .expect("the binary runs");
@@ -61,7 +61,7 @@ fn a_box_with_nothing_to_check_a_caller_against_does_not_listen() {
     if about_the_token {
         assert!(said.contains("0600"), "names the mode: {said}");
         assert!(
-            said.contains("TORMONI_SERVE_TOKEN"),
+            said.contains("BOXDESK_SERVE_TOKEN"),
             "names the way out: {said}"
         );
     }
@@ -78,7 +78,7 @@ fn a_token_the_whole_machine_can_read_is_refused() {
     let path = data.join("serve.token");
     std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).expect("chmod");
 
-    let out = tormoni(&data)
+    let out = boxdesk(&data)
         .args(["serve", "--bind", "0"])
         .output()
         .expect("the binary runs");
@@ -101,7 +101,7 @@ fn an_address_that_is_not_one_is_refused_before_binding() {
     let scratch = ScratchDir::created("serve-bad-bind");
     let data = scratch.path().join("data");
     token_at(&data, "tor_secret\n");
-    let out = tormoni(&data)
+    let out = boxdesk(&data)
         .args(["serve", "--bind", "everywhere"])
         .output()
         .expect("the binary runs");
@@ -123,7 +123,7 @@ fn an_address_that_is_not_one_is_refused_before_binding() {
 /// non-zero count for a sandbox that has ended.
 ///
 /// By hand, on a host with a hypervisor (and on macOS, after `cargo xtask sign`):
-/// `cargo test -p tormoni --test serve -- --ignored --nocapture`
+/// `cargo test -p boxdesk --test serve -- --ignored --nocapture`
 #[test]
 #[ignore = "boots a real sandbox through a listening server: needs a hypervisor"]
 fn a_served_archive_is_byte_for_byte_the_one_a_local_export_writes() {
@@ -133,7 +133,7 @@ fn a_served_archive_is_byte_for_byte_the_one_a_local_export_writes() {
     let port = 8499;
     let name = format!("served-{}", std::process::id());
 
-    let mut server = tormoni(&data)
+    let mut server = boxdesk(&data)
         .args(["serve", "--bind", &port.to_string()])
         .spawn()
         .expect("the server starts");
@@ -207,7 +207,7 @@ fn a_served_archive_is_byte_for_byte_the_one_a_local_export_writes() {
 
     // Serving cannot have changed the archive: the same bytes, or this is two products.
     let served = scratch.path().join("served.tar");
-    let mut restarted = tormoni(&data)
+    let mut restarted = boxdesk(&data)
         .args(["serve", "--bind", &port.to_string()])
         .spawn()
         .expect("the server starts again");
@@ -224,7 +224,7 @@ fn a_served_archive_is_byte_for_byte_the_one_a_local_export_writes() {
     assert!(pulled.success(), "the archive did not come back");
 
     let local = scratch.path().join("local.tar");
-    let exported = Command::new(env!("CARGO_BIN_EXE_tormoni"))
+    let exported = Command::new(env!("CARGO_BIN_EXE_boxdesk"))
         .args(["export", &run_id, "--to"])
         .arg(&local)
         .output()

@@ -13,12 +13,12 @@
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
 
-/// The port `tormoni serve` listens on when nothing names one.
+/// The port `boxdesk serve` listens on when nothing names one.
 pub const DEFAULT_PORT: u16 = 8420;
 /// The bind address, the token and the data directory, for a container with no config file.
-pub const BIND_ENV: &str = "TORMONI_SERVE_BIND";
-pub const TOKEN_ENV: &str = "TORMONI_SERVE_TOKEN";
-pub const DATA_ENV: &str = "TORMONI_SERVE_DATA";
+pub const BIND_ENV: &str = "BOXDESK_SERVE_BIND";
+pub const TOKEN_ENV: &str = "BOXDESK_SERVE_TOKEN";
+pub const DATA_ENV: &str = "BOXDESK_SERVE_DATA";
 /// How many sandboxes may run at once when nothing names a number.
 pub const DEFAULT_CONCURRENCY: usize = 4;
 
@@ -199,7 +199,7 @@ pub fn hypervisor_unusable() -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tormoni_test_support::ScratchDir;
+    use boxdesk_test_support::ScratchDir;
 
     /// **Loopback unless somebody was explicit.** A bare port is loopback on that port, so the
     /// shortest thing to type is never the one that publishes a sandbox host to the network.

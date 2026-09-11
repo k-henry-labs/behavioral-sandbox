@@ -1,6 +1,6 @@
 //! The lease: a thread that asks the sandbox for its display and forwards each present.
 //!
-//! The same client as `tormoni __frames`, feeding a channel the window's subscription drains. A
+//! The same client as `boxdesk __frames`, feeding a channel the window's subscription drains. A
 //! present is forwarded as its record says, slot and damage, and the frame is never copied here;
 //! the upload in [`crate::frame`] reads the mapped slot itself. Once the display is mapped the
 //! thread opens the input session too, and hands it to the window, whose events go down it.
@@ -23,7 +23,7 @@ use std::time::{Duration, Instant};
 use iced::futures::channel::mpsc;
 use iced::futures::{Stream, StreamExt};
 
-use tormoni_supervisor::control::{self, Event, LeaseStop};
+use boxdesk_supervisor::control::{self, Event, LeaseStop};
 
 use crate::Message;
 
@@ -111,7 +111,7 @@ fn run(
     stop: &Stop,
 ) -> Result<String, String> {
     let socket =
-        tormoni_supervisor::socket::path_for(watch.name.as_str()).map_err(|e| e.to_string())?;
+        boxdesk_supervisor::socket::path_for(watch.name.as_str()).map_err(|e| e.to_string())?;
     let mut log = watch
         .log
         .as_deref()
@@ -174,16 +174,16 @@ fn run_one_lease(
     let memfd = lease
         .take_memfd()
         .ok_or_else(|| "the lease carried no memfd".to_string())?;
-    let layout = tormoni_krun::SharedLayout::new(
+    let layout = boxdesk_krun::SharedLayout::new(
         scanout.width,
         scanout.height,
-        tormoni_krun::PixelFormat::from_raw(scanout.format),
+        boxdesk_krun::PixelFormat::from_raw(scanout.format),
         scanout.stride,
         scanout.slots,
         scanout.slot_bytes,
         scanout.generation,
     );
-    let mapped = tormoni_krun::SharedFrames::map(memfd, layout).map_err(|e| e.to_string())?;
+    let mapped = boxdesk_krun::SharedFrames::map(memfd, layout).map_err(|e| e.to_string())?;
     if sender
         .unbounded_send(Message::Mapped(watch.name.clone(), Arc::new(mapped)))
         .is_err()

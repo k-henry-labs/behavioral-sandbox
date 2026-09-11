@@ -1,8 +1,8 @@
-// Copyright 2026 The Tormoni Authors. All rights reserved.
+// Copyright 2026 The Boxdesk Authors. All rights reserved.
 // Use of this source code is governed by the Apache-2.0 license that can be
 // found in the LICENSE file.
 
-package tormoni_test
+package boxdesk_test
 
 // The two rules the whole contract rests on, and the ones most likely to be
 // broken by a well-meaning change: a guest command exiting non-zero is a
@@ -16,7 +16,7 @@ import (
 	"strings"
 	"testing"
 
-	tormoni "github.com/kendricklawton/tormoni/sdk/go"
+	boxdesk "github.com/kendricklawton/boxdesk/sdk/go"
 )
 
 // TestGuestExitIsNotAnError is the heart of the contract: the CLI exits with
@@ -27,7 +27,7 @@ func TestGuestExitIsNotAnError(t *testing.T) {
 		name     string
 		doc      string
 		exitCode int
-		wantKind tormoni.EndKind
+		wantKind boxdesk.EndKind
 		wantCode *int
 		wantOK   bool
 	}{
@@ -35,49 +35,49 @@ func TestGuestExitIsNotAnError(t *testing.T) {
 			name:     "exited zero",
 			doc:      `{"end_kind":"exit","end_code":0}`,
 			exitCode: 0,
-			wantKind: tormoni.EndExit, wantCode: ptr(0), wantOK: true,
+			wantKind: boxdesk.EndExit, wantCode: ptr(0), wantOK: true,
 		},
 		{
 			name:     "exited three",
 			doc:      `{"end_kind":"exit","end_code":3}`,
 			exitCode: 3,
-			wantKind: tormoni.EndExit, wantCode: ptr(3), wantOK: false,
+			wantKind: boxdesk.EndExit, wantCode: ptr(3), wantOK: false,
 		},
 		{
 			name:     "exited one, the `false` case",
 			doc:      `{"end_kind":"exit","end_code":1}`,
 			exitCode: 1,
-			wantKind: tormoni.EndExit, wantCode: ptr(1), wantOK: false,
+			wantKind: boxdesk.EndExit, wantCode: ptr(1), wantOK: false,
 		},
 		{
 			name:     "killed by a signal",
 			doc:      `{"end_kind":"signal","end_code":9}`,
 			exitCode: 137,
-			wantKind: tormoni.EndSignal, wantCode: ptr(9), wantOK: false,
+			wantKind: boxdesk.EndSignal, wantCode: ptr(9), wantOK: false,
 		},
 		{
 			name:     "stopped, with no code",
 			doc:      `{"end_kind":"stopped","end_code":null}`,
 			exitCode: 1,
-			wantKind: tormoni.EndStopped, wantCode: nil, wantOK: false,
+			wantKind: boxdesk.EndStopped, wantCode: nil, wantOK: false,
 		},
 		{
 			name:     "gone, with no code",
 			doc:      `{"end_kind":"gone","end_code":null}`,
 			exitCode: 1,
-			wantKind: tormoni.EndGone, wantCode: nil, wantOK: false,
+			wantKind: boxdesk.EndGone, wantCode: nil, wantOK: false,
 		},
 		{
 			name:     "failed, with no code",
 			doc:      `{"end_kind":"failed","end_code":null}`,
 			exitCode: 1,
-			wantKind: tormoni.EndFailed, wantCode: nil, wantOK: false,
+			wantKind: boxdesk.EndFailed, wantCode: nil, wantOK: false,
 		},
 		{
 			name:     "unknown, with no code",
 			doc:      `{"end_kind":"unknown","end_code":null}`,
 			exitCode: 1,
-			wantKind: tormoni.EndUnknown, wantCode: nil, wantOK: false,
+			wantKind: boxdesk.EndUnknown, wantCode: nil, wantOK: false,
 		},
 		{
 			name:     "still going",
@@ -121,7 +121,7 @@ func TestEnvValuesGoOutAndNamesComeBack(t *testing.T) {
 	         "posture":{"env":["API_KEY","DEBUG"]}}`
 	s := newStub(t, doc, "", 0)
 
-	run, err := s.Client().Run(context.Background(), []string{"env"}, &tormoni.RunOptions{
+	run, err := s.Client().Run(context.Background(), []string{"env"}, &boxdesk.RunOptions{
 		Env: []string{"API_KEY=" + secret, "DEBUG=1"},
 	})
 	if err != nil {

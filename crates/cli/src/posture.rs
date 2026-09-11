@@ -4,7 +4,7 @@
 //!   takes the same words back off the argv the supervisor wrote. Two enums of one shape would be
 //!   two lists a new posture has to reach, and the second is the one that gets missed.
 //! - **The CLI owns the mirror.** clap's `ValueEnum` cannot derive on a type from another crate,
-//!   so these mirror `tormoni_supervisor`'s; the `into_*` methods below are the only crossings,
+//!   so these mirror `boxdesk_supervisor`'s; the `into_*` methods below are the only crossings,
 //!   and `the_record_and_the_config_spell_the_posture_alike` holds the words in step.
 //! - **Each default is the closed one**, because libkrun's own defaults are not: it adds an
 //!   implicit vsock whose TSI hijacking proxies the guest's sockets onto the host, so saying
@@ -22,10 +22,10 @@ pub(crate) enum NetArg {
 
 impl NetArg {
     /// The supervisor's spelling of this posture.
-    pub(crate) fn into_net(self) -> tormoni_supervisor::Net {
+    pub(crate) fn into_net(self) -> boxdesk_supervisor::Net {
         match self {
-            Self::None => tormoni_supervisor::Net::None,
-            Self::Tsi => tormoni_supervisor::Net::Tsi,
+            Self::None => boxdesk_supervisor::Net::None,
+            Self::Tsi => boxdesk_supervisor::Net::Tsi,
         }
     }
 
@@ -34,7 +34,7 @@ impl NetArg {
     pub(crate) fn tsi_flags(self) -> u32 {
         match self {
             Self::None => 0,
-            Self::Tsi => tormoni_krun::KRUN_TSI_HIJACK_INET,
+            Self::Tsi => boxdesk_krun::KRUN_TSI_HIJACK_INET,
         }
     }
 }
@@ -52,19 +52,19 @@ pub(crate) enum RootFsArg {
 
 impl RootFsArg {
     /// The supervisor's spelling of this posture.
-    pub(crate) fn into_rootfs(self) -> tormoni_supervisor::RootFs {
+    pub(crate) fn into_rootfs(self) -> boxdesk_supervisor::RootFs {
         match self {
-            Self::ReadOnly => tormoni_supervisor::RootFs::ReadOnly,
-            Self::Writable => tormoni_supervisor::RootFs::Writable,
+            Self::ReadOnly => boxdesk_supervisor::RootFs::ReadOnly,
+            Self::Writable => boxdesk_supervisor::RootFs::Writable,
         }
     }
 
     /// The virtiofs device flag this posture is. Enforced by the device, so the guest can neither
     /// undo nor see it: `/proc/mounts` still reports the root `rw`.
-    pub(crate) fn into_access(self) -> tormoni_krun::FsAccess {
+    pub(crate) fn into_access(self) -> boxdesk_krun::FsAccess {
         match self {
-            Self::ReadOnly => tormoni_krun::FsAccess::ReadOnly,
-            Self::Writable => tormoni_krun::FsAccess::ReadWrite,
+            Self::ReadOnly => boxdesk_krun::FsAccess::ReadOnly,
+            Self::Writable => boxdesk_krun::FsAccess::ReadWrite,
         }
     }
 }
@@ -78,27 +78,27 @@ mod tests {
     #[test]
     fn every_posture_defaults_closed_and_crosses_to_its_own_variant() {
         assert_eq!(NetArg::default(), NetArg::None);
-        assert_eq!(NetArg::None.into_net(), tormoni_supervisor::Net::None);
-        assert_eq!(NetArg::Tsi.into_net(), tormoni_supervisor::Net::Tsi);
+        assert_eq!(NetArg::None.into_net(), boxdesk_supervisor::Net::None);
+        assert_eq!(NetArg::Tsi.into_net(), boxdesk_supervisor::Net::Tsi);
         assert_eq!(NetArg::None.tsi_flags(), 0, "no network asks for no hijack");
         assert_ne!(NetArg::Tsi.tsi_flags(), 0);
 
         assert_eq!(RootFsArg::default(), RootFsArg::ReadOnly);
         assert_eq!(
             RootFsArg::ReadOnly.into_rootfs(),
-            tormoni_supervisor::RootFs::ReadOnly
+            boxdesk_supervisor::RootFs::ReadOnly
         );
         assert_eq!(
             RootFsArg::Writable.into_rootfs(),
-            tormoni_supervisor::RootFs::Writable
+            boxdesk_supervisor::RootFs::Writable
         );
         assert_eq!(
             RootFsArg::ReadOnly.into_access(),
-            tormoni_krun::FsAccess::ReadOnly
+            boxdesk_krun::FsAccess::ReadOnly
         );
         assert_eq!(
             RootFsArg::Writable.into_access(),
-            tormoni_krun::FsAccess::ReadWrite
+            boxdesk_krun::FsAccess::ReadWrite
         );
     }
 }

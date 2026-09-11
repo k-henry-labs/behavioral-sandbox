@@ -8,7 +8,7 @@
 //!   after it was the latest, so a very late upload tears; it never faults, because the mapping's
 //!   size is sealed.
 //! - **The widget's events are the guest's input.** A key, a pointer move against where the
-//!   frame sits, a button or a wheel becomes `tormoni_input`'s report and travels as its lines down
+//!   frame sits, a button or a wheel becomes `boxdesk_input`'s report and travels as its lines down
 //!   the input session; losing the window's focus releases everything held.
 
 use std::collections::VecDeque;
@@ -22,9 +22,9 @@ use iced::wgpu;
 use iced::widget::shader::{self, Viewport};
 use iced::{Event, Rectangle, keyboard, mouse, window};
 
-use tormoni_input::{Area, Button, Held, InputEvent, Target, format_line};
-use tormoni_krun::{PixelFormat, SharedFrames, SharedLayout};
-use tormoni_supervisor::control::Damage;
+use boxdesk_input::{Area, Button, Held, InputEvent, Target, format_line};
+use boxdesk_krun::{PixelFormat, SharedFrames, SharedLayout};
+use boxdesk_supervisor::control::Damage;
 
 use crate::NAME;
 
@@ -129,9 +129,9 @@ impl<Message> shader::Program<Message> for Program {
                 repeat,
                 ..
             }) => {
-                let action = tormoni_input::KeyAction::of(true, *repeat);
+                let action = boxdesk_input::KeyAction::of(true, *repeat);
                 if let Some(report) =
-                    scancode(physical_key).and_then(|code| tormoni_input::key(code, action))
+                    scancode(physical_key).and_then(|code| boxdesk_input::key(code, action))
                 {
                     held.key(report[0].code, action.is_down());
                     send(Target::Keyboard, &report);
@@ -139,7 +139,7 @@ impl<Message> shader::Program<Message> for Program {
             }
             Event::Keyboard(keyboard::Event::KeyReleased { physical_key, .. }) => {
                 if let Some(report) = scancode(physical_key)
-                    .and_then(|code| tormoni_input::key(code, tormoni_input::KeyAction::Release))
+                    .and_then(|code| boxdesk_input::key(code, boxdesk_input::KeyAction::Release))
                 {
                     held.key(report[0].code, false);
                     send(Target::Keyboard, &report);
@@ -156,19 +156,19 @@ impl<Message> shader::Program<Message> for Program {
                 );
                 send(
                     Target::Pointer,
-                    &tormoni_input::position(f64::from(position.x), f64::from(position.y), area),
+                    &boxdesk_input::position(f64::from(position.x), f64::from(position.y), area),
                 );
             }
             Event::Mouse(mouse::Event::ButtonPressed(button)) => {
                 if let Some(code) = button_of(*button) {
                     held.button(code, true);
-                    send(Target::Pointer, &tormoni_input::button(code, true));
+                    send(Target::Pointer, &boxdesk_input::button(code, true));
                 }
             }
             Event::Mouse(mouse::Event::ButtonReleased(button)) => {
                 if let Some(code) = button_of(*button) {
                     held.button(code, false);
-                    send(Target::Pointer, &tormoni_input::button(code, false));
+                    send(Target::Pointer, &boxdesk_input::button(code, false));
                 }
             }
             Event::Mouse(mouse::Event::WheelScrolled { delta }) => {
@@ -176,11 +176,11 @@ impl<Message> shader::Program<Message> for Program {
                     mouse::ScrollDelta::Lines { x, y } => (f64::from(x), f64::from(y)),
                     // The window's pixel count as a line; `wheel` rounds and clamps it.
                     mouse::ScrollDelta::Pixels { x, y } => (
-                        f64::from(x) / tormoni_input::WHEEL_LINE_PIXELS,
-                        f64::from(y) / tormoni_input::WHEEL_LINE_PIXELS,
+                        f64::from(x) / boxdesk_input::WHEEL_LINE_PIXELS,
+                        f64::from(y) / boxdesk_input::WHEEL_LINE_PIXELS,
                     ),
                 };
-                let report = tormoni_input::wheel(dx, dy);
+                let report = boxdesk_input::wheel(dx, dy);
                 if !report.is_empty() {
                     send(Target::Pointer, &report);
                 }
@@ -215,7 +215,7 @@ impl<Message> shader::Program<Message> for Program {
 /// number of one it could not name, which winit reports as the scancode itself.
 fn scancode(key: &Physical) -> Option<u32> {
     match key {
-        Physical::Code(code) => tormoni_input::key_code(&format!("{code:?}")).map(u32::from),
+        Physical::Code(code) => boxdesk_input::key_code(&format!("{code:?}")).map(u32::from),
         Physical::Unidentified(NativeCode::Xkb(raw)) => Some(*raw),
         Physical::Unidentified(_) => None,
     }
@@ -223,7 +223,7 @@ fn scancode(key: &Physical) -> Option<u32> {
 
 /// The evdev code of a mouse button, or `None` for one the pointer does not emit.
 fn button_of(button: mouse::Button) -> Option<u16> {
-    Some(tormoni_input::button_code(match button {
+    Some(boxdesk_input::button_code(match button {
         mouse::Button::Left => Button::Left,
         mouse::Button::Right => Button::Right,
         mouse::Button::Middle => Button::Middle,
@@ -484,7 +484,7 @@ impl Pipeline {
                 return None;
             };
             let texture = device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("tormoni frame"),
+                label: Some("boxdesk frame"),
                 size: wgpu::Extent3d {
                     width: layout.width,
                     height: layout.height,
@@ -499,7 +499,7 @@ impl Pipeline {
             });
             let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
             let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("tormoni frame"),
+                label: Some("boxdesk frame"),
                 layout: &self.bind_layout,
                 entries: &[
                     wgpu::BindGroupEntry {
@@ -573,11 +573,11 @@ impl shader::Pipeline for Pipeline {
     fn new(device: &wgpu::Device, _queue: &wgpu::Queue, format: wgpu::TextureFormat) -> Self {
         eprintln!("{NAME}: target format {format:?}");
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("tormoni frame"),
+            label: Some("boxdesk frame"),
             source: wgpu::ShaderSource::Wgsl(SHADER.into()),
         });
         let bind_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("tormoni frame"),
+            label: Some("boxdesk frame"),
             entries: &[
                 wgpu::BindGroupLayoutEntry {
                     binding: 0,
@@ -598,12 +598,12 @@ impl shader::Pipeline for Pipeline {
             ],
         });
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("tormoni frame"),
+            label: Some("boxdesk frame"),
             bind_group_layouts: &[&bind_layout],
             push_constant_ranges: &[],
         });
         let render = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("tormoni frame"),
+            label: Some("boxdesk frame"),
             layout: Some(&layout),
             vertex: wgpu::VertexState {
                 module: &module,
@@ -628,7 +628,7 @@ impl shader::Pipeline for Pipeline {
             cache: None,
         });
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            label: Some("tormoni frame"),
+            label: Some("boxdesk frame"),
             mag_filter: wgpu::FilterMode::Linear,
             min_filter: wgpu::FilterMode::Linear,
             ..wgpu::SamplerDescriptor::default()
@@ -799,11 +799,11 @@ mod tests {
         );
         assert_eq!(
             button_of(mouse::Button::Left),
-            Some(tormoni_input::BTN_LEFT)
+            Some(boxdesk_input::BTN_LEFT)
         );
         assert_eq!(
             button_of(mouse::Button::Forward),
-            Some(tormoni_input::BTN_EXTRA)
+            Some(boxdesk_input::BTN_EXTRA)
         );
         assert_eq!(button_of(mouse::Button::Other(9)), None);
     }

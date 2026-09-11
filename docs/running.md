@@ -6,16 +6,16 @@ into on the command line, and the posture is printed (`--dry-run` shows it witho
 what is shared **is** the policy.
 
 ```console
-tormoni run -- uname -a
+boxdesk run -- uname -a
 ```
 
-The guest root is `--root`, else `$TORMONI_GUEST_ROOT`, else `~/.local/share/tormoni/rootfs`, which
+The guest root is `--root`, else `$BOXDESK_GUEST_ROOT`, else `~/.local/share/boxdesk/rootfs`, which
 is where `cargo xtask init` puts one. The flag and the variable are for a tree somewhere else.
 
 ## Installing
 
 ```console
-curl -fsSL https://raw.githubusercontent.com/kendricklawton/tormoni/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/kendricklawton/boxdesk/main/install.sh | sh
 ```
 
 The address redirects to the latest release's `install.sh` on GitHub, as Ollama's does. The script
@@ -23,16 +23,16 @@ is one function called on its last line, so a truncated download runs nothing. I
 but macOS on ARM64 and Linux on x86_64, downloads that host's artifact and `SHA256SUMS`, verifies
 the digest, and then:
 
-- **macOS**: puts `Tormoni.app` in `/Applications`, symlinks `/usr/local/bin/tormoni` to the
-  `tormoni` inside it (as this user first, then with `sudo`), and opens the app unless
-  `TORMONI_NO_START` is set.
-- **Linux**: needs `sudo`, untars `bin/tormoni`, `bin/Tormoni`, a desktop entry, the icon and the
+- **macOS**: puts `Boxdesk.app` in `/Applications`, symlinks `/usr/local/bin/boxdesk` to the
+  `boxdesk` inside it (as this user first, then with `sudo`), and opens the app unless
+  `BOXDESK_NO_START` is set.
+- **Linux**: needs `sudo`, untars `bin/boxdesk`, `bin/Boxdesk`, a desktop entry, the icon and the
   guest tree under the first of `/usr/local`, `/usr` or `/` whose `bin` is on `PATH`, and warns if
   `/dev/kvm` is not readable and writable by you (membership of the `kvm` group, usually).
-- **Both**: unpacks the guest tree the release carries to `~/.local/share/tormoni/rootfs`, keeping
-  a tree it did not write unless `TORMONI_REPLACE_ROOTFS=1`; asks before running the package
-  manager's libkrun line (`--yes` or `TORMONI_INSTALL_YES=1` skips the question; with no terminal
-  it prints the line and exits 1); and `TORMONI_VERSION=0.0.1` takes that tag's assets.
+- **Both**: unpacks the guest tree the release carries to `~/.local/share/boxdesk/rootfs`, keeping
+  a tree it did not write unless `BOXDESK_REPLACE_ROOTFS=1`; asks before running the package
+  manager's libkrun line (`--yes` or `BOXDESK_INSTALL_YES=1` skips the question; with no terminal
+  it prints the line and exits 1); and `BOXDESK_VERSION=0.0.1` takes that tag's assets.
   `--dry-run` prints every command that would change the machine and runs none, which is what the
   gate's tests drive it with.
 
@@ -47,32 +47,32 @@ What it cannot claim, each with its mechanism:
   is a requirement of the release. On Linux the binary was linked in a Fedora 43 container, so its
   glibc floor is 2.42, and the loader needs `libkrun.so.1`: Arch, Fedora and openSUSE package it,
   Debian and Ubuntu do not.
-- The `tormoni` inside the bundle carries the hypervisor entitlement; a byte copy keeps it, a
+- The `boxdesk` inside the bundle carries the hypervisor entitlement; a byte copy keeps it, a
   relink loses it.
 - The prompt, `sudo`, and the real download are outside the gate: they are run by hand on each
   host before a tag.
 
 ### Removing
 
-macOS: `/Applications/Tormoni.app`, `/usr/local/bin/tormoni`, and under `~/.local/share/tormoni`
-the `rootfs` tree and `rootfs.sha256`. Linux: `/usr/local/bin/tormoni`, `/usr/local/bin/Tormoni`,
-`/usr/local/share/tormoni`, `/usr/local/share/applications/ai.tormoni.app.desktop`,
-`/usr/local/share/icons/hicolor/512x512/apps/ai.tormoni.app.png`, plus the same two user paths.
-Run records under `~/.local/share/tormoni/runs` are yours and are not removed.
+macOS: `/Applications/Boxdesk.app`, `/usr/local/bin/boxdesk`, and under `~/.local/share/boxdesk`
+the `rootfs` tree and `rootfs.sha256`. Linux: `/usr/local/bin/boxdesk`, `/usr/local/bin/Boxdesk`,
+`/usr/local/share/boxdesk`, `/usr/local/share/applications/ai.boxdesk.app.desktop`,
+`/usr/local/share/icons/hicolor/512x512/apps/ai.boxdesk.app.png`, plus the same two user paths.
+Run records under `~/.local/share/boxdesk/runs` are yours and are not removed.
 
 ## The verbs
 
 | Verb | What it does |
 |---|---|
-| `tormoni run -- CMD` | Runs one command in a fresh sandbox and exits with its status. |
-| `tormoni shell` | Opens an interactive session (or any command) on a pty in a fresh sandbox. |
-| `tormoni up --name NAME` | Starts a sandbox that outlives the command, reachable afterwards by name. |
-| `tormoni ls` | Lists the sandboxes running on this machine; `--all` adds the ended runs. |
-| `tormoni exec NAME -- CMD` | Runs a command in a sandbox that is already up; `--tty` attaches a terminal. |
-| `tormoni stop NAME` | Stops a running sandbox. |
-| `tormoni show ID\|NAME` | Prints one run's record: what it could touch, what it printed, what it wrote. |
-| `tormoni rm ID\|NAME` | Removes one run's record and everything it captured. |
-| `tormoni export ID\|NAME` | Writes one run as a ustar `.tar` (`--to` picks a directory or exact path). |
+| `boxdesk run -- CMD` | Runs one command in a fresh sandbox and exits with its status. |
+| `boxdesk shell` | Opens an interactive session (or any command) on a pty in a fresh sandbox. |
+| `boxdesk up --name NAME` | Starts a sandbox that outlives the command, reachable afterwards by name. |
+| `boxdesk ls` | Lists the sandboxes running on this machine; `--all` adds the ended runs. |
+| `boxdesk exec NAME -- CMD` | Runs a command in a sandbox that is already up; `--tty` attaches a terminal. |
+| `boxdesk stop NAME` | Stops a running sandbox. |
+| `boxdesk show ID\|NAME` | Prints one run's record: what it could touch, what it printed, what it wrote. |
+| `boxdesk rm ID\|NAME` | Removes one run's record and everything it captured. |
+| `boxdesk export ID\|NAME` | Writes one run as a ustar `.tar` (`--to` picks a directory or exact path). |
 
 There is no daemon: a VM is a helper process listening on a control socket in the runtime directory,
 so a sandbox started by the CLI is visible to the app and the other way round.
@@ -91,39 +91,39 @@ so a sandbox started by the CLI is visible to the app and the other way round.
 | `--sound` | A virtio-snd card on the host's audio server: playback **and** capture. | off |
 | `--gpu` | A 3D virtio-gpu into the host renderer (virgl + Venus offered); the guest brings its own driver. | off |
 | `--env KEY=VALUE` | One guest environment entry. Repeatable. The record keeps the name, never the value. | nothing |
-| `--vcpus N`, `--mem MIB` | Sizing; also `$TORMONI_VCPUS` and `$TORMONI_MEM_MIB`. | 1 vCPU, 512 MiB |
+| `--vcpus N`, `--mem MIB` | Sizing; also `$BOXDESK_VCPUS` and `$BOXDESK_MEM_MIB`. | 1 vCPU, 512 MiB |
 | `--no-results` | Drops the default `/results` mount. | mounted |
 
 ## Configuration layering
 
 Configuration is resolved in precedence order: 1. Command line flags. 2. Environment variables
-(`$TORMONI_VCPUS`, `$TORMONI_MEM_MIB`, `$TORMONI_GUEST_ROOT`, `$TORMONI_RUNS_DIR`, `$TORMONI_RUNS_KEEP`,
-`$TORMONI_OUTPUT_CAP_KIB`, `$TORMONI_LOG`, `$TORMONI_CLI`, `$TORMONI_THEME`). 3. The nearest `.tormoni.toml` in or above
-the current working directory. 4. User defaults in `~/.tormoni.toml`. 5. Built-in defaults.
+(`$BOXDESK_VCPUS`, `$BOXDESK_MEM_MIB`, `$BOXDESK_GUEST_ROOT`, `$BOXDESK_RUNS_DIR`, `$BOXDESK_RUNS_KEEP`,
+`$BOXDESK_OUTPUT_CAP_KIB`, `$BOXDESK_LOG`, `$BOXDESK_CLI`, `$BOXDESK_THEME`). 3. The nearest `.boxdesk.toml` in or above
+the current working directory. 4. User defaults in `~/.boxdesk.toml`. 5. Built-in defaults.
 
 ## What a run leaves
 
-Every run leaves one directory under `$TORMONI_RUNS_DIR`, else `$XDG_DATA_HOME/tormoni/runs`, else
-`~/.local/share/tormoni/runs`: the `record` file (the posture as settled, the timings, the end), the
-captured output (capped at `$TORMONI_OUTPUT_CAP_KIB`, 4 MiB by default, with a `.truncated` sidecar when
-cut), and `results/`, the directory the guest saw as `/results`. Ended runs beyond `$TORMONI_RUNS_KEEP`
+Every run leaves one directory under `$BOXDESK_RUNS_DIR`, else `$XDG_DATA_HOME/boxdesk/runs`, else
+`~/.local/share/boxdesk/runs`: the `record` file (the posture as settled, the timings, the end), the
+captured output (capped at `$BOXDESK_OUTPUT_CAP_KIB`, 4 MiB by default, with a `.truncated` sidecar when
+cut), and `results/`, the directory the guest saw as `/results`. Ended runs beyond `$BOXDESK_RUNS_KEEP`
 (200 by default) are pruned oldest-first when a new run starts.
 
 **An environment entry reaches the guest whole and the record by name.** The VM is given
-`KEY=VALUE`, because that is what `--env` is for; what the record, `tormoni show` and the export
+`KEY=VALUE`, because that is what `--env` is for; what the record, `boxdesk show` and the export
 carry is `KEY` alone. `an_env_value_reaches_the_guest_and_never_the_record_or_the_posture_print`
-drives the pair, and `tormoni_record::env_key` cuts again as the file is written, so a value
+drives the pair, and `boxdesk_record::env_key` cuts again as the file is written, so a value
 cannot reach it even from a caller that skipped the first cut.
 
-`tormoni export` packages that directory as one ustar file a stock `tar` extracts. A symlink a guest
+`boxdesk export` packages that directory as one ustar file a stock `tar` extracts. A symlink a guest
 planted inside `results/` is archived as a link entry, never opened:
-`a_symlink_is_archived_as_itself_and_never_followed` in `tormoni-record` holds it to that. A file that
+`a_symlink_is_archived_as_itself_and_never_followed` in `boxdesk-record` holds it to that. A file that
 grows or shrinks mid-export keeps the size its header pinned, so exporting a live run stays
 readable.
 
 ## The notebook
 
-`Tormoni` opens on the notebook, with a sidebar reaching four tabs:
+`Boxdesk` opens on the notebook, with a sidebar reaching four tabs:
 
 - **The list**: every run, newest first, live ones with a thumbnail of their display. `Select`
   turns each ended row into a tick box, `All` takes every one of them, and `Remove` asks about what
@@ -133,15 +133,15 @@ readable.
 - **The start form**: every posture flag as a field, summarised in the record's own posture
   sentence ("This sandbox will: ..."), confirmed before anything boots.
 - **The cookbook**: runs worth trying, on five shelves, each one press from a filled form. A press
-  fills the form and stops there, so its posture is read before it boots, and the `tormoni` line a
+  fills the form and stops there, so its posture is read before it boots, and the `boxdesk` line a
   card shows is built from the same fields the form takes
   (`the_line_an_entry_shows_is_the_posture_it_fills_in`). [Examples](./examples.md) has the same
   runs with their output.
 - **Settings** (the platform's command with `,`, from any screen): light,
   dark or the desktop's own mode, and the interface scale, both applied live, the screen a plain
-  launch opens on, and what this machine has to run a sandbox with (the `tormoni` binary and guest
+  launch opens on, and what this machine has to run a sandbox with (the `boxdesk` binary and guest
   root it found). The picks are kept across launches in a file beside the runs directory.
-  `--theme` and `$TORMONI_THEME` outrank the saved palette, and `--open` the saved screen, for one
+  `--theme` and `$BOXDESK_THEME` outrank the saved palette, and `--open` the saved screen, for one
   launch.
 
 Every delete asks first, in a modal naming the run or the count it would remove, with Cancel and
@@ -150,23 +150,23 @@ question gives the selection back rather than dropping it.
 `deleting_one_run_asks_first_and_never_asks_about_a_live_one` and
 `a_selection_removes_what_was_selected_and_only_behind_the_confirm` hold both paths to it.
 
-`Tormoni NAME` opens straight onto a run; `--open list|new|settings` opens a screen. Starting and
-stopping go through the `tormoni` binary beside the app, or under its bundle's `Contents/Resources`
-(`$TORMONI_CLI` overrides which one).
+`Boxdesk NAME` opens straight onto a run; `--open list|new|settings` opens a screen. Starting and
+stopping go through the `boxdesk` binary beside the app, or under its bundle's `Contents/Resources`
+(`$BOXDESK_CLI` overrides which one).
 
 ## Platform notes
 
 On macOS ARM64 the same verbs work, but this platform's libkrun builds no `--sound` and no guest
-input backend, and a display is viewed in `Tormoni` rather than a window of the helper's own; sign
+input backend, and a display is viewed in `Boxdesk` rather than a window of the helper's own; sign
 the binary again after any build (`cargo xtask sign`). **A bundle is named by its `Info.plist`,
-not by the file inside it**, so the executable stays `tormoni-app`, the name cargo writes, and
+not by the file inside it**, so the executable stays `boxdesk-app`, the name cargo writes, and
 `CFBundleName` is what the menu bar and the Dock read (measured on this host, macOS 26.6.2,
-2026-09-09: a bundle whose executable was `tormoni-app` and whose `CFBundleName` was `Zephyr` read
+2026-09-09: a bundle whose executable was `boxdesk-app` and whose `CFBundleName` was `Zephyr` read
 `Zephyr` in both). The items under that title are the exception, since the toolkit builds them
 from the process name, which the app sets at startup. `cargo xtask bundle` adds what a bare binary
-carries none of: that plist, the identifier `ai.tormoni.app`, the icon, and the `tormoni` under
+carries none of: that plist, the identifier `ai.boxdesk.app`, the icon, and the `boxdesk` under
 `Contents/Resources`, entitled for the hypervisor before the bundle is sealed over it. A bare
-`target/debug/tormoni-app` has no plist, so it is named for the build: `cargo xtask app` builds the
+`target/debug/boxdesk-app` has no plist, so it is named for the build: `cargo xtask app` builds the
 pair, assembles the bundle and starts the copy inside it, with its output still on the terminal. `--gpu` boots here and the
 guest sees `card0` and `renderD128`; this host's virglrenderer carries no Venus, so the offer ends
 at the device. The [Architecture](./architecture.md) page carries the fuller status and the

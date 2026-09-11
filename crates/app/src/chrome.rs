@@ -25,7 +25,7 @@
 //!   `NSProcessInfo`, which defaults to the executable's file name, so
 //!   [`name_the_application`] sets that to [`crate::NAME`] before the event loop.
 //! - **AppKit is Objective-C**, which is why this module is the app's one `unsafe`, as libkrun's C
-//!   is `tormoni-krun`'s. Everything read back out is the platform's own.
+//!   is `boxdesk-krun`'s. Everything read back out is the platform's own.
 
 /// Names this process [`crate::NAME`], which is what the toolkit builds the About, Hide and Quit
 /// items from.

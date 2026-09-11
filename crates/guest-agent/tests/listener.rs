@@ -1,4 +1,4 @@
-//! The agent **binary** serving its own listener, rather than [`tormoni_guest_agent::serve`] driven
+//! The agent **binary** serving its own listener, rather than [`boxdesk_guest_agent::serve`] driven
 //! over a socketpair in this process (roadmap 0.6, 0.7).
 //!
 //! What the other suites cannot show: that the process a guest image runs binds a socket, accepts,
@@ -29,13 +29,13 @@ const BIND_GRACE: Duration = Duration::from_secs(10);
 struct Listening {
     child: Child,
     socket: PathBuf,
-    _dir: tormoni_test_support::ScratchDir,
+    _dir: boxdesk_test_support::ScratchDir,
 }
 
 impl Listening {
     /// Spawns `guest-agent unix:<path>` and hands back the socket to dial.
     fn start(tag: &str) -> Self {
-        let dir = tormoni_test_support::ScratchDir::created(tag);
+        let dir = boxdesk_test_support::ScratchDir::created(tag);
         let socket = dir.path().join("agent.sock");
         let child = Command::new(env!("CARGO_BIN_EXE_guest-agent"))
             .arg(format!("unix:{}", socket.display()))
@@ -67,7 +67,7 @@ impl Drop for Listening {
     }
 }
 
-/// One `tormoni-channel` exchange crosses a real unix socket into the agent **process** and back: the
+/// One `boxdesk-channel` exchange crosses a real unix socket into the agent **process** and back: the
 /// handshake, an `Exec` frame out, the command's stdout and its exit code in.
 #[test]
 fn the_agent_binary_serves_a_frame_over_its_own_socket() {

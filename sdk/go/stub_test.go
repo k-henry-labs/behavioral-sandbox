@@ -1,8 +1,8 @@
-// Copyright 2026 The Tormoni Authors. All rights reserved.
+// Copyright 2026 The Boxdesk Authors. All rights reserved.
 // Use of this source code is governed by the Apache-2.0 license that can be
 // found in the LICENSE file.
 
-package tormoni_test
+package boxdesk_test
 
 import (
 	"errors"
@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	tormoni "github.com/kendricklawton/tormoni/sdk/go"
+	boxdesk "github.com/kendricklawton/boxdesk/sdk/go"
 )
 
 // sampleDoc is the record from the CLI contract, verbatim.
@@ -22,7 +22,7 @@ const sampleDoc = `{
   "verb": "run",
   "command": ["/bin/busybox", "sh", "-c", "echo hello"],
   "posture": {
-    "root": "/home/you/.local/share/tormoni/rootfs",
+    "root": "/home/you/.local/share/boxdesk/rootfs",
     "rootfs": "read-only",
     "mounts": [["/mnt", "/home/you/project"]],
     "shares": [],
@@ -46,13 +46,13 @@ const sampleDoc = `{
   "stderr_bytes": 0,
   "output_truncated": false,
   "files": [{ "path": "note.txt", "size_bytes": 5 }],
-  "dir": "/home/you/.local/share/tormoni/runs/1789085063489-run-81523"
+  "dir": "/home/you/.local/share/boxdesk/runs/1789085063489-run-81523"
 }`
 
 // okDoc is the smallest record of a command that exited cleanly.
 const okDoc = `{"run_id":"1-run-1","end_kind":"exit","end_code":0,"stdout":"hi\n","stdout_bytes":3}`
 
-// stub stands in for the tormoni binary. It records the argv it was called
+// stub stands in for the boxdesk binary. It records the argv it was called
 // with and prints whatever the test canned for it, so the suite never boots a
 // VM and never needs a hypervisor or a network.
 type stub struct {
@@ -61,7 +61,7 @@ type stub struct {
 	argvPath string
 }
 
-// writeStub writes an executable named "tormoni" whose body is body, prefixed
+// writeStub writes an executable named "boxdesk" whose body is body, prefixed
 // with the argv recording every stub does.
 func writeStub(t *testing.T, body string) *stub {
 	t.Helper()
@@ -70,7 +70,7 @@ func writeStub(t *testing.T, body string) *stub {
 	script := "#!/bin/sh\n" +
 		fmt.Sprintf("for a in \"$@\"; do printf '%%s\\n' \"$a\" >> '%s'; done\n", argvPath) +
 		body
-	path := filepath.Join(dir, "tormoni")
+	path := filepath.Join(dir, "boxdesk")
 	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
 		t.Fatalf("writing stub: %v", err)
 	}
@@ -94,7 +94,7 @@ func newStub(t *testing.T, stdout, stderrText string, exitCode int) *stub {
 }
 
 // Client returns a Client pointed straight at the stub.
-func (s *stub) Client() *tormoni.Client { return tormoni.NewWithPath(s.Path) }
+func (s *stub) Client() *boxdesk.Client { return boxdesk.NewWithPath(s.Path) }
 
 // Argv is the argument list the stub was last called with, without the binary.
 func (s *stub) Argv() []string {

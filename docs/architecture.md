@@ -1,26 +1,26 @@
 # Architecture
 
-What Tormoni is, the rules it holds itself to, and what is in the tree today.
+What Boxdesk is, the rules it holds itself to, and what is in the tree today.
 
 ## Scope
 
 ### What this is
 
-Tormoni is a local-first desktop sandbox. Untrusted code runs inside a virtual machine, with the
+Boxdesk is a local-first desktop sandbox. Untrusted code runs inside a virtual machine, with the
 isolation boundary enforced by the CPU through hardware virtualization: KVM on Linux,
 Hypervisor.framework on macOS. It is a GUI application with a CLI beside it, both on one machine.
 
 ### What the tree does today
 
-Tormoni runs on [libkrun](https://github.com/libkrun/libkrun), a library that makes the calling
+Boxdesk runs on [libkrun](https://github.com/libkrun/libkrun), a library that makes the calling
 process the virtual machine monitor.
 
-In the tree: the host/guest wire framing (`tormoni-channel`), the in-guest agent (`tormoni-guest-agent`),
-the safe libkrun wrapper (`tormoni-krun`), the process supervisor (`tormoni-supervisor`), the `tormoni` CLI and
-its verbs, the run record and its ustar export (`tormoni-record`), the guest image build and the gate
+In the tree: the host/guest wire framing (`boxdesk-channel`), the in-guest agent (`boxdesk-guest-agent`),
+the safe libkrun wrapper (`boxdesk-krun`), the process supervisor (`boxdesk-supervisor`), the `boxdesk` CLI and
+its verbs, the run record and its ustar export (`boxdesk-record`), the guest image build and the gate
 (`xtask`), and the display path: a virtio-gpu scanout landing in host RAM and shown in a window,
 with that window's keyboard and pointer going back as two virtio-input devices, a second guest
-image that boots a Wayland compositor on it, and an opt-in virtio-snd card. `Tormoni` is the
+image that boots a Wayland compositor on it, and an opt-in virtio-snd card. `Boxdesk` is the
 notebook of those runs: a sidebar over the list, a live run's display and input in the window, a
 start form that shows the posture before boot, export, a selection of ended runs removed behind a
 confirm, and a Settings screen whose palette, scale and landing screen persist. On macOS ARM64 the
@@ -30,7 +30,7 @@ Hypervisor.framework.
 **Status.** Pre-release: one maintainer, no external review; a `v*` tag releases the tree through
 `cargo xtask dist` and `install.sh`. macOS's libkrun builds
 neither the `--sound` nor the guest input backend, and the display helper's own window is compiled
-out there, so a display on macOS is viewed in `Tormoni`. `--gpu` offers a guest the 3D path behind
+out there, so a display on macOS is viewed in `Boxdesk`. `--gpu` offers a guest the 3D path behind
 `krun_has_feature`; measured acceleration exists nowhere yet, for reasons below.
 
 ### Design rules
@@ -61,46 +61,46 @@ verified outcome.
 
 ## Index of crates
 
-Directories stay short and packages carry the `tormoni-` prefix, so a package is its directory plus that
-prefix, with one exception: `crates/cli` builds `tormoni`, the bare name going to the command a user
+Directories stay short and packages carry the `boxdesk-` prefix, so a package is its directory plus that
+prefix, with one exception: `crates/cli` builds `boxdesk`, the bare name going to the command a user
 types. `cargo … -p` takes the **package**, a path takes the **directory**.
 
 | Crate | Directory | Role |
 |---|---|---|
-| `tormoni-supervisor` | `crates/supervisor` | Spawn, track, stop and reap the helper processes that are VMs. One value per live VM; `Drop` tears it down. |
-| `tormoni-krun` | `crates/krun` | The safe wrapper over libkrun, with the raw declarations private beneath it. One of the two crates that may use `unsafe`, because the library is C. |
-| `tormoni-channel` | `crates/channel` | The host/guest wire protocol. Nearly dependency-free framing (`zeroize`, for the post-send secret wipe, is the one dependency), shared verbatim by both ends. |
-| `tormoni-guest-agent` | `crates/guest-agent` | The in-guest agent. One command per connection, static musl, baked into the guest image. Not a security boundary. Its binary keeps the bare name `guest-agent`. |
-| `tormoni-record` | `crates/record` | The run record: posture, captured output and the guest's `/results`, one directory per run under the local data dir, written by the CLI, read by both binaries, and exported as one ustar file. |
-| `tormoni-input` | `crates/input` | The guest's keyboard and pointer: device shapes, reports, and the line grammar the replay file and the control socket's `input` session feed. |
-| `tormoni` | `crates/cli` | The `tormoni` binary and its verbs. Package, binary, and command all share the name. |
-| `tormoni-serve` | `crates/serve` | `tormoni serve`: one box that runs sandboxes for a caller over HTTP, and the meter that says what one held. One tenant, one token; it decides nothing about who is asking. |
-| `tormoni-app` | `crates/app` | The GUI application, on iced: the notebook of runs from `tormoni-record` reached from a sidebar, a run's record with its display (leased over the control socket, uploaded to a wgpu texture) and output, a start form, stop, re-run, delete, export, a selection of ended runs to remove, a persisted palette, scale and landing screen, and a shell in the operator's terminal through `tormoni`. |
-| `tormoni-test-support` | `crates/test-support` | Test fixtures: a self-reclaiming scratch dir, a log sink, and the deterministic generator the in-gate fuzz suites use. |
+| `boxdesk-supervisor` | `crates/supervisor` | Spawn, track, stop and reap the helper processes that are VMs. One value per live VM; `Drop` tears it down. |
+| `boxdesk-krun` | `crates/krun` | The safe wrapper over libkrun, with the raw declarations private beneath it. One of the two crates that may use `unsafe`, because the library is C. |
+| `boxdesk-channel` | `crates/channel` | The host/guest wire protocol. Nearly dependency-free framing (`zeroize`, for the post-send secret wipe, is the one dependency), shared verbatim by both ends. |
+| `boxdesk-guest-agent` | `crates/guest-agent` | The in-guest agent. One command per connection, static musl, baked into the guest image. Not a security boundary. Its binary keeps the bare name `guest-agent`. |
+| `boxdesk-record` | `crates/record` | The run record: posture, captured output and the guest's `/results`, one directory per run under the local data dir, written by the CLI, read by both binaries, and exported as one ustar file. |
+| `boxdesk-input` | `crates/input` | The guest's keyboard and pointer: device shapes, reports, and the line grammar the replay file and the control socket's `input` session feed. |
+| `boxdesk` | `crates/cli` | The `boxdesk` binary and its verbs. Package, binary, and command all share the name. |
+| `boxdesk-serve` | `crates/serve` | `boxdesk serve`: one box that runs sandboxes for a caller over HTTP, and the meter that says what one held. One tenant, one token; it decides nothing about who is asking. |
+| `boxdesk-app` | `crates/app` | The GUI application, on iced: the notebook of runs from `boxdesk-record` reached from a sidebar, a run's record with its display (leased over the control socket, uploaded to a wgpu texture) and output, a start form, stop, re-run, delete, export, a selection of ended runs to remove, a persisted palette, scale and landing screen, and a shell in the operator's terminal through `boxdesk`. |
+| `boxdesk-test-support` | `crates/test-support` | Test fixtures: a self-reclaiming scratch dir, a log sink, and the deterministic generator the in-gate fuzz suites use. |
 | `xtask` | `xtask` | Dev orchestration: the gate, the guest image build, the vendor mirror. Never shipped, and never renamed: `cargo xtask` is a `--package xtask` alias. |
 
 ## How a sandbox runs
 
 One verb, end to end, with the boundary each step sits on:
 
-1. **The posture is settled on the host, before anything boots.** Flags, then `TORMONI_*`, then the
-   nearest `.tormoni.toml`, then defaults, resolve to one set of virtiofs tags, a network backend and a
+1. **The posture is settled on the host, before anything boots.** Flags, then `BOXDESK_*`, then the
+   nearest `.boxdesk.toml`, then defaults, resolve to one set of virtiofs tags, a network backend and a
    device list. `--dry-run` prints it without booting. Nothing decides this later, because there is
    no in-kernel enforcer behind it to decide with.
-2. **The CLI writes the record and spawns a helper.** `tormoni-supervisor` writes the helper's argv and
-   spawns `tormoni __vmm`; `tormoni-record` writes the run's directory with the posture as settled. One
+2. **The CLI writes the record and spawns a helper.** `boxdesk-supervisor` writes the helper's argv and
+   spawns `boxdesk __vmm`; `boxdesk-record` writes the run's directory with the posture as settled. One
    `Vm` value tracks the child, and `Drop` tears it down.
-3. **The helper becomes the VM.** It configures libkrun through `tormoni-krun`'s builder, whose types
+3. **The helper becomes the VM.** It configures libkrun through `boxdesk-krun`'s builder, whose types
    carry the library's call-ordering rules, then calls `krun_start_enter`, which does not return.
    From here the process *is* the guest's monitor: there is no daemon above it.
-4. **The guest is reached over vsock.** `tormoni-guest-agent`, static musl and baked into the image,
-   serves repeated execs from one session directory. `tormoni exec` and `tormoni shell` speak
-   `tormoni-channel`'s framing to it. The agent does no init work and is not the security boundary.
+4. **The guest is reached over vsock.** `boxdesk-guest-agent`, static musl and baked into the image,
+   serves repeated execs from one session directory. `boxdesk exec` and `boxdesk shell` speak
+   `boxdesk-channel`'s framing to it. The agent does no init work and is not the security boundary.
 5. **A display leaves the guest as pixels.** The guest draws into a dumb buffer; its `virtio_gpu`
    driver transfers and flushes; the frame lands in host RAM in a sealed memfd of equal slots. A
    second process leases that scanout over the control socket, maps it, and uploads by damage
-   rectangle into a wgpu texture, which is how `Tormoni` shows a run another process started.
-6. **Input goes back the same way.** Window events become `tormoni-input` reports and travel as
+   rectangle into a wgpu texture, which is how `Boxdesk` shows a run another process started.
+6. **Input goes back the same way.** Window events become `boxdesk-input` reports and travel as
    `kbd|ptr TYPE CODE VALUE` lines down an `input` session on the control socket, arriving as two
    virtio-input devices. The replay file and the socket speak one grammar, so both feeders are the
    same code path.
@@ -117,14 +117,14 @@ and libkrunfw 5.5.0 from Homebrew, a debug build. The guest is the aarch64 Alpin
 tree, not `build-rootfs`'s product. One host, one date; nothing here is claimed for any other.
 
 Every boot is a cold boot, because libkrun has no snapshot surface, so the boot number is the
-whole verb: `tormoni run --root <tree> -- /bin/true` from spawn to exit, record written, timed around
+whole verb: `boxdesk run --root <tree> -- /bin/true` from spawn to exit, record written, timed around
 the subprocess. Three warmups discarded, then one hundred runs, nearest-rank percentiles:
 
 | What | Number |
 |---|---|
 | Cold boot, wall clock, n=100 | p50 157 ms, p90 162 ms, p99 169 ms (min 150, max 170) |
-| An idle `tormoni up` sandbox, 512 MiB configured | 102 MiB resident, steady over three samples |
-| `Tormoni` idling (on the menu screen it had that day) | 101 MiB resident |
+| An idle `boxdesk up` sandbox, 512 MiB configured | 102 MiB resident, steady over three samples |
+| `Boxdesk` idling (on the menu screen it had that day) | 101 MiB resident |
 
 Resident is what was touched, not what was granted: the helper holds a 512 MiB guest with a
 102 MiB resident set.
@@ -146,10 +146,10 @@ render node) and maps Mesa's EGL, GLES and GBM alongside `libvirglrenderer`. A h
 same image holds none, and maps neither EGL nor GLES:
 
 ```console
-$ tormoni up --name gpuprobe --root artifacts/rootfs-guest --display 640x480
-$ ls -l /proc/$(pgrep -f 'tormoni __vmm')/fd | grep -c renderD128
+$ boxdesk up --name gpuprobe --root artifacts/rootfs-guest --display 640x480
+$ ls -l /proc/$(pgrep -f 'boxdesk __vmm')/fd | grep -c renderD128
 7
-$ awk '{print $6}' /proc/$(pgrep -f 'tormoni __vmm')/maps | grep -E 'libEGL|libGLES|virgl' | sort -u
+$ awk '{print $6}' /proc/$(pgrep -f 'boxdesk __vmm')/maps | grep -E 'libEGL|libGLES|virgl' | sort -u
 /usr/lib/libEGL_mesa.so.0.0.0
 /usr/lib/libGLESv2.so.2.1.0
 /usr/lib/libvirglrenderer.so.1.11.0
@@ -185,14 +185,14 @@ host, one date; nothing here is claimed for any other, and the Linux rows are no
 |---|---|---|
 | Venus in the host renderer | `nm -gU $(brew --prefix virglrenderer)/lib/libvirglrenderer.dylib \| grep -c vkr_` | 0, and `otool -L` shows no Vulkan: built without Venus, the same wall the Arch box showed |
 | The feature probe | `cargo xtask setup` | the gpu feature answers yes |
-| Boot with `--gpu`, no display | `tormoni run --gpu -- /bin/true` | exit 0: `krun_set_gpu_options2` with Venus in the flags is tolerated by a Venus-less renderer |
-| DRM nodes under `--gpu` | `tormoni run --gpu -- sh -c 'ls /dev/dri'` | `card0`, `renderD128` |
-| No DRM nodes without it | `tormoni run -- sh -c 'ls /dev/dri'` | `none`: the offer exists exactly when asked for |
-| The refusal, feature absent | `tormoni run --gpu` on a gpu-less libkrun | not reproducible here (this libkrun answers the feature); the pinned text is "--gpu needs a libkrun built with the gpu feature, which this one lacks" |
+| Boot with `--gpu`, no display | `boxdesk run --gpu -- /bin/true` | exit 0: `krun_set_gpu_options2` with Venus in the flags is tolerated by a Venus-less renderer |
+| DRM nodes under `--gpu` | `boxdesk run --gpu -- sh -c 'ls /dev/dri'` | `card0`, `renderD128` |
+| No DRM nodes without it | `boxdesk run -- sh -c 'ls /dev/dri'` | `none`: the offer exists exactly when asked for |
+| The refusal, feature absent | `boxdesk run --gpu` on a gpu-less libkrun | not reproducible here (this libkrun answers the feature); the pinned text is "--gpu needs a libkrun built with the gpu feature, which this one lacks" |
 
 ### What guest acceleration still needs
 
-Two things, neither of them a Tormoni code change:
+Two things, neither of them a Boxdesk code change:
 
 - **A guest Mesa carrying the virgl Gallium driver.** Alpine's `mesa-dri-gallium` is built with
   Iris, llvmpipe and radeonsi only: `strings libgallium-26.1.6.so` finds no virgl driver. A guest

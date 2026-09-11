@@ -1,4 +1,4 @@
-//! `tormoni serve`: one box that runs sandboxes for a caller over HTTP.
+//! `boxdesk serve`: one box that runs sandboxes for a caller over HTTP.
 //!
 //! - **One tenant, one token, one box.** No account, no role, no membership, no placement. This
 //!   takes a posture and a command and gives back a record, exactly as the CLI does; which box a

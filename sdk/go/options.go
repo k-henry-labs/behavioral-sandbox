@@ -1,12 +1,12 @@
-// Copyright 2026 The Tormoni Authors. All rights reserved.
+// Copyright 2026 The Boxdesk Authors. All rights reserved.
 // Use of this source code is governed by the Apache-2.0 license that can be
 // found in the LICENSE file.
 
-package tormoni
+package boxdesk
 
 import "strconv"
 
-// RunOptions maps one-to-one onto the flags `tormoni run` accepts. Every field
+// RunOptions maps one-to-one onto the flags `boxdesk run` accepts. Every field
 // is optional: a zero value means "do not pass the flag", and the CLI's own
 // default stands. This package adds no defaults of its own.
 //
@@ -14,7 +14,7 @@ import "strconv"
 // to send (VCPUs, MemMiB); everywhere else the zero value is unambiguous.
 type RunOptions struct {
 	// Root is --root DIR, the guest root tree. Unset, the CLI uses
-	// $TORMONI_GUEST_ROOT and then ~/.local/share/tormoni/rootfs.
+	// $BOXDESK_GUEST_ROOT and then ~/.local/share/boxdesk/rootfs.
 	Root string
 
 	// VCPUs is --vcpus N. Nil leaves the CLI default (1).

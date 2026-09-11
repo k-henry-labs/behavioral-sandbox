@@ -69,7 +69,7 @@ jobs:
         with:
           name: dist-macos-aarch64
           path: |
-            dist/Tormoni-macos-aarch64.zip
+            dist/Boxdesk-macos-aarch64.zip
             dist/SHA256SUMS
           if-no-files-found: error
 
@@ -109,7 +109,7 @@ jobs:
         with:
           name: dist-linux-x86_64
           path: |
-            dist/tormoni-linux-x86_64.tgz
+            dist/boxdesk-linux-x86_64.tgz
             dist/SHA256SUMS
           if-no-files-found: error
 
@@ -136,7 +136,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir release
-          cp built/dist-macos-aarch64/Tormoni-macos-aarch64.zip built/dist-linux-x86_64/tormoni-linux-x86_64.tgz release/
+          cp built/dist-macos-aarch64/Boxdesk-macos-aarch64.zip built/dist-linux-x86_64/boxdesk-linux-x86_64.tgz release/
           cat built/dist-macos-aarch64/SHA256SUMS built/dist-linux-x86_64/SHA256SUMS > release/SHA256SUMS
           cp install.sh release/
           (cd release && sha256sum install.sh >> SHA256SUMS && sha256sum -c SHA256SUMS)
@@ -151,4 +151,4 @@ jobs:
           prerelease=
           case "$GITHUB_REF_NAME" in *-*) prerelease=--prerelease ;; esac
           gh release create "$GITHUB_REF_NAME" --verify-tag --notes-from-tag $prerelease \
-            release/Tormoni-macos-aarch64.zip release/tormoni-linux-x86_64.tgz release/SHA256SUMS release/install.sh
+            release/Boxdesk-macos-aarch64.zip release/boxdesk-linux-x86_64.tgz release/SHA256SUMS release/install.sh

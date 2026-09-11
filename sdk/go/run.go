@@ -1,8 +1,8 @@
-// Copyright 2026 The Tormoni Authors. All rights reserved.
+// Copyright 2026 The Boxdesk Authors. All rights reserved.
 // Use of this source code is governed by the Apache-2.0 license that can be
 // found in the LICENSE file.
 
-package tormoni
+package boxdesk
 
 import (
 	"encoding/json"
@@ -16,7 +16,7 @@ import (
 // EndCode. EndCode carries a number only for EndExit and EndSignal.
 type EndKind string
 
-// The end kinds Tormoni reports.
+// The end kinds Boxdesk reports.
 const (
 	// EndExit means the guest command exited on its own; EndCode is its status.
 	EndExit EndKind = "exit"
@@ -28,11 +28,11 @@ const (
 	EndGone EndKind = "gone"
 	// EndFailed means the sandbox failed to run the command.
 	EndFailed EndKind = "failed"
-	// EndUnknown means Tormoni could not determine how the run ended.
+	// EndUnknown means Boxdesk could not determine how the run ended.
 	EndUnknown EndKind = "unknown"
 )
 
-// Run is one Tormoni record: the posture a sandbox was given, how its command
+// Run is one Boxdesk record: the posture a sandbox was given, how its command
 // finished, and what it captured.
 //
 // The same shape is returned by Run, DryRun, Show and Runs. A dry run has no
@@ -99,7 +99,7 @@ type Posture struct {
 	GPU     bool    `json:"gpu"`
 	Results bool    `json:"results"`
 
-	// Env holds environment variable NAMES only. Tormoni deliberately never
+	// Env holds environment variable NAMES only. Boxdesk deliberately never
 	// writes an environment value to a record, so no value is available here
 	// or anywhere else in a Run.
 	Env []string `json:"env"`
@@ -124,7 +124,7 @@ func (m Mount) MarshalJSON() ([]byte, error) {
 func (m *Mount) UnmarshalJSON(b []byte) error {
 	var pair [2]string
 	if err := json.Unmarshal(b, &pair); err != nil {
-		return fmt.Errorf("tormoni: mount is not a [guest_path, host_path] pair: %w", err)
+		return fmt.Errorf("boxdesk: mount is not a [guest_path, host_path] pair: %w", err)
 	}
 	m.Guest, m.Host = pair[0], pair[1]
 	return nil
@@ -146,7 +146,7 @@ func (s Share) MarshalJSON() ([]byte, error) {
 func (s *Share) UnmarshalJSON(b []byte) error {
 	var pair [2]string
 	if err := json.Unmarshal(b, &pair); err != nil {
-		return fmt.Errorf("tormoni: share is not a [tag, host_path] pair: %w", err)
+		return fmt.Errorf("boxdesk: share is not a [tag, host_path] pair: %w", err)
 	}
 	s.Tag, s.Host = pair[0], pair[1]
 	return nil

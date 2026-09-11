@@ -101,7 +101,7 @@ pub(crate) fn cut_text_fonts() -> Result<()> {
         &root.join(FONT_DIR).join("LICENSE-GeistMono"),
     )?;
 
-    println!("fonts: `cargo test -p tormoni-app` checks each cut declares what the app asks for");
+    println!("fonts: `cargo test -p boxdesk-app` checks each cut declares what the app asks for");
     Ok(())
 }
 

@@ -1,7 +1,7 @@
 //! The record as JavaScript sees it.
 //!
 //! `#[napi(object)]` generates both the plain JS object and its TypeScript declaration from these
-//! structs, so the `.d.ts` a caller types against is derived from `tormoni_record::Record` rather
+//! structs, so the `.d.ts` a caller types against is derived from `boxdesk_record::Record` rather
 //! than written next to it. [`convert_record`] is the one place a field is read; rename a field
 //! upstream and this file stops compiling.
 //!
@@ -10,7 +10,7 @@
 //! inside the 2^53 a JS number holds exactly: epoch milliseconds run out in 287,000 years.
 
 use napi_derive::napi;
-use tormoni_record::{End, Record, RunDir};
+use boxdesk_record::{End, Record, RunDir};
 
 #[napi(object)]
 pub struct JsPosture {

@@ -1,14 +1,14 @@
 # Security
 
-Tormoni's whole reason to exist is running code you don't trust. This page states what is trusted, what
+Boxdesk's whole reason to exist is running code you don't trust. This page states what is trusted, what
 counts as a security bug (and what does not), how to report one, and what happens after a report.
 The reporting mechanism also lives in
-[`SECURITY.md`](https://github.com/kendricklawton/tormoni/blob/main/SECURITY.md) at the
+[`SECURITY.md`](https://github.com/kendricklawton/boxdesk/blob/main/SECURITY.md) at the
 repo root (GitHub surfaces it in the Security tab).
 
 ## The tree runs guests, and has never been audited
 
-The libkrun supervisor boots sandboxes: `tormoni run`, `shell`, `up`, `exec` and `stop` work on a host
+The libkrun supervisor boots sandboxes: `boxdesk run`, `shell`, `up`, `exec` and `stop` work on a host
 whose hypervisor answers (`/dev/kvm` on Linux, Hypervisor.framework on macOS ARM64) and a guest
 image. So there is something here to attack. The host-side decoders of the guest's wire protocol
 are fuzzed: cargo-fuzz targets seeded from a committed corpus the encoders generate, with a smoke
@@ -72,7 +72,7 @@ The mirror list, so reports stay signal:
 - **Hosts below the supported floor.** A host without a working hypervisor is refused; weaknesses
   that require running there anyway are the operator's acceptance. The same goes for an *unpatched*
   host kernel: patching the substrate is the operator's half of the contract.
-- **The caller harming the caller.** The person running Tormoni is trusted; policy binds the *guest*.
+- **The caller harming the caller.** The person running Boxdesk is trusted; policy binds the *guest*.
   Pointing it at a bad image, or exhausting your own machine with a thousand sandboxes, is misuse
   rather than a vulnerability.
 - **A hostile guest controlling the in-guest agent.** Assumed, by design; only effects that cross
@@ -86,7 +86,7 @@ The mirror list, so reports stay signal:
 ## After a report: how a fix ships
 
 The reporting mechanics and response expectations live in
-[`SECURITY.md`](https://github.com/kendricklawton/tormoni/blob/main/SECURITY.md) (private
+[`SECURITY.md`](https://github.com/kendricklawton/boxdesk/blob/main/SECURITY.md) (private
 GitHub advisory, acknowledgement within about a week, no bounty). What happens next, honestly scoped
 to a pre-`v0.1.0` single-maintainer project:
 
@@ -101,6 +101,6 @@ to a pre-`v0.1.0` single-maintainer project:
 ## Reporting a vulnerability
 
 Report privately via GitHub's security advisories: the [Security
-tab](https://github.com/kendricklawton/tormoni/security), or [this direct
-link](https://github.com/kendricklawton/tormoni/security/advisories/new) to the reporting
+tab](https://github.com/kendricklawton/boxdesk/security), or [this direct
+link](https://github.com/kendricklawton/boxdesk/security/advisories/new) to the reporting
 form. Please do not open a public issue for a suspected vulnerability.

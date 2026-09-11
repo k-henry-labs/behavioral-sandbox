@@ -1,8 +1,8 @@
-// Copyright 2026 The Tormoni Authors. All rights reserved.
+// Copyright 2026 The Boxdesk Authors. All rights reserved.
 // Use of this source code is governed by the Apache-2.0 license that can be
 // found in the LICENSE file.
 
-package tormoni_test
+package boxdesk_test
 
 import (
 	"context"
@@ -12,27 +12,27 @@ import (
 	"strings"
 	"testing"
 
-	tormoni "github.com/kendricklawton/tormoni/sdk/go"
+	boxdesk "github.com/kendricklawton/boxdesk/sdk/go"
 )
 
 // TestOperationalFailure covers a stub that writes garbage to stdout, a
 // message to stderr, and exits 2.
 func TestOperationalFailure(t *testing.T) {
-	const message = "tormoni: guest root not found at /home/you/.local/share/tormoni/rootfs\n"
+	const message = "boxdesk: guest root not found at /home/you/.local/share/boxdesk/rootfs\n"
 	s := newStub(t, "not json at all\n", message, 2)
 
 	run, err := s.Client().Run(context.Background(), []string{"echo", "hi"}, nil)
 	if run != nil {
 		t.Errorf("run = %+v, want nil", run)
 	}
-	var tErr *tormoni.Error
+	var tErr *boxdesk.Error
 	if !errors.As(err, &tErr) {
-		t.Fatalf("err = %#v, want *tormoni.Error", err)
+		t.Fatalf("err = %#v, want *boxdesk.Error", err)
 	}
 	if tErr.Stderr != message {
 		t.Errorf("Stderr = %q, want %q", tErr.Stderr, message)
 	}
-	// Tormoni's message reaches the caller verbatim, not reworded.
+	// Boxdesk's message reaches the caller verbatim, not reworded.
 	if got, want := tErr.Error(), strings.TrimRight(message, "\n"); got != want {
 		t.Errorf("Error() = %q, want %q", got, want)
 	}
@@ -75,9 +75,9 @@ func TestUnparsableStdout(t *testing.T) {
 			if err == nil {
 				t.Fatal("err = nil, want an operational failure")
 			}
-			var tErr *tormoni.Error
+			var tErr *boxdesk.Error
 			if !errors.As(err, &tErr) {
-				t.Fatalf("err = %#v, want *tormoni.Error", err)
+				t.Fatalf("err = %#v, want *boxdesk.Error", err)
 			}
 			if tErr.Stderr != "something went wrong\n" {
 				t.Errorf("Stderr = %q", tErr.Stderr)
@@ -86,16 +86,16 @@ func TestUnparsableStdout(t *testing.T) {
 	}
 }
 
-// TestErrorWithoutStderr checks the fallback message when Tormoni said nothing
+// TestErrorWithoutStderr checks the fallback message when Boxdesk said nothing
 // a person could read.
 func TestErrorWithoutStderr(t *testing.T) {
 	s := newStub(t, "", "", 0)
 	_, err := s.Client().Show(context.Background(), "run-1")
-	var tErr *tormoni.Error
+	var tErr *boxdesk.Error
 	if !errors.As(err, &tErr) {
-		t.Fatalf("err = %#v, want *tormoni.Error", err)
+		t.Fatalf("err = %#v, want *boxdesk.Error", err)
 	}
-	if !strings.Contains(tErr.Error(), "tormoni show") {
+	if !strings.Contains(tErr.Error(), "boxdesk show") {
 		t.Errorf("Error() = %q, want it to name the verb", tErr.Error())
 	}
 	if tErr.ExitCode != 0 {
@@ -108,33 +108,33 @@ func TestErrorWithoutStderr(t *testing.T) {
 func TestErrorMessage(t *testing.T) {
 	tests := []struct {
 		name string
-		err  tormoni.Error
+		err  boxdesk.Error
 		want string
 	}{
 		{
-			name: "Tormoni's message, verbatim but for the trailing newline",
-			err:  tormoni.Error{Verb: "run", Stderr: "tormoni: no /dev/kvm\n"},
-			want: "tormoni: no /dev/kvm",
+			name: "Boxdesk's message, verbatim but for the trailing newline",
+			err:  boxdesk.Error{Verb: "run", Stderr: "boxdesk: no /dev/kvm\n"},
+			want: "boxdesk: no /dev/kvm",
 		},
 		{
 			name: "a multi-line message keeps its shape",
-			err:  tormoni.Error{Verb: "run", Stderr: "tormoni: two things went wrong:\n  - one\n  - two\n"},
-			want: "tormoni: two things went wrong:\n  - one\n  - two",
+			err:  boxdesk.Error{Verb: "run", Stderr: "boxdesk: two things went wrong:\n  - one\n  - two\n"},
+			want: "boxdesk: two things went wrong:\n  - one\n  - two",
 		},
 		{
 			name: "whitespace is not a message",
-			err:  tormoni.Error{Verb: "ls", Stderr: " \n\n", ExitCode: 2},
-			want: "tormoni ls: exited 2 without writing a JSON document",
+			err:  boxdesk.Error{Verb: "ls", Stderr: " \n\n", ExitCode: 2},
+			want: "boxdesk ls: exited 2 without writing a JSON document",
 		},
 		{
 			name: "with a cause but nothing on stderr",
-			err:  tormoni.Error{Verb: "show", Err: context.Canceled},
-			want: "tormoni show: context canceled",
+			err:  boxdesk.Error{Verb: "show", Err: context.Canceled},
+			want: "boxdesk show: context canceled",
 		},
 		{
 			name: "the zero value still says something",
-			err:  tormoni.Error{},
-			want: "tormoni : exited 0 without writing a JSON document",
+			err:  boxdesk.Error{},
+			want: "boxdesk : exited 0 without writing a JSON document",
 		},
 	}
 	for _, tt := range tests {
@@ -148,21 +148,21 @@ func TestErrorMessage(t *testing.T) {
 
 // TestErrorArgsRedactEnvValues: an *Error carries the argument list for
 // debugging, and that list contains whatever --env values the caller passed.
-// Tormoni deliberately never writes an environment value to a record, so an
+// Boxdesk deliberately never writes an environment value to a record, so an
 // error from this package must not undo that by spilling one into a log.
 func TestErrorArgsRedactEnvValues(t *testing.T) {
 	const secret = "s3cret-value-nobody-should-see"
-	s := newStub(t, "not json", "tormoni: the hypervisor did not answer\n", 1)
+	s := newStub(t, "not json", "boxdesk: the hypervisor did not answer\n", 1)
 
 	// The guest's own command contains a word that looks like the flag, to
 	// check that only real flags are touched.
-	_, err := s.Client().Run(context.Background(), []string{"printenv", "--env"}, &tormoni.RunOptions{
+	_, err := s.Client().Run(context.Background(), []string{"printenv", "--env"}, &boxdesk.RunOptions{
 		Env:  []string{"API_KEY=" + secret, "BARE_NAME", "EMPTY="},
 		Name: "builder",
 	})
-	var tErr *tormoni.Error
+	var tErr *boxdesk.Error
 	if !errors.As(err, &tErr) {
-		t.Fatalf("err = %#v, want *tormoni.Error", err)
+		t.Fatalf("err = %#v, want *boxdesk.Error", err)
 	}
 
 	joined := strings.Join(tErr.Args, " ")
@@ -193,8 +193,8 @@ func TestErrorArgsRedactEnvValues(t *testing.T) {
 		t.Errorf("the guest did not get the real values\n got: %q\nwant: %q", got, wantArgv)
 	}
 
-	// The message itself is still Tormoni's, verbatim.
-	if tErr.Error() != "tormoni: the hypervisor did not answer" {
+	// The message itself is still Boxdesk's, verbatim.
+	if tErr.Error() != "boxdesk: the hypervisor did not answer" {
 		t.Errorf("Error() = %q", tErr.Error())
 	}
 }

@@ -1,6 +1,6 @@
 //! `cargo xtask app-icon`: the application's icon, cut from the product's mark.
 //!
-//! - **One source, two outputs.** `crates/app/icon/tormoni.svg` is the mark on a 1024 canvas at
+//! - **One source, two outputs.** `crates/app/icon/boxdesk.svg` is the mark on a 1024 canvas at
 //!   the extent macOS draws an icon to; from it come the `.icns` the bundle names and the PNG the
 //!   Linux desktop entry names, both committed, as the fonts are.
 //! - **macOS tooling.** `sips` rasterises the SVG and scales it, `iconutil` packs the iconset. A
@@ -14,10 +14,10 @@ use crate::bundle::APP_ID;
 use crate::{artifacts_dir, run_tool, workspace_root};
 
 /// The mark, on a 1024 canvas.
-const SOURCE: &str = "crates/app/icon/tormoni.svg";
+const SOURCE: &str = "crates/app/icon/boxdesk.svg";
 
 /// The icon the bundle names in its plist.
-pub(crate) const ICNS: &str = "crates/app/icon/Tormoni.icns";
+pub(crate) const ICNS: &str = "crates/app/icon/Boxdesk.icns";
 
 /// The icon the desktop entry names, which is by the app id.
 pub(crate) fn png() -> PathBuf {
@@ -36,7 +36,7 @@ pub(crate) fn cut_app_icon() -> Result<()> {
     let root = workspace_root();
     let source = root.join(SOURCE);
     let work = artifacts_dir().join("icon");
-    let iconset = work.join("Tormoni.iconset");
+    let iconset = work.join("Boxdesk.iconset");
     std::fs::create_dir_all(&iconset).with_context(|| format!("creating {}", iconset.display()))?;
 
     let master = work.join("master.png");
@@ -105,7 +105,7 @@ fn scale(from: &Path, size: u32, to: &Path) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use tormoni_test_support::ScratchDir;
+    use boxdesk_test_support::ScratchDir;
 
     use super::*;
 

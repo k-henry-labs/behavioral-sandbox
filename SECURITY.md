@@ -12,8 +12,8 @@ backported fixes, and nothing should be treated as production-ready.
 ## Reporting a vulnerability
 
 Report privately via GitHub's security advisories: the [Security
-tab](https://github.com/kendricklawton/tormoni/security), or [this direct
-link](https://github.com/kendricklawton/tormoni/security/advisories/new) to the reporting
+tab](https://github.com/kendricklawton/boxdesk/security), or [this direct
+link](https://github.com/kendricklawton/boxdesk/security/advisories/new) to the reporting
 form. Please do not open a public issue for a suspected vulnerability.
 
 ## What to expect

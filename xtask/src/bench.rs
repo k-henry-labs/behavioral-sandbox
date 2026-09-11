@@ -12,7 +12,7 @@
 //! **What this does not separate.** The boot bench times what the *host* can see, split at the one
 //! boundary it can observe: the vCPU thread appearing. The guest's own share sits inside the second
 //! number, because the workload is `/bin/true`, which reaches userspace and exits without saying
-//! so. An agent guest announces itself (`tormoni_channel::GUEST_READY_MARKER`), so a bench booting
+//! so. An agent guest announces itself (`boxdesk_channel::GUEST_READY_MARKER`), so a bench booting
 //! one could split that number; this one does not, and says so rather than implying a precision it
 //! does not have.
 
@@ -80,7 +80,7 @@ pub(crate) fn bench_boot(runs: usize) -> Result<()> {
                 let status = child.wait().context("reap the early-exiting helper")?;
                 bail!(
                     "boot {i}: the helper ended ({status}) before a vCPU was observed; run \
-                     `tormoni __vmm` by hand to see why"
+                     `boxdesk __vmm` by hand to see why"
                 );
             }
             to_vcpu.push(started.elapsed().as_millis() as u64);
@@ -170,7 +170,7 @@ pub(crate) fn bench_footprint(count: usize, settle: Duration) -> Result<()> {
             teardown(&mut cohort);
             bail!(
                 "VM {i}: never reached a running vCPU (an idle guest has no reason to exit; run \
-                 `tormoni __vmm` by hand to see why)"
+                 `boxdesk __vmm` by hand to see why)"
             );
         }
         cohort.push(child);
@@ -258,7 +258,7 @@ pub(crate) fn bench_frames(display: &str, frames: usize, app: bool) -> Result<()
     std::fs::write(stage.join("flip.py"), FLIPPER)?;
     for path in ["dirty", "flip"] {
         let log = stage.join(format!("{path}.tsv"));
-        let out = Command::new(&ctx.tormoni)
+        let out = Command::new(&ctx.boxdesk)
             .arg("run")
             .arg("--root")
             .arg(&ctx.guest_root)
@@ -269,7 +269,7 @@ pub(crate) fn bench_frames(display: &str, frames: usize, app: bool) -> Result<()
             .arg(format!("/mnt={}", stage.display()))
             .args(["--", "python3", "/mnt/flip.py", path, &frames.to_string()])
             .env("XDG_RUNTIME_DIR", &ctx.runtime)
-            .env("TORMONI_RUNS_DIR", ctx.runtime.join("runs"))
+            .env("BOXDESK_RUNS_DIR", ctx.runtime.join("runs"))
             .env_remove("DISPLAY")
             .env_remove("WAYLAND_DISPLAY")
             .stdin(Stdio::null())
@@ -314,7 +314,7 @@ pub(crate) fn bench_frames(display: &str, frames: usize, app: bool) -> Result<()
 fn bench_boundary(ctx: &BenchContext, display: &str, frames: usize, stage: &Path) -> Result<()> {
     let helper_log = stage.join("boundary-helper.tsv");
     let client_log = stage.join("boundary-client.tsv");
-    let mut reader = Command::new(&ctx.tormoni);
+    let mut reader = Command::new(&ctx.boxdesk);
     reader
         .args(["__frames", "bench-frames-boundary"])
         .arg("--log")
@@ -353,14 +353,14 @@ fn bench_boundary(ctx: &BenchContext, display: &str, frames: usize, stage: &Path
     Ok(())
 }
 
-/// The application (4.10): `Tormoni` leases the display into a window, logging each present read
+/// The application (4.10): `Boxdesk` leases the display into a window, logging each present read
 /// and each frame uploaded. The panel bounds what reaches the screen, so uploaded against
 /// presented is the number.
 fn bench_app(ctx: &BenchContext, display: &str, frames: usize, stage: &Path) -> Result<()> {
-    let app = ctx.tormoni.with_file_name(crate::bundle::EXECUTABLE);
+    let app = ctx.boxdesk.with_file_name(crate::bundle::EXECUTABLE);
     if !app.is_file() {
         bail!(
-            "no release app at {} — run `cargo build --release -p tormoni-app`",
+            "no release app at {} — run `cargo build --release -p boxdesk-app`",
             app.display()
         );
     }
@@ -369,7 +369,7 @@ fn bench_app(ctx: &BenchContext, display: &str, frames: usize, stage: &Path) -> 
         std::env::var_os("DISPLAY"),
     );
     if wayland.is_none() && x11.is_none() {
-        println!("path flip, through Tormoni: SKIPPED (no WAYLAND_DISPLAY or DISPLAY: no window)");
+        println!("path flip, through Boxdesk: SKIPPED (no WAYLAND_DISPLAY or DISPLAY: no window)");
         return Ok(());
     }
     let helper_log = stage.join("app-helper.tsv");
@@ -402,12 +402,12 @@ fn bench_app(ctx: &BenchContext, display: &str, frames: usize, stage: &Path) -> 
     )?;
     let stderr = String::from_utf8_lossy(&ran.stderr);
     if !ran.status.success() {
-        bail!("Tormoni failed: {stderr}");
+        bail!("Boxdesk failed: {stderr}");
     }
     let helper = read_frame_log(&helper_log)?;
     let read = read_frame_log(&read_log)?;
     let drawn = read_frame_log(&drawn_log)?;
-    println!("path flip, through Tormoni (iced, wgpu):");
+    println!("path flip, through Boxdesk (iced, wgpu):");
     let prefix = format!("{}:", crate::bundle::APP);
     for line in stderr.lines().filter(|l| l.starts_with(&prefix)) {
         println!("  {}", line.trim_start_matches(&prefix).trim());
@@ -444,8 +444,8 @@ fn bench_app(ctx: &BenchContext, display: &str, frames: usize, stage: &Path) -> 
     Ok(())
 }
 
-/// `tormoni up` with a frame log at `helper_log`, `reader` (which takes the sandbox `name`) on it,
-/// the flipper through `tormoni exec`, then `tormoni stop`; the reader's output once it has exited, which
+/// `boxdesk up` with a frame log at `helper_log`, `reader` (which takes the sandbox `name`) on it,
+/// the flipper through `boxdesk exec`, then `boxdesk stop`; the reader's output once it has exited, which
 /// it does when the lease ends.
 fn run_through_reader(
     ctx: &BenchContext,
@@ -456,7 +456,7 @@ fn run_through_reader(
     helper_log: &Path,
     mut reader: Command,
 ) -> Result<std::process::Output> {
-    let up = Command::new(&ctx.tormoni)
+    let up = Command::new(&ctx.boxdesk)
         .arg("up")
         .arg("--root")
         .arg(&ctx.guest_root)
@@ -466,32 +466,32 @@ fn run_through_reader(
         .arg("--mount")
         .arg(format!("/mnt={}", stage.display()))
         .env("XDG_RUNTIME_DIR", &ctx.runtime)
-        .env("TORMONI_RUNS_DIR", ctx.runtime.join("runs"))
+        .env("BOXDESK_RUNS_DIR", ctx.runtime.join("runs"))
         .env_remove("DISPLAY")
         .env_remove("WAYLAND_DISPLAY")
         .stdin(Stdio::null())
         .output()
-        .with_context(|| format!("run tormoni up for {name}"))?;
+        .with_context(|| format!("run boxdesk up for {name}"))?;
     if !up.status.success() {
-        bail!("tormoni up failed: {}", String::from_utf8_lossy(&up.stderr));
+        bail!("boxdesk up failed: {}", String::from_utf8_lossy(&up.stderr));
     }
     let stop = || {
-        let _ = Command::new(&ctx.tormoni)
+        let _ = Command::new(&ctx.boxdesk)
             .args(["stop", name])
             .env("XDG_RUNTIME_DIR", &ctx.runtime)
-            .env("TORMONI_RUNS_DIR", ctx.runtime.join("runs"))
+            .env("BOXDESK_RUNS_DIR", ctx.runtime.join("runs"))
             .output();
     };
     // No frame count: the reader ends with the lease, and a late lease misses the first frames.
     let reader = reader
         .env("XDG_RUNTIME_DIR", &ctx.runtime)
-        .env("TORMONI_RUNS_DIR", ctx.runtime.join("runs"))
+        .env("BOXDESK_RUNS_DIR", ctx.runtime.join("runs"))
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
         .spawn()
         .with_context(|| format!("run the reader for {name}"))?;
-    let drew = Command::new(&ctx.tormoni)
+    let drew = Command::new(&ctx.boxdesk)
         .args([
             "exec",
             name,
@@ -502,7 +502,7 @@ fn run_through_reader(
             &frames.to_string(),
         ])
         .env("XDG_RUNTIME_DIR", &ctx.runtime)
-        .env("TORMONI_RUNS_DIR", ctx.runtime.join("runs"))
+        .env("BOXDESK_RUNS_DIR", ctx.runtime.join("runs"))
         .stdin(Stdio::null())
         .output()
         .context("run the flipper through exec")?;
@@ -623,7 +623,7 @@ const POLL_MS: u64 = 2;
 /// What every bench needs before it can measure anything: the binary under test, a guest tree, and
 /// a private runtime directory so a bench's own VMs are the only ones it sees.
 struct BenchContext {
-    tormoni: PathBuf,
+    boxdesk: PathBuf,
     guest_root: PathBuf,
     runtime: PathBuf,
     mem_mib: u32,
@@ -633,7 +633,7 @@ impl BenchContext {
     /// Resolves the inputs, refusing with the command that produces each missing one.
     fn resolve() -> Result<Self> {
         // Opened, not tested: outside the `kvm` group the device exists and every boot dies.
-        // Not `tormoni_test_support::hypervisor_unusable`, which additionally refuses a *test* on
+        // Not `boxdesk_test_support::hypervisor_unusable`, which additionally refuses a *test* on
         // macOS for want of a signed binary. A bench is run by hand after `cargo xtask sign`, so
         // what it needs to know is only whether the machine virtualises.
         if let Some(why) = hypervisor_unusable_for_a_bench() {
@@ -641,12 +641,12 @@ impl BenchContext {
         }
         // The **release** binary, deliberately: a debug build measures the wrong thing, and the old
         // suite's withdrawn numbers included a run whose profile was never recorded.
-        let tormoni = workspace_root().join("target/release/tormoni");
-        if !tormoni.is_file() {
+        let boxdesk = workspace_root().join("target/release/boxdesk");
+        if !boxdesk.is_file() {
             bail!(
-                "no release binary at {} — run `cargo build --release -p tormoni` (a debug build \
+                "no release binary at {} — run `cargo build --release -p boxdesk` (a debug build \
                  measures the wrong thing)",
-                tormoni.display()
+                boxdesk.display()
             );
         }
         let guest_root = guest_rootfs_path();
@@ -656,11 +656,11 @@ impl BenchContext {
                 guest_root.display()
             );
         }
-        let runtime = std::env::temp_dir().join(format!("tormoni-bench-{}", std::process::id()));
+        let runtime = std::env::temp_dir().join(format!("boxdesk-bench-{}", std::process::id()));
         std::fs::create_dir_all(&runtime)
             .with_context(|| format!("create {}", runtime.display()))?;
         Ok(Self {
-            tormoni,
+            boxdesk,
             guest_root,
             runtime,
             mem_mib: 512,
@@ -670,7 +670,7 @@ impl BenchContext {
     /// Spawns one VM running `script` under `/bin/sh -c`, with its output discarded so a guest's
     /// writes never land in the measurement.
     fn spawn_guest(&self, name: &str, script: &str) -> Result<Child> {
-        Command::new(&self.tormoni)
+        Command::new(&self.boxdesk)
             .args(["__vmm", "--name", name])
             .arg("--root")
             .arg(&self.guest_root)
@@ -924,12 +924,12 @@ const SHARED_AWARE_LABEL: &str = if cfg!(target_os = "linux") {
 
 /// Why this machine cannot back a VM, or `None` when it can.
 ///
-/// The benches ask only about the machine: the operator signs a release `tormoni` before running one,
+/// The benches ask only about the machine: the operator signs a release `boxdesk` before running one,
 /// which is the step a test cannot take for itself.
 fn hypervisor_unusable_for_a_bench() -> Option<String> {
     #[cfg(target_os = "linux")]
     {
-        tormoni_test_support::hypervisor_unusable()
+        boxdesk_test_support::hypervisor_unusable()
     }
     #[cfg(not(target_os = "linux"))]
     {

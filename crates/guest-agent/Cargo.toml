@@ -1,5 +1,5 @@
 [package]
-name = "tormoni-guest-agent"
+name = "boxdesk-guest-agent"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -9,7 +9,7 @@ authors.workspace = true
 publish = false
 description = "The in-guest agent: runs one command per connection and streams its output over the channel."
 
-# The bin name stays `guest-agent` while the package is `tormoni-guest-agent`: it is the path the
+# The bin name stays `guest-agent` while the package is `boxdesk-guest-agent`: it is the path the
 # rootfs build bakes into the guest image (`GUEST_AGENT_PATH` in `xtask/src/rootfs.rs`).
 [[bin]]
 name = "guest-agent"
@@ -18,7 +18,7 @@ path = "src/main.rs"
 [dependencies]
 # The wire protocol is shared with the host driver; tracing is the guest agent's stderr log.
 # `serve` is transport-agnostic (any `Read`+`Write`); `main` binds the concrete listener.
-tormoni-channel = { path = "../channel" }
+boxdesk-channel = { path = "../channel" }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 # The in-VM transport: a static `AF_VSOCK` listener. Guest-agent-only: the host reaches libkrun's
@@ -32,7 +32,7 @@ rustix = { workspace = true, features = ["pty", "termios", "process", "mount"] }
 # The shared scratch-dir guard, so the `PATH`-resolution tests stage a real executable without a
 # hand-rolled temp dir. A dev-dep, so the static musl binary baked into the rootfs is unaffected.
 [dev-dependencies]
-tormoni-test-support = { path = "../test-support", features = ["tracing-capture"] }
+boxdesk-test-support = { path = "../test-support", features = ["tracing-capture"] }
 
 [lints]
 workspace = true

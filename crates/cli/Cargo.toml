@@ -1,5 +1,5 @@
 [package]
-name = "tormoni"
+name = "boxdesk"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -7,25 +7,25 @@ rust-version.workspace = true
 repository.workspace = true
 authors.workspace = true
 publish = false
-description = "The tormoni CLI (`tormoni`)."
+description = "The boxdesk CLI (`boxdesk`)."
 
-# One entrypoint: `tormoni`, the canonical command, built from `src/main.rs`.
+# One entrypoint: `boxdesk`, the canonical command, built from `src/main.rs`.
 [[bin]]
-name = "tormoni"
+name = "boxdesk"
 path = "src/main.rs"
 
 [dependencies]
 # The agent wire protocol, for the interactive shell's session over vsock.
-tormoni-channel = { path = "../channel" }
-tormoni-krun = { path = "../krun" }
+boxdesk-channel = { path = "../channel" }
+boxdesk-krun = { path = "../krun" }
 # The guest's keyboard and pointer: devices, reports, and the line grammar the replay and the
 # control socket feed.
-tormoni-input = { path = "../input" }
+boxdesk-input = { path = "../input" }
 # The run record every verb that boots writes: the notebook's unit.
-tormoni-record = { path = "../record" }
-# `tormoni serve`, and the only reason this binary carries an HTTP stack at all.
-tormoni-serve = { path = "../serve" }
-tormoni-supervisor = { path = "../supervisor" }
+boxdesk-record = { path = "../record" }
+# `boxdesk serve`, and the only reason this binary carries an HTTP stack at all.
+boxdesk-serve = { path = "../serve" }
+boxdesk-supervisor = { path = "../supervisor" }
 clap = { workspace = true }
 # The cloud's answers and its RFC 9457 refusals. The lanes are JSON; nothing else here parses any.
 serde_json = { workspace = true }
@@ -40,11 +40,11 @@ softbuffer = { workspace = true }
 
 [dev-dependencies]
 # The `/dev/kvm` probe, so the end-to-end tests skip with the same message everywhere.
-tormoni-test-support = { path = "../test-support" }
+boxdesk-test-support = { path = "../test-support" }
 
 [features]
 # Exposes library items for the fuzz harness in `fuzz/`; without it the library target is empty and
-# the package is just the `tormoni` binary. Nothing is behind it today (see `src/lib.rs`).
+# the package is just the `boxdesk` binary. Nothing is behind it today (see `src/lib.rs`).
 fuzzing = []
 
 [lints]

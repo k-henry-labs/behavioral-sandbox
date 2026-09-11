@@ -4,12 +4,12 @@ body:
       value: |
         **Do not report security issues here.** If you think you have found a sandbox escape, or
         anything that weakens the isolation or the audit record, report it privately through
-        [GitHub Security Advisories](https://github.com/kendricklawton/tormoni/security/advisories/new).
-        See [`SECURITY.md`](https://github.com/kendricklawton/tormoni/blob/main/SECURITY.md).
+        [GitHub Security Advisories](https://github.com/kendricklawton/boxdesk/security/advisories/new).
+        See [`SECURITY.md`](https://github.com/kendricklawton/boxdesk/blob/main/SECURITY.md).
 
         Most first-run failures are already answered in the pinned **Common first failures** post
         and in [Running a
-        sandbox](https://github.com/kendricklawton/tormoni/blob/main/docs/running.md).
+        sandbox](https://github.com/kendricklawton/boxdesk/blob/main/docs/running.md).
         Worth a look before you write this up.
 
   - type: textarea
@@ -26,7 +26,7 @@ body:
     attributes:
       label: "`cargo xtask setup` output"
       description: >
-        All of it. Tormoni probes host capabilities rather than distributions, so these rows
+        All of it. Boxdesk probes host capabilities rather than distributions, so these rows
         usually identify the problem outright.
       render: console
     validations:
@@ -48,7 +48,7 @@ body:
       options:
         - Building from source
         - The guest image build (cargo xtask build-rootfs)
-        - The host↔guest wire (tormoni-channel) or the in-guest agent
+        - The host↔guest wire (boxdesk-channel) or the in-guest agent
         - Where the rebuild is going
         - Something else
     validations:
@@ -62,6 +62,6 @@ body:
         - label: This is not a security report.
           required: true
         - label: >
-            I understand Tormoni is pre-release and unaudited, with one maintainer, and that a reply
+            I understand Boxdesk is pre-release and unaudited, with one maintainer, and that a reply
             may take a few days.
           required: true

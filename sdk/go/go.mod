@@ -1,3 +1,3 @@
-module github.com/kendricklawton/tormoni/sdk/go
+module github.com/kendricklawton/boxdesk/sdk/go
 
 go 1.22

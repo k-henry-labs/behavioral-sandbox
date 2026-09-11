@@ -1,11 +1,11 @@
 [package]
-name = "tormoni"
+name = "boxdesk"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.98"
-description = "Rust SDK for Tormoni: run untrusted code in a hardware-isolated VM on your own machine"
-repository = "https://github.com/kendricklawton/tormoni"
-homepage = "https://github.com/kendricklawton/tormoni"
+description = "Rust SDK for Boxdesk: run untrusted code in a hardware-isolated VM on your own machine"
+repository = "https://github.com/kendricklawton/boxdesk"
+homepage = "https://github.com/kendricklawton/boxdesk"
 license = "Apache-2.0"
 readme = "README.md"
 keywords = ["sandbox", "vm", "libkrun", "isolation", "sdk"]
@@ -19,9 +19,9 @@ publish = false
 include = ["src/**/*", "tests/**/*", "examples/**/*", "README.md", "CHANGELOG.md", "LICENSE"]
 
 [dependencies]
-tormoni-core = { package = "tormoni", path = "../../crates/cli" }
-tormoni-record = { path = "../../crates/record" }
-tormoni-supervisor = { path = "../../crates/supervisor" }
+boxdesk-core = { package = "boxdesk", path = "../../crates/cli" }
+boxdesk-record = { path = "../../crates/record" }
+boxdesk-supervisor = { path = "../../crates/supervisor" }
 
 [lints.rust]
 unsafe_code = "forbid"

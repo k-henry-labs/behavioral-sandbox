@@ -1,3 +1,3 @@
-# `@tormoni/js-linux-arm64-gnu`
+# `@boxdesk/js-linux-arm64-gnu`
 
-This is the **aarch64-unknown-linux-gnu** binary for `@tormoni/js`
+This is the **aarch64-unknown-linux-gnu** binary for `@boxdesk/js`

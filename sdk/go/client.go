@@ -1,8 +1,8 @@
-// Copyright 2026 The Tormoni Authors. All rights reserved.
+// Copyright 2026 The Boxdesk Authors. All rights reserved.
 // Use of this source code is governed by the Apache-2.0 license that can be
 // found in the LICENSE file.
 
-package tormoni
+package boxdesk
 
 import (
 	"context"
@@ -14,31 +14,31 @@ import (
 )
 
 // DefaultBinary is the binary name looked up on PATH when neither Client.Path
-// nor $TORMONI_CLI says otherwise.
-const DefaultBinary = "tormoni"
+// nor $BOXDESK_CLI says otherwise.
+const DefaultBinary = "boxdesk"
 
-// EnvBinary is the environment variable naming the tormoni binary. It is the
-// same variable Tormoni's own desktop app uses to find it.
-const EnvBinary = "TORMONI_CLI"
+// EnvBinary is the environment variable naming the boxdesk binary. It is the
+// same variable Boxdesk's own desktop app uses to find it.
+const EnvBinary = "BOXDESK_CLI"
 
-// Client runs the tormoni CLI. The zero value is usable and finds the binary
+// Client runs the boxdesk CLI. The zero value is usable and finds the binary
 // the same way New does.
 //
-// A Client holds no state between calls: Tormoni's records directory is the
+// A Client holds no state between calls: Boxdesk's records directory is the
 // state, and this package neither caches runs nor keeps an index.
 type Client struct {
-	// Path is the tormoni binary. When empty, $TORMONI_CLI is used, and
-	// failing that the name "tormoni" is looked up on PATH. It is read at
+	// Path is the boxdesk binary. When empty, $BOXDESK_CLI is used, and
+	// failing that the name "boxdesk" is looked up on PATH. It is read at
 	// call time, not when the Client is made.
 	Path string
 }
 
-// New returns a Client that finds the tormoni binary through $TORMONI_CLI, or
+// New returns a Client that finds the boxdesk binary through $BOXDESK_CLI, or
 // else on PATH.
 func New() *Client { return &Client{} }
 
 // NewWithPath returns a Client that runs the binary at path, ignoring
-// $TORMONI_CLI and PATH.
+// $BOXDESK_CLI and PATH.
 func NewWithPath(path string) *Client { return &Client{Path: path} }
 
 // Run boots a fresh sandbox, runs one command in it, waits, and returns the
@@ -50,8 +50,8 @@ func NewWithPath(path string) *Client { return &Client{Path: path} }
 //
 // A guest command exiting non-zero returns a *Run and a nil error — read
 // Run.OK, Run.EndKind and Run.EndCode to learn how it finished. A non-nil
-// error means Tormoni itself did not work, and is either ErrNotFound or an
-// *Error carrying Tormoni's stderr verbatim.
+// error means Boxdesk itself did not work, and is either ErrNotFound or an
+// *Error carrying Boxdesk's stderr verbatim.
 //
 // Cancelling ctx kills the sandbox process.
 func (c *Client) Run(ctx context.Context, command []string, opts *RunOptions) (*Run, error) {
@@ -142,7 +142,7 @@ func (c *Client) binary() (string, error) {
 	path, err := exec.LookPath(name)
 	if err != nil {
 		return "", fmt.Errorf(
-			"%w: %q (from %s); install Tormoni, or set %s or Client.Path to the tormoni binary: %w",
+			"%w: %q (from %s); install Boxdesk, or set %s or Client.Path to the boxdesk binary: %w",
 			ErrNotFound, name, source, EnvBinary, err)
 	}
 	return path, nil

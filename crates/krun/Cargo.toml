@@ -1,5 +1,5 @@
 [package]
-name = "tormoni-krun"
+name = "boxdesk-krun"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

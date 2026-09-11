@@ -1,8 +1,8 @@
-// Copyright 2026 The Tormoni Authors. All rights reserved.
+// Copyright 2026 The Boxdesk Authors. All rights reserved.
 // Use of this source code is governed by the Apache-2.0 license that can be
 // found in the LICENSE file.
 
-package tormoni_test
+package boxdesk_test
 
 import (
 	"context"
@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	tormoni "github.com/kendricklawton/tormoni/sdk/go"
+	boxdesk "github.com/kendricklawton/boxdesk/sdk/go"
 )
 
 // TestArgv pins the exact argument list the client builds, including flag
@@ -23,12 +23,12 @@ import (
 func TestArgv(t *testing.T) {
 	tests := []struct {
 		name string
-		call func(context.Context, *tormoni.Client) error
+		call func(context.Context, *boxdesk.Client) error
 		want []string
 	}{
 		{
 			name: "run with no options",
-			call: func(ctx context.Context, c *tormoni.Client) error {
+			call: func(ctx context.Context, c *boxdesk.Client) error {
 				_, err := c.Run(ctx, []string{"echo", "hi"}, nil)
 				return err
 			},
@@ -36,15 +36,15 @@ func TestArgv(t *testing.T) {
 		},
 		{
 			name: "run with empty options adds no flags",
-			call: func(ctx context.Context, c *tormoni.Client) error {
-				_, err := c.Run(ctx, []string{"echo", "hi"}, &tormoni.RunOptions{})
+			call: func(ctx context.Context, c *boxdesk.Client) error {
+				_, err := c.Run(ctx, []string{"echo", "hi"}, &boxdesk.RunOptions{})
 				return err
 			},
 			want: []string{"run", "--json", "--", "echo", "hi"},
 		},
 		{
 			name: "the command is passed through verbatim after the separator",
-			call: func(ctx context.Context, c *tormoni.Client) error {
+			call: func(ctx context.Context, c *boxdesk.Client) error {
 				_, err := c.Run(ctx, []string{"sh", "-c", "echo hello && exit 1"}, nil)
 				return err
 			},
@@ -52,7 +52,7 @@ func TestArgv(t *testing.T) {
 		},
 		{
 			name: "a command that looks like flags is still the guest's command",
-			call: func(ctx context.Context, c *tormoni.Client) error {
+			call: func(ctx context.Context, c *boxdesk.Client) error {
 				_, err := c.Run(ctx, []string{"ls", "--all", "--json"}, nil)
 				return err
 			},
@@ -60,40 +60,40 @@ func TestArgv(t *testing.T) {
 		},
 		{
 			name: "root",
-			call: func(ctx context.Context, c *tormoni.Client) error {
-				_, err := c.Run(ctx, []string{"true"}, &tormoni.RunOptions{Root: "/srv/rootfs"})
+			call: func(ctx context.Context, c *boxdesk.Client) error {
+				_, err := c.Run(ctx, []string{"true"}, &boxdesk.RunOptions{Root: "/srv/rootfs"})
 				return err
 			},
 			want: []string{"run", "--json", "--root", "/srv/rootfs", "--", "true"},
 		},
 		{
 			name: "vcpus, including a zero the caller meant",
-			call: func(ctx context.Context, c *tormoni.Client) error {
-				_, err := c.Run(ctx, []string{"true"}, &tormoni.RunOptions{VCPUs: ptr(0)})
+			call: func(ctx context.Context, c *boxdesk.Client) error {
+				_, err := c.Run(ctx, []string{"true"}, &boxdesk.RunOptions{VCPUs: ptr(0)})
 				return err
 			},
 			want: []string{"run", "--json", "--vcpus", "0", "--", "true"},
 		},
 		{
 			name: "mem",
-			call: func(ctx context.Context, c *tormoni.Client) error {
-				_, err := c.Run(ctx, []string{"true"}, &tormoni.RunOptions{MemMiB: ptr(2048)})
+			call: func(ctx context.Context, c *boxdesk.Client) error {
+				_, err := c.Run(ctx, []string{"true"}, &boxdesk.RunOptions{MemMiB: ptr(2048)})
 				return err
 			},
 			want: []string{"run", "--json", "--mem", "2048", "--", "true"},
 		},
 		{
 			name: "workdir",
-			call: func(ctx context.Context, c *tormoni.Client) error {
-				_, err := c.Run(ctx, []string{"true"}, &tormoni.RunOptions{Workdir: "/work"})
+			call: func(ctx context.Context, c *boxdesk.Client) error {
+				_, err := c.Run(ctx, []string{"true"}, &boxdesk.RunOptions{Workdir: "/work"})
 				return err
 			},
 			want: []string{"run", "--json", "--workdir", "/work", "--", "true"},
 		},
 		{
 			name: "mounts repeat in the order given",
-			call: func(ctx context.Context, c *tormoni.Client) error {
-				_, err := c.Run(ctx, []string{"true"}, &tormoni.RunOptions{Mounts: []tormoni.Mount{
+			call: func(ctx context.Context, c *boxdesk.Client) error {
+				_, err := c.Run(ctx, []string{"true"}, &boxdesk.RunOptions{Mounts: []boxdesk.Mount{
 					{Guest: "/mnt", Host: "/home/you/project"},
 					{Guest: "/data", Host: "/var/data"},
 				}})
@@ -106,8 +106,8 @@ func TestArgv(t *testing.T) {
 		},
 		{
 			name: "shares repeat in the order given",
-			call: func(ctx context.Context, c *tormoni.Client) error {
-				_, err := c.Run(ctx, []string{"true"}, &tormoni.RunOptions{Shares: []tormoni.Share{
+			call: func(ctx context.Context, c *boxdesk.Client) error {
+				_, err := c.Run(ctx, []string{"true"}, &boxdesk.RunOptions{Shares: []boxdesk.Share{
 					{Tag: "models", Host: "/opt/models"},
 					{Tag: "cache", Host: "/var/cache"},
 				}})
@@ -120,24 +120,24 @@ func TestArgv(t *testing.T) {
 		},
 		{
 			name: "net",
-			call: func(ctx context.Context, c *tormoni.Client) error {
-				_, err := c.Run(ctx, []string{"true"}, &tormoni.RunOptions{Net: "tsi"})
+			call: func(ctx context.Context, c *boxdesk.Client) error {
+				_, err := c.Run(ctx, []string{"true"}, &boxdesk.RunOptions{Net: "tsi"})
 				return err
 			},
 			want: []string{"run", "--json", "--net", "tsi", "--", "true"},
 		},
 		{
 			name: "rootfs",
-			call: func(ctx context.Context, c *tormoni.Client) error {
-				_, err := c.Run(ctx, []string{"true"}, &tormoni.RunOptions{Rootfs: "writable"})
+			call: func(ctx context.Context, c *boxdesk.Client) error {
+				_, err := c.Run(ctx, []string{"true"}, &boxdesk.RunOptions{Rootfs: "writable"})
 				return err
 			},
 			want: []string{"run", "--json", "--rootfs", "writable", "--", "true"},
 		},
 		{
 			name: "env repeats, and carries the whole entry",
-			call: func(ctx context.Context, c *tormoni.Client) error {
-				_, err := c.Run(ctx, []string{"true"}, &tormoni.RunOptions{
+			call: func(ctx context.Context, c *boxdesk.Client) error {
+				_, err := c.Run(ctx, []string{"true"}, &boxdesk.RunOptions{
 					Env: []string{"API_KEY=s3cret", "DEBUG=1", "EMPTY="},
 				})
 				return err
@@ -150,8 +150,8 @@ func TestArgv(t *testing.T) {
 		},
 		{
 			name: "an env value containing = is passed through whole",
-			call: func(ctx context.Context, c *tormoni.Client) error {
-				_, err := c.Run(ctx, []string{"true"}, &tormoni.RunOptions{
+			call: func(ctx context.Context, c *boxdesk.Client) error {
+				_, err := c.Run(ctx, []string{"true"}, &boxdesk.RunOptions{
 					Env: []string{"TOKEN=abc=def=="},
 				})
 				return err
@@ -160,54 +160,54 @@ func TestArgv(t *testing.T) {
 		},
 		{
 			name: "name",
-			call: func(ctx context.Context, c *tormoni.Client) error {
-				_, err := c.Run(ctx, []string{"true"}, &tormoni.RunOptions{Name: "builder"})
+			call: func(ctx context.Context, c *boxdesk.Client) error {
+				_, err := c.Run(ctx, []string{"true"}, &boxdesk.RunOptions{Name: "builder"})
 				return err
 			},
 			want: []string{"run", "--json", "--name", "builder", "--", "true"},
 		},
 		{
 			name: "no-results",
-			call: func(ctx context.Context, c *tormoni.Client) error {
-				_, err := c.Run(ctx, []string{"true"}, &tormoni.RunOptions{NoResults: true})
+			call: func(ctx context.Context, c *boxdesk.Client) error {
+				_, err := c.Run(ctx, []string{"true"}, &boxdesk.RunOptions{NoResults: true})
 				return err
 			},
 			want: []string{"run", "--json", "--no-results", "--", "true"},
 		},
 		{
 			name: "gpu",
-			call: func(ctx context.Context, c *tormoni.Client) error {
-				_, err := c.Run(ctx, []string{"true"}, &tormoni.RunOptions{GPU: true})
+			call: func(ctx context.Context, c *boxdesk.Client) error {
+				_, err := c.Run(ctx, []string{"true"}, &boxdesk.RunOptions{GPU: true})
 				return err
 			},
 			want: []string{"run", "--json", "--gpu", "--", "true"},
 		},
 		{
 			name: "sound",
-			call: func(ctx context.Context, c *tormoni.Client) error {
-				_, err := c.Run(ctx, []string{"true"}, &tormoni.RunOptions{Sound: true})
+			call: func(ctx context.Context, c *boxdesk.Client) error {
+				_, err := c.Run(ctx, []string{"true"}, &boxdesk.RunOptions{Sound: true})
 				return err
 			},
 			want: []string{"run", "--json", "--sound", "--", "true"},
 		},
 		{
 			name: "display",
-			call: func(ctx context.Context, c *tormoni.Client) error {
-				_, err := c.Run(ctx, []string{"true"}, &tormoni.RunOptions{Display: "1280x800@60"})
+			call: func(ctx context.Context, c *boxdesk.Client) error {
+				_, err := c.Run(ctx, []string{"true"}, &boxdesk.RunOptions{Display: "1280x800@60"})
 				return err
 			},
 			want: []string{"run", "--json", "--display", "1280x800@60", "--", "true"},
 		},
 		{
 			name: "every flag at once, in table order",
-			call: func(ctx context.Context, c *tormoni.Client) error {
-				_, err := c.Run(ctx, []string{"sh", "-c", "make"}, &tormoni.RunOptions{
+			call: func(ctx context.Context, c *boxdesk.Client) error {
+				_, err := c.Run(ctx, []string{"sh", "-c", "make"}, &boxdesk.RunOptions{
 					Root:      "/srv/rootfs",
 					VCPUs:     ptr(4),
 					MemMiB:    ptr(2048),
 					Workdir:   "/work",
-					Mounts:    []tormoni.Mount{{Guest: "/mnt", Host: "/home/you/project"}},
-					Shares:    []tormoni.Share{{Tag: "models", Host: "/opt/models"}},
+					Mounts:    []boxdesk.Mount{{Guest: "/mnt", Host: "/home/you/project"}},
+					Shares:    []boxdesk.Share{{Tag: "models", Host: "/opt/models"}},
 					Net:       "tsi",
 					Rootfs:    "writable",
 					Env:       []string{"API_KEY=s3cret"},
@@ -238,15 +238,15 @@ func TestArgv(t *testing.T) {
 		},
 		{
 			name: "dry run sits between the verb and the flags",
-			call: func(ctx context.Context, c *tormoni.Client) error {
-				_, err := c.DryRun(ctx, []string{"true"}, &tormoni.RunOptions{Net: "tsi"})
+			call: func(ctx context.Context, c *boxdesk.Client) error {
+				_, err := c.DryRun(ctx, []string{"true"}, &boxdesk.RunOptions{Net: "tsi"})
 				return err
 			},
 			want: []string{"run", "--json", "--dry-run", "--net", "tsi", "--", "true"},
 		},
 		{
 			name: "show",
-			call: func(ctx context.Context, c *tormoni.Client) error {
+			call: func(ctx context.Context, c *boxdesk.Client) error {
 				_, err := c.Show(ctx, "1789085063489-run-81523")
 				return err
 			},
@@ -254,7 +254,7 @@ func TestArgv(t *testing.T) {
 		},
 		{
 			name: "ls",
-			call: func(ctx context.Context, c *tormoni.Client) error {
+			call: func(ctx context.Context, c *boxdesk.Client) error {
 				_, err := c.Runs(ctx, false)
 				return err
 			},
@@ -262,7 +262,7 @@ func TestArgv(t *testing.T) {
 		},
 		{
 			name: "ls --all",
-			call: func(ctx context.Context, c *tormoni.Client) error {
+			call: func(ctx context.Context, c *boxdesk.Client) error {
 				_, err := c.Runs(ctx, true)
 				return err
 			},
@@ -288,8 +288,8 @@ func TestBinaryDiscovery(t *testing.T) {
 	t.Run("found on PATH", func(t *testing.T) {
 		s := newStub(t, okDoc, "", 0)
 		t.Setenv("PATH", filepath.Dir(s.Path)+string(os.PathListSeparator)+os.Getenv("PATH"))
-		t.Setenv("TORMONI_CLI", "")
-		if _, err := tormoni.New().Run(context.Background(), []string{"echo", "hi"}, nil); err != nil {
+		t.Setenv("BOXDESK_CLI", "")
+		if _, err := boxdesk.New().Run(context.Background(), []string{"echo", "hi"}, nil); err != nil {
 			t.Fatalf("run: %v", err)
 		}
 		if got := s.Argv(); len(got) == 0 {
@@ -297,26 +297,26 @@ func TestBinaryDiscovery(t *testing.T) {
 		}
 	})
 
-	t.Run("TORMONI_CLI wins over PATH", func(t *testing.T) {
+	t.Run("BOXDESK_CLI wins over PATH", func(t *testing.T) {
 		onPath := newStub(t, okDoc, "", 0)
 		named := newStub(t, okDoc, "", 0)
 		t.Setenv("PATH", filepath.Dir(onPath.Path)+string(os.PathListSeparator)+os.Getenv("PATH"))
-		t.Setenv("TORMONI_CLI", named.Path)
-		if _, err := tormoni.New().Run(context.Background(), []string{"echo", "hi"}, nil); err != nil {
+		t.Setenv("BOXDESK_CLI", named.Path)
+		if _, err := boxdesk.New().Run(context.Background(), []string{"echo", "hi"}, nil); err != nil {
 			t.Fatalf("run: %v", err)
 		}
 		if len(named.Argv()) == 0 {
-			t.Error("the binary named by TORMONI_CLI was not used")
+			t.Error("the binary named by BOXDESK_CLI was not used")
 		}
 		if len(onPath.Argv()) != 0 {
-			t.Error("the binary on PATH was used even though TORMONI_CLI was set")
+			t.Error("the binary on PATH was used even though BOXDESK_CLI was set")
 		}
 	})
 
-	t.Run("Client.Path wins over TORMONI_CLI", func(t *testing.T) {
+	t.Run("Client.Path wins over BOXDESK_CLI", func(t *testing.T) {
 		named := newStub(t, okDoc, "", 0)
 		explicit := newStub(t, okDoc, "", 0)
-		t.Setenv("TORMONI_CLI", named.Path)
+		t.Setenv("BOXDESK_CLI", named.Path)
 		if _, err := explicit.Client().Run(context.Background(), []string{"echo", "hi"}, nil); err != nil {
 			t.Fatalf("run: %v", err)
 		}
@@ -324,14 +324,14 @@ func TestBinaryDiscovery(t *testing.T) {
 			t.Error("Client.Path was not used")
 		}
 		if len(named.Argv()) != 0 {
-			t.Error("TORMONI_CLI was used even though Client.Path was set")
+			t.Error("BOXDESK_CLI was used even though Client.Path was set")
 		}
 	})
 
 	t.Run("the zero Client works", func(t *testing.T) {
 		s := newStub(t, okDoc, "", 0)
-		t.Setenv("TORMONI_CLI", s.Path)
-		var c tormoni.Client
+		t.Setenv("BOXDESK_CLI", s.Path)
+		var c boxdesk.Client
 		run, err := c.Run(context.Background(), []string{"echo", "hi"}, nil)
 		if err != nil {
 			t.Fatalf("run: %v", err)
@@ -347,14 +347,14 @@ func TestBinaryNotFound(t *testing.T) {
 	empty := t.TempDir()
 
 	t.Run("named path does not exist", func(t *testing.T) {
-		c := tormoni.NewWithPath(filepath.Join(empty, "nowhere", "tormoni"))
+		c := boxdesk.NewWithPath(filepath.Join(empty, "nowhere", "boxdesk"))
 		_, err := c.Run(context.Background(), []string{"echo", "hi"}, nil)
-		if !errors.Is(err, tormoni.ErrNotFound) {
+		if !errors.Is(err, boxdesk.ErrNotFound) {
 			t.Fatalf("err = %#v, want ErrNotFound", err)
 		}
 		// The message says what to do about it.
 		msg := err.Error()
-		for _, want := range []string{"tormoni", "TORMONI_CLI", "Client.Path"} {
+		for _, want := range []string{"boxdesk", "BOXDESK_CLI", "Client.Path"} {
 			if !strings.Contains(msg, want) {
 				t.Errorf("message %q does not mention %q", msg, want)
 			}
@@ -363,20 +363,20 @@ func TestBinaryNotFound(t *testing.T) {
 
 	t.Run("not on PATH", func(t *testing.T) {
 		t.Setenv("PATH", empty)
-		t.Setenv("TORMONI_CLI", "")
-		_, err := tormoni.New().Runs(context.Background(), true)
-		if !errors.Is(err, tormoni.ErrNotFound) {
+		t.Setenv("BOXDESK_CLI", "")
+		_, err := boxdesk.New().Runs(context.Background(), true)
+		if !errors.Is(err, boxdesk.ErrNotFound) {
 			t.Fatalf("err = %#v, want ErrNotFound", err)
 		}
 	})
 
-	t.Run("TORMONI_CLI points nowhere", func(t *testing.T) {
-		t.Setenv("TORMONI_CLI", filepath.Join(empty, "nope"))
-		_, err := tormoni.New().Show(context.Background(), "run-1")
-		if !errors.Is(err, tormoni.ErrNotFound) {
+	t.Run("BOXDESK_CLI points nowhere", func(t *testing.T) {
+		t.Setenv("BOXDESK_CLI", filepath.Join(empty, "nope"))
+		_, err := boxdesk.New().Show(context.Background(), "run-1")
+		if !errors.Is(err, boxdesk.ErrNotFound) {
 			t.Fatalf("err = %#v, want ErrNotFound", err)
 		}
-		if !strings.Contains(err.Error(), "$TORMONI_CLI") {
+		if !strings.Contains(err.Error(), "$BOXDESK_CLI") {
 			t.Errorf("message %q does not say where the name came from", err.Error())
 		}
 	})
@@ -398,9 +398,9 @@ func TestContextCancellation(t *testing.T) {
 		if !errors.Is(err, context.DeadlineExceeded) {
 			t.Fatalf("err = %#v, want context.DeadlineExceeded", err)
 		}
-		var tErr *tormoni.Error
+		var tErr *boxdesk.Error
 		if !errors.As(err, &tErr) {
-			t.Fatalf("err = %#v, want *tormoni.Error", err)
+			t.Fatalf("err = %#v, want *boxdesk.Error", err)
 		}
 	})
 
@@ -424,7 +424,7 @@ func TestContextCancellation(t *testing.T) {
 // context, forever. WaitDelay bounds it, and the document the CLI wrote before
 // it exited still arrives.
 func TestWaitDelayBoundsAHeldPipe(t *testing.T) {
-	defer tormoni.SetWaitDelay(250 * time.Millisecond)()
+	defer boxdesk.SetWaitDelay(250 * time.Millisecond)()
 
 	// The background subshell inherits stdout and outlives the CLI, holding
 	// the pipe open for far longer than any caller would wait.
@@ -464,9 +464,9 @@ func TestLibraryWritesNothingToStdio(t *testing.T) {
 
 	ok := newStub(t, sampleDoc, "", 0)
 	_, runErr := ok.Client().Run(context.Background(), []string{"echo", "hello"}, nil)
-	bad := newStub(t, "not json", "tormoni: the hypervisor did not answer\n", 2)
+	bad := newStub(t, "not json", "boxdesk: the hypervisor did not answer\n", 2)
 	_, badErr := bad.Client().Run(context.Background(), []string{"echo", "hello"}, nil)
-	missing := tormoni.NewWithPath(filepath.Join(t.TempDir(), "absent"))
+	missing := boxdesk.NewWithPath(filepath.Join(t.TempDir(), "absent"))
 	_, missingErr := missing.Runs(context.Background(), true)
 
 	os.Stdout, os.Stderr = origOut, origErr

@@ -160,7 +160,7 @@ mod tests {
         );
     }
 
-    /// **Every posture flag `tormoni run` takes is one the Go SDK knows.**
+    /// **Every posture flag `boxdesk run` takes is one the Go SDK knows.**
     ///
     /// Go is the one SDK still built on an argv: Python, JS and Rust call `execute_sandbox`
     /// directly, so a renamed field is a compile error for them and no lint is needed. Go's
@@ -233,7 +233,7 @@ mod tests {
         }
         assert!(
             unknown.is_empty(),
-            "`tormoni run` takes flags the SDKs have never heard of:\n  {}",
+            "`boxdesk run` takes flags the SDKs have never heard of:\n  {}",
             unknown.join("\n  ")
         );
     }

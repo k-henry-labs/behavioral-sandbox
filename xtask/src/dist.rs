@@ -1,7 +1,7 @@
 //! `cargo xtask dist`: this host's release, packaged with its guest tree, as `install.sh`
 //! fetches it.
 //!
-//! - **One artifact per host.** macOS ARM64 packs `Tormoni.app`, with `tormoni` and the guest
+//! - **One artifact per host.** macOS ARM64 packs `Boxdesk.app`, with `boxdesk` and the guest
 //!   tree under `Contents/Resources`, as a zip; Linux x86_64 packs `bin/`, the desktop entry, the
 //!   icon and the tree as a tarball. [`artifact_name`] is the contract `install.sh` downloads.
 //! - **The guest tree is the one `init` writes**, built here for the host's guest and archived,
@@ -26,9 +26,9 @@ pub(crate) fn dist() -> Result<()> {
         "--release",
         "--locked",
         "-p",
-        "tormoni-app",
+        "boxdesk-app",
         "-p",
-        "tormoni",
+        "boxdesk",
     ])?;
     let rootfs = guest_tree_archive()?;
     let out = dist_dir();
@@ -63,8 +63,8 @@ pub(crate) fn dist() -> Result<()> {
 /// The asset an `install.sh` on `os` and `arch` downloads, or why there is none.
 pub(crate) fn artifact_name(os: &str, arch: &str) -> Result<String> {
     match (os, arch) {
-        ("macos", "aarch64") => Ok("Tormoni-macos-aarch64.zip".to_string()),
-        ("linux", "x86_64") => Ok("tormoni-linux-x86_64.tgz".to_string()),
+        ("macos", "aarch64") => Ok("Boxdesk-macos-aarch64.zip".to_string()),
+        ("linux", "x86_64") => Ok("boxdesk-linux-x86_64.tgz".to_string()),
         _ => bail!(
             "no release is built for {os} on {arch}: the two are macOS on aarch64 and Linux on \
              x86_64"
@@ -147,7 +147,7 @@ fn stage_linux(rootfs: &Path, artifact: &Path) -> Result<()> {
 /// own root.
 ///
 /// **No wrapper directory.** `install.sh` untars this straight into `/usr/local`, so a member
-/// named `<name>/bin/tormoni` would install to `/usr/local/<name>/bin/tormoni` and nothing would
+/// named `<name>/bin/boxdesk` would install to `/usr/local/<name>/bin/boxdesk` and nothing would
 /// be on `PATH`. Owned by 0:0, since a root `tar -x` keeps whatever the archive says.
 fn archive_linux(root: &Path, artifact: &Path) -> Result<()> {
     let mut args: Vec<&OsStr> = vec![
@@ -194,11 +194,11 @@ mod tests {
     fn the_asset_names_are_the_installers_contract() {
         assert_eq!(
             artifact_name("macos", "aarch64").unwrap(),
-            "Tormoni-macos-aarch64.zip"
+            "Boxdesk-macos-aarch64.zip"
         );
         assert_eq!(
             artifact_name("linux", "x86_64").unwrap(),
-            "tormoni-linux-x86_64.tgz"
+            "boxdesk-linux-x86_64.tgz"
         );
         let why = artifact_name("linux", "aarch64").unwrap_err().to_string();
         assert!(
@@ -216,14 +216,14 @@ mod tests {
     #[test]
     fn the_linux_archive_has_no_wrapper_directory() {
         assert_eq!(linux_top_levels(), ["bin", "share"]);
-        let scratch = tormoni_test_support::ScratchDir::created("dist-linux");
+        let scratch = boxdesk_test_support::ScratchDir::created("dist-linux");
         let root = scratch.path().join("stage");
         for (rel, _) in bundle::linux_layout() {
             let dest = root.join(&rel);
             std::fs::create_dir_all(dest.parent().expect("a parent")).expect("staged");
             std::fs::write(&dest, b"x").expect("staged");
         }
-        let artifact = scratch.path().join("tormoni-linux-x86_64.tgz");
+        let artifact = scratch.path().join("boxdesk-linux-x86_64.tgz");
         archive_linux(&root, &artifact).expect("archived");
 
         let out = std::process::Command::new("tar")
@@ -242,7 +242,7 @@ mod tests {
                 "{member} is not at the archive's root, so it would install one level too deep"
             );
         }
-        assert!(members.contains(&"bin/tormoni"), "{members:?}");
+        assert!(members.contains(&"bin/boxdesk"), "{members:?}");
         assert!(
             members.iter().any(|m| m.starts_with("share/")),
             "{members:?}"
