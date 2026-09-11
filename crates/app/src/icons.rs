@@ -29,8 +29,8 @@ pub(crate) struct Icon {
 /// The extent most of the set is drawn to, and so the one every icon is corrected to.
 const INK: f32 = 833.0;
 
-/// The apparent size every icon is drawn at, which is the size the sidebar's `Sandboxes` grid has
-/// always been: a step above the label beside it, as macOS sets an icon in a source list.
+/// The apparent size every icon is drawn at: a step above the label beside it, as macOS sets an
+/// icon in a source list, which is the size the sidebar's tabs have always worn.
 pub(crate) const SIZE: f32 = 17.0;
 
 /// Names each icon once, as a const and as an entry of the test's list, so the two agree.
@@ -46,8 +46,6 @@ macro_rules! icons {
 
 icons! {
     PANEL_LEFT = '\u{e12a}', 832;
-    GRID = '\u{e0ff}', 833;
-    SQUARE_PLUS = '\u{e173}', 832;
     SETTINGS = '\u{e154}', 917;
     SUN_MOON = '\u{e2b2}', 876;
     SCALING = '\u{e2ec}', 832;
@@ -58,26 +56,52 @@ icons! {
     SQUARE = '\u{e167}', 832;
     SQUARE_CHECK = '\u{e16a}', 874;
     BOOK_OPEN = '\u{e05f}', 918;
+    SEARCH = '\u{e151}', 832;
+    CONTAINER = '\u{e4d5}', 916;
+    BOX = '\u{e061}', 915;
+    PACKAGE_OPEN = '\u{e2cc}', 923;
+    HARD_DRIVE = '\u{e0ed}', 916;
+    PLAY = '\u{e13c}', 836;
+    CIRCLE_STOP = '\u{e083}', 922;
+    SQUARE_TERMINAL = '\u{e20a}', 832;
+    DOWNLOAD = '\u{e0b2}', 832;
+    TRASH = '\u{e18e}', 917;
+    BELL = '\u{e059}', 918;
+    BELL_DOT = '\u{e42b}', 917;
+    LIFE_BUOY = '\u{e101}', 922;
+    FOLDER_OPEN = '\u{e247}', 919;
+    EXTERNAL_LINK = '\u{e0b9}', 832;
 }
 
-/// The font size [`glyph`] draws `icon` at to put [`SIZE`] of its ink on the screen.
+/// The font size an icon is drawn at to put `apparent` of its ink on the screen.
 ///
 /// **A glyph's stroke weight travels with this.** Most of the set is drawn within an eighth of
 /// [`INK`], and so within an eighth of one weight; a glyph drawn well inside its box is scaled up
 /// far enough that its strokes read heavier than its neighbours'.
 /// `the_set_is_drawn_within_an_eighth_of_one_stroke_weight` is the bound, and names the one glyph
 /// outside it.
-fn drawn_size(icon: &Icon) -> f32 {
-    SIZE * INK / f32::from(icon.ink)
+fn drawn_size(icon: &Icon, apparent: f32) -> f32 {
+    apparent * INK / f32::from(icon.ink)
 }
 
 /// One icon at [`SIZE`], in the icon grey, drawn to the same apparent size as every other and in
 /// a cell of that width, so a row of them shares one left edge.
 pub(crate) fn glyph<'a>(icon: Icon) -> iced::widget::Text<'a> {
+    glyph_at(icon, SIZE)
+}
+
+/// The same, at an apparent size of its own, for the one place an icon is not one of a row: the
+/// glyph inside the fold's circle, which is set well in from the ring around it rather than
+/// filling it.
+///
+/// **The ink correction travels with the size**, so a glyph asked for at 15 puts 15 on the screen
+/// whichever of the set it is, exactly as [`glyph`] does at [`SIZE`]. Its strokes lighten with it,
+/// which is what a smaller icon should do.
+pub(crate) fn glyph_at<'a>(icon: Icon, apparent: f32) -> iced::widget::Text<'a> {
     iced::widget::text(icon.ch.to_string())
         .font(FONT)
-        .size(drawn_size(&icon))
-        .width(SIZE)
+        .size(drawn_size(&icon, apparent))
+        .width(apparent)
         .center()
         .style(|theme| iced::widget::text::Style {
             color: Some(crate::theme::icon(theme)),
@@ -110,16 +134,20 @@ mod tests {
     /// holds within an eighth of one weight, which is what lets a row of them read as one set.
     ///
     /// [`CLOSE`] is the exception and is named rather than hidden: Lucide draws `x` at 0.7 of the
-    /// box, so it is scaled up by nearly half. On this panel that is 1.50 px of stroke against
-    /// [`GRID`]'s 1.25, which is the price of the two standing on the head's line at one size.
+    /// box, so it is scaled up by nearly half. On this panel that is 1.50 px of stroke against a
+    /// standard 1.25, which is the price of the two standing on the head's line at one size.
+    ///
+    /// The standard is [`INK`] itself rather than a chosen icon's: an icon drawn to exactly the
+    /// extent every other is corrected to needs no correction, so it is the weight the set is
+    /// measured against whether or not the set happens to contain one.
     #[test]
     fn the_set_is_drawn_within_an_eighth_of_one_stroke_weight() {
-        let standard = drawn_size(&GRID);
+        let standard = SIZE;
         for (name, icon) in ALL {
             if name == "CLOSE" {
                 continue;
             }
-            let ratio = drawn_size(&icon) / standard;
+            let ratio = drawn_size(&icon, SIZE) / standard;
             assert!(
                 (0.875..=1.125).contains(&ratio),
                 "{name} is drawn at {ratio:.3} of the standard's font size, so it reads as a \

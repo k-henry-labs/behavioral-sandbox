@@ -97,35 +97,350 @@ fn lane() -> scrollable::Direction {
 /// The window's own furniture: the sidebar on the left, the open screen beside it.
 pub(crate) fn chrome<'a>(app: &'a App, content: Element<'a, Message>) -> Element<'a, Message> {
     let out = app.sidebar_out();
-    let mut panes = row![];
-    if out > 0.0 {
-        panes = panes
-            .push(sidebar(app, SIDEBAR * out))
-            .push(rule::vertical(1).style(divider));
+    // Folded is a rail of icons, not an absence: Docker Desktop keeps its column of glyphs and
+    // drops only the words beside them, so the way back is the same column that was there before
+    // and nothing has to be found again. The sidebar is therefore always drawn.
+    let panes = row![
+        sidebar(app, rail_width(out)),
+        rule::vertical(RULE).style(divider),
+    ];
+    // The header is a band across the whole window rather than a head inside the content pane,
+    // which is the shape Docker Desktop's is: the sidebar starts under it, not beside it, so the
+    // band is the one line that crosses the window and the fold happens below it. That is also
+    // what takes the window's own buttons off the panes' line and puts them on the band.
+    let mut body = panes.push(content);
+    if app.notices_open() {
+        body = body.push(panel_grip()).push(notices(app));
     }
-    // The toggle rides over both panes rather than inside either, so that one glyph crosses the
-    // window as the sidebar folds instead of two swapping places.
-    let mut window = iced::widget::stack![
-        panes.push(content),
-        container(sidebar_toggle()).padding(iced::Padding {
-            top: TOGGLE_TOP - HALO_OVERHANG,
-            right: 0.0,
-            bottom: 0.0,
-            left: toggle_at(out, app.lights()) - HALO_OVERHANG,
-        }),
-    ]
-    // `push_under`, not a first layer: a stack takes its size from the layer it was built on, and
-    // this one is 52 tall. Under everything, so a control on that line answers a click first and
-    // only what nothing else wanted reaches the window's own line, which a double click zooms.
-    .push_under(
-        mouse_area(space().width(Fill).height(HEAD_BAR)).on_double_click(Message::ZoomWindow),
-    );
-    // Over every layer, including the window's own line: while a question is up it is the only
-    // thing that answers a press.
+    let mut window = iced::widget::stack![column![header(app), body], divider_reach(app),];
+    // Over every layer, including the band: while a question is up it is the only thing that
+    // answers a press.
+    if let Some(open) = app.settings_sheet() {
+        window = window.push(settings(app, open));
+    }
+    if app.trouble_open() {
+        window = window.push(troubleshoot(app));
+    }
+    // Over every layer, including the sheet: a question asked from the sheet is answered before
+    // the sheet is.
     if let Some(confirm) = &app.confirm {
         window = window.push(asking(app, confirm));
     }
+    // **Only while a drag is under way**, because these fire on every pointer move: a window that
+    // published one per move at rest would redraw itself for nothing. The whole window is the
+    // area, so the pointer can leave the strip it grabbed and the edge still follows it.
+    if app.dragging() {
+        return mouse_area(window)
+            .interaction(iced::mouse::Interaction::ResizingHorizontally)
+            .on_move(Message::PanelDragged)
+            .on_release(Message::PanelDropped)
+            .on_exit(Message::PanelDropped)
+            .into();
+    }
     window.into()
+}
+
+/// How wide the notifications panel is when nobody has dragged it, and the bounds a drag holds
+/// it to.
+///
+/// **The floor is what a line of it needs to be readable**, and the ceiling keeps the page it is
+/// beside from becoming the narrower of the two: a panel is something you glance at.
+pub(crate) const PANEL_DEFAULT: f32 = 320.0;
+const PANEL_MIN: f32 = 240.0;
+const PANEL_MAX: f32 = 560.0;
+
+const _: () = assert!(
+    PANEL_MIN <= PANEL_DEFAULT && PANEL_DEFAULT <= PANEL_MAX,
+    "the width nobody chose has to be one a drag could have chosen"
+);
+
+/// A panel width held inside its bounds, which is what a drag and a state file both go through.
+pub(crate) fn panel_within(width: f32) -> f32 {
+    width.clamp(PANEL_MIN, PANEL_MAX)
+}
+
+/// How wide the strip that drags the panel's edge is. Wider than the line it draws, because a
+/// one-pixel target is one nobody can hit; the same bargain [`DIVIDER_REACH`] makes on the fold.
+const GRIP: f32 = 9.0;
+
+/// The panel's edge: a hairline with a strip of pointer either side of it.
+///
+/// **The drag is a delta, not a position.** Each move moves the edge by however far the pointer
+/// moved since the last one, so nothing here has to know how wide the window is — which is the
+/// one thing a widget in this position cannot ask.
+fn panel_grip<'a>() -> Element<'a, Message> {
+    mouse_area(
+        container(rule::vertical(RULE).style(divider))
+            .width(GRIP)
+            .height(Fill)
+            .align_x(iced::alignment::Horizontal::Center),
+    )
+    .interaction(iced::mouse::Interaction::ResizingHorizontally)
+    .on_press(Message::PanelGrabbed)
+    .into()
+}
+
+/// The notifications panel: everything the window has said, newest first.
+///
+/// **The status line holds one thing and the next thing destroys it.** This is where the one
+/// before went, which is the whole reason the panel is worth having: a run that ended while you
+/// were reading another page used to be a sentence you missed.
+pub(crate) fn notices(app: &App) -> Element<'_, Message> {
+    let head = row![
+        text("Notifications").size(TAB).font(HEADING).width(Fill),
+        icon_action(icons::CLOSE, "Close", Some(Message::Notifications)),
+    ]
+    .align_y(iced::alignment::Vertical::Center);
+
+    let mut body = column![].spacing(8);
+    if app.notices().is_empty() {
+        body = body.push(
+            iced::widget::center(
+                column![
+                    icons::glyph_at(icons::BELL, 28.0).center().width(Fill),
+                    text("No new notifications")
+                        .size(BODY)
+                        .style(|t| text::Style {
+                            color: Some(muted(t)),
+                        }),
+                ]
+                .spacing(12)
+                .align_x(iced::alignment::Horizontal::Center),
+            )
+            .height(Fill),
+        );
+    } else {
+        for notice in app.notices() {
+            body = body.push(
+                column![
+                    text(boxdesk_record::format_time(notice.at_ms))
+                        .size(SMALL)
+                        .style(|t| text::Style {
+                            color: Some(muted(t)),
+                        }),
+                    text(notice.text.clone()).size(BODY),
+                ]
+                .spacing(4)
+                .padding(10)
+                .width(Fill),
+            );
+            body = body.push(rule::horizontal(RULE).style(divider));
+        }
+    }
+
+    let mut panel = column![head, rule::horizontal(RULE).style(divider)].spacing(12);
+    panel = panel.push(
+        scrollable(body)
+            .direction(lane())
+            .style(scroll)
+            .height(Fill),
+    );
+    if !app.notices().is_empty() {
+        panel = panel.push(
+            row![
+                space().width(Fill),
+                small_button("Clear", push).on_press(Message::ClearNotices),
+            ]
+            .align_y(iced::alignment::Vertical::Center),
+        );
+    }
+
+    container(panel)
+        .width(Length::Fixed(app.panel()))
+        .height(Fill)
+        .padding(GUTTER)
+        .style(|theme: &iced::Theme| container::Style {
+            background: Some(crate::theme::raised(theme).into()),
+            ..container::Style::default()
+        })
+        .into()
+}
+
+/// The band across the top of the window: what the product is called, what it can be asked, and
+/// the handful of things that are reachable from anywhere.
+///
+/// - **The window's own buttons ride on it.** [`crate::chrome::LIGHTS`] is their room, kept as
+///   the first thing in the row, so nothing is drawn under them; full screen takes them off the
+///   line and the room closes with them.
+/// - **Only what boxdesk can actually do stands here.** Docker's band carries help, notifications,
+///   extensions and a sign-in; this machine signs in to nothing and has no inbox, so the right of
+///   the band is the two settings a person changes most and the quit control on the platforms
+///   that draw no close button of their own.
+/// - **It is one of the page's own surfaces, parted by a rule.** Docker's band is a blue of its
+///   own in both appearances; this one is [`crate::theme::raised`] with a hairline under it, so
+///   the window is light in light and dark in dark all the way up, and the band is told from the
+///   panes by the same line that parts the panes from each other.
+/// - **A double click on the band zooms the window**, as it does on any titlebar, since the band
+///   is drawn where the titlebar would be. The controls on it answer a press first, so only the
+///   surface between them reaches this.
+fn header(app: &App) -> Element<'_, Message> {
+    let bar = row![
+        wordmark(),
+        badge("LOCAL"),
+        space().width(Fill),
+        search_field(app),
+        space().width(Fill),
+        // The cookbook lost its sidebar tab to the four features; this is its door, beside the
+        // other two things that are settings rather than features.
+        header_icon(icons::LIFE_BUOY, Message::Troubleshoot),
+        header_icon(icons::BOOK_OPEN, Message::Cookbook),
+        // Two glyphs, not a number: a count on a bell this small is a smudge, and what a reader
+        // needs to know is whether there is anything at all.
+        header_icon(
+            if app.unread() > 0 {
+                icons::BELL_DOT
+            } else {
+                icons::BELL
+            },
+            Message::Notifications,
+        ),
+        header_icon(icons::SUN_MOON, Message::SetTheme(app.next_mode())),
+        header_icon(icons::SETTINGS, Message::Settings),
+    ]
+    .align_y(iced::alignment::Vertical::Center)
+    .spacing(HEADER_GAP);
+    let bar = if crate::chrome::DRAWS_ITS_OWN_QUIT {
+        bar.push(header_icon(icons::CLOSE, Message::Quit))
+    } else {
+        bar
+    };
+    mouse_area(column![
+        container(bar)
+            .height(band_height(app.scale_factor()))
+            .width(Fill)
+            .align_y(iced::alignment::Vertical::Center)
+            .padding(iced::Padding {
+                top: 0.0,
+                right: GUTTER,
+                bottom: 0.0,
+                left: band_starts_at(app.lights()),
+            })
+            .style(|theme: &iced::Theme| container::Style {
+                background: Some(crate::theme::raised(theme).into()),
+                ..container::Style::default()
+            }),
+        rule::horizontal(RULE).style(divider),
+    ])
+    .on_double_click(Message::ZoomWindow)
+    .into()
+}
+
+/// The product's own name on the band, in the weight a wordmark is set in.
+fn wordmark<'a>() -> Element<'a, Message> {
+    row![
+        icons::glyph(icons::SQUARE),
+        text(crate::NAME)
+            .size(HEAD)
+            .font(HEADING)
+            .line_height(1.0)
+            .wrapping(text::Wrapping::None),
+    ]
+    .align_y(iced::alignment::Vertical::Center)
+    .spacing(8)
+    .into()
+}
+
+/// The word set into the band beside the name, where Docker's says which account is signed in.
+/// This one says the thing that is true of every boxdesk: the runs are on this machine and
+/// nowhere else. A label, not a control — there is nothing to press it for.
+fn badge<'a>(word: &'a str) -> Element<'a, Message> {
+    container(
+        text(word)
+            .size(BADGE)
+            .font(HEADING)
+            .line_height(1.0)
+            .style(|theme: &iced::Theme| text::Style {
+                color: Some(muted(theme)),
+            }),
+    )
+    .padding(BADGE_PAD)
+    .style(|theme: &iced::Theme| container::Style {
+        background: Some(crate::theme::selected(theme).into()),
+        border: iced::Border {
+            radius: CORNER.into(),
+            ..iced::Border::default()
+        },
+        ..container::Style::default()
+    })
+    .into()
+}
+
+/// One glyph on the band: a lone icon, wearing the mark every lone icon in the window wears,
+/// since the band is a surface of the page rather than a colour of its own.
+fn header_icon<'a>(icon: icons::Icon, press: Message) -> Element<'a, Message> {
+    button(icons::glyph(icon).center().width(HALO))
+        .style(halo)
+        .padding(0)
+        .height(HALO)
+        .on_press(press)
+        .into()
+}
+
+/// The field on the band: what the notebook's list is narrowed by.
+///
+/// **It filters rather than decorates.** A band that carried a field which did nothing would be
+/// the same promise Docker's makes and this one would not keep, so the text here is what
+/// [`crate::App::matches_search`] reads and the list below is what it leaves.
+fn search_field(app: &App) -> Element<'_, Message> {
+    container(
+        row![
+            icons::glyph(icons::SEARCH),
+            text_input("Search sandboxes", app.search())
+                .id(SEARCH_ID)
+                .on_input(Message::Search)
+                .size(BODY)
+                .padding(0)
+                .style(|theme: &iced::Theme, status| {
+                    let mut style = entry(theme, status);
+                    // The well around it is what is drawn; the field only sets ink.
+                    style.background = iced::Color::TRANSPARENT.into();
+                    style.border = iced::Border::default();
+                    style
+                }),
+        ]
+        .align_y(iced::alignment::Vertical::Center)
+        .spacing(8),
+    )
+    .width(Length::Fixed(SEARCH_WIDTH))
+    .padding(SEARCH_PAD)
+    .style(|theme: &iced::Theme| container::Style {
+        background: Some(crate::theme::selected(theme).into()),
+        border: iced::Border {
+            radius: CORNER.into(),
+            ..iced::Border::default()
+        },
+        ..container::Style::default()
+    })
+    .into()
+}
+
+/// The field's own id, so a chord can put the cursor in it without the band holding focus state.
+pub(crate) const SEARCH_ID: &str = "header-search";
+
+/// How wide the field is: room for a run's name and its image, which is what is being scanned
+/// for, and not so wide that the band is a field with a name beside it.
+const SEARCH_WIDTH: f32 = 380.0;
+const SEARCH_PAD: [f32; 2] = [7.0, 10.0];
+
+/// The room around the badge's word, and the size it is set at: a step under body text, as a
+/// badge is set beside a name rather than beneath it.
+const BADGE: f32 = 10.0;
+const BADGE_PAD: [f32; 2] = [4.0, 7.0];
+
+/// The gap between what stands on the band, and the room kept at its own left edge before the
+/// first of them.
+const HEADER_GAP: f32 = 10.0;
+const HEADER_EDGE: f32 = 12.0;
+
+/// Where the first control on the band stands, given the room `lights` the window's own buttons
+/// take: the band's own edge, out past them.
+///
+/// **Full screen closes their room and the controls come back with it.** macOS auto-hides the
+/// titlebar carrying the buttons there, so [`crate::App::lights`] answers zero and the toggle
+/// returns to the edge rather than standing 91 in past a band holding nothing — which is the
+/// mistake the head's own line made until 2026-09-10, in the layout this one replaced.
+fn band_starts_at(lights: f32) -> f32 {
+    HEADER_EDGE + lights
 }
 
 /// The question a destructive press waits behind: what would go, and the two ways out.
@@ -138,16 +453,29 @@ fn asking<'a>(app: &'a App, confirm: &'a crate::Confirm) -> Element<'a, Message>
             .record(id)
             .map_or_else(|| "this run".to_string(), |record| record.name.clone()),
         crate::Confirm::Selected(_) => crate::runs(confirm.len()),
+        crate::Confirm::Volume(name) => format!("the volume {name}"),
+        crate::Confirm::Swept(n) => crate::ended_runs(*n),
+        crate::Confirm::Everything => "everything Boxdesk keeps".to_string(),
     };
     let card = container(
         column![
             text(format!("Delete {subject}?")).size(TITLE).font(HEADING),
             // What a delete does, not what it costs: the directory is the mechanism, and naming it
             // is the whole warning.
-            text(if confirm.len() == 1 {
-                "Its record, captured output and results are removed from the runs directory."
-            } else {
-                "Their records, captured output and results are removed from the runs directory."
+            text(match confirm {
+                // A volume is the thing that was **not** ephemeral, so the warning is about its
+                // contents rather than about a record.
+                crate::Confirm::Volume(_) =>
+                    "Everything in it goes with it. Nothing else keeps a copy.",
+                crate::Confirm::One(_) =>
+                    "Its record, captured output and results are removed from the runs directory.",
+                crate::Confirm::Selected(_) | crate::Confirm::Swept(_) =>
+                    "Their records, captured output and results are removed from the runs directory.",
+                // The largest answer in the window, so it names what is easiest to forget is in
+                // there: the volumes, which exist because their contents were worth keeping.
+                crate::Confirm::Everything =>
+                    "Every run, snapshot, registry, volume and image goes, and the settings with \
+                     them. What is in a volume goes too, and nothing else has a copy.",
             })
             .size(BODY),
             row![
@@ -185,72 +513,38 @@ fn scrim(_theme: &iced::Theme) -> container::Style {
 fn sidebar(app: &App, width: f32) -> Element<'_, Message> {
     let running = app.runs.iter().filter(|r| app.is_live(r)).count();
     let on_list = matches!(app.screen, crate::Screen::List | crate::Screen::Run(_));
-    let nav = column![
-        tab(
-            icons::GRID,
-            "Sandboxes",
-            (running > 0).then(|| running.to_string()),
-            on_list,
-            Message::List,
-        ),
-        tab(
-            icons::SQUARE_PLUS,
-            "Create Sandbox",
-            None,
-            app.screen == crate::Screen::New,
-            Message::NewRun
-        ),
-        tab(
-            icons::SQUARE,
-            "Snapshots",
-            None,
-            false,
-            Message::List,
-        ),
-        tab(
-            icons::BOOK_OPEN,
-            "Registries",
-            None,
-            app.screen == crate::Screen::Cookbook,
-            Message::Cookbook,
-        ),
-        tab(
-            icons::FOLDER,
-            "Volumes",
-            None,
-            false,
-            Message::List,
-        ),
-        tab(
-            icons::TERMINAL,
-            "Audit Logs",
-            None,
-            false,
-            Message::List,
-        ),
-        tab(
-            icons::ROCKET,
-            "Playground",
-            None,
-            false,
-            Message::List,
-        ),
-        tab(
-            icons::SQUARE_CHECK,
-            "API Keys",
-            None,
-            false,
-            Message::List,
-        ),
-        tab(
-            icons::SETTINGS,
-            "Settings",
-            None,
-            app.screen == crate::Screen::Settings,
-            Message::Settings,
-        ),
-    ]
+    // Four features and no verbs. Starting a run is a button on the notebook and ⌘N; settings and
+    // the cookbook are icons in the band. Three of the four are not built, and each opens a page
+    // that says so rather than borrowing a screen that works.
+    let mut nav = column![tab(
+        icons::CONTAINER,
+        "Sandboxes",
+        (running > 0).then(|| running.to_string()),
+        on_list,
+        Message::List,
+    )]
     .spacing(3);
+    nav = nav.push(tab(
+        icons::BOX,
+        "Snapshots",
+        (!app.snapshots().is_empty()).then(|| app.snapshots().len().to_string()),
+        app.screen == crate::Screen::Snapshots,
+        Message::Snapshots,
+    ));
+    nav = nav.push(tab(
+        icons::PACKAGE_OPEN,
+        "Registries",
+        (!app.registries().is_empty()).then(|| app.registries().len().to_string()),
+        app.screen == crate::Screen::Registries,
+        Message::Registries,
+    ));
+    nav = nav.push(tab(
+        icons::HARD_DRIVE,
+        "Volumes",
+        (!app.volumes().is_empty()).then(|| app.volumes().len().to_string()),
+        app.screen == crate::Screen::Volumes,
+        Message::Volumes,
+    ));
     container(nav)
         .style(rail)
         .width(Length::Fixed(width))
@@ -267,22 +561,146 @@ fn sidebar(app: &App, width: f32) -> Element<'_, Message> {
 
 /// The button that folds the sidebar and brings it back, wearing the glyph macOS gives it.
 fn sidebar_toggle<'a>() -> Element<'a, Message> {
-    button(icons::glyph(icons::PANEL_LEFT).center().width(HALO))
-        .style(halo)
-        .padding(0)
-        .height(HALO)
-        .on_press(Message::ToggleSidebar)
-        .into()
+    button(
+        icons::glyph_at(icons::PANEL_LEFT, DIVIDER_GLYPH)
+            .center()
+            .width(DIVIDER_TOGGLE)
+            .style(|theme: &iced::Theme| text::Style {
+                color: Some(theme.extended_palette().primary.base.color),
+            }),
+    )
+    .style(divider_toggle)
+    .padding(0)
+    .height(DIVIDER_TOGGLE)
+    .on_press(Message::ToggleSidebar)
+    .into()
 }
 
-/// The room the toggle takes in the head's line: what the lights' room and the head's inset
-/// are measured against.
-const TOGGLE: f32 = 28.0;
+/// The strip of window the fold answers to, and the control it shows there.
+///
+/// **The line is the target, not a button parked beside it.** Docker Desktop puts nothing on the
+/// boundary until the pointer is near it, and then a circle on the line itself; a control that
+/// were always drawn would be one more thing on a band that already carries four. So this layer
+/// is a strip [`DIVIDER_REACH`] wide down the fold, and the circle is what it shows while the
+/// pointer is inside it.
+///
+/// **Nothing here takes a press that was not for it.** The strip is a `mouse_area` with only
+/// `on_enter` and `on_exit`, which iced does not let capture a click, so the sidebar row and the
+/// page column under the strip answer presses as though it were not there. Only the circle, a
+/// button in its own bounds, takes one.
+fn divider_reach(app: &App) -> Element<'_, Message> {
+    let fold = rail_width(app.sidebar_out());
+    let shown: Element<'_, Message> = if app.divider_hovered() {
+        sidebar_toggle()
+    } else {
+        space().width(DIVIDER_TOGGLE).height(DIVIDER_TOGGLE).into()
+    };
+    container(
+        mouse_area(
+            container(shown)
+                .width(DIVIDER_REACH)
+                .height(Fill)
+                .align_x(iced::alignment::Horizontal::Center)
+                .padding(iced::Padding {
+                    top: (HEAD_BAR - DIVIDER_TOGGLE) / 2.0,
+                    right: 0.0,
+                    bottom: 0.0,
+                    left: 0.0,
+                }),
+        )
+        .on_enter(Message::HoverDivider(true))
+        .on_exit(Message::HoverDivider(false)),
+    )
+    // The layer is the whole window, so the strip inside it has a window's height to fill; a
+    // container left to shrink would be as tall as the circle and the fold would answer the
+    // pointer on one line of itself.
+    .width(Fill)
+    .height(Fill)
+    .padding(iced::Padding {
+        top: band_height(app.scale_factor()),
+        right: 0.0,
+        bottom: 0.0,
+        left: reach_at(fold),
+    })
+    .into()
+}
 
-/// The mark the toggle wears under the pointer, drawn on the same centre as its room and past it
-/// on every side by [`HALO_OVERHANG`], as a toolbar icon's halo is wider than the icon.
+/// Where the strip's own left edge falls, given how far `fold` the sidebar is out: centred on the
+/// boundary, and never past the window's edge, so a folded sidebar still has a whole circle to be
+/// brought back by rather than half of one cut off at zero.
+fn reach_at(fold: f32) -> f32 {
+    (fold - DIVIDER_REACH / 2.0).max(0.0)
+}
+
+/// How far the circle reaches into the pane beside it, which it does at every fold, since it is
+/// centred on a boundary that is always there now.
+///
+/// A head begins a [`GUTTER`] into that pane, and this is less, so the two never meet and the
+/// head's inset is the gutter at every width — which it was not while the fold ran to nothing and
+/// the circle stood on the page itself, drawn through the first letter of the head's own name.
+/// `the_circle_never_reaches_a_head` is what keeps that from coming back.
+const CIRCLE_INTO_PANE: f32 = DIVIDER_TOGGLE / 2.0 - RULE;
+const _: () = assert!(
+    CIRCLE_INTO_PANE < GUTTER,
+    "the circle would reach past where a head's name starts, and be drawn through its first \
+     letter, as it was while the fold ran to nothing"
+);
+
+/// The circle the fold is worked by, and the strip of window that shows it. The circle is Docker's
+/// size; the strip is wider than the circle so the pointer that brought it out is still inside
+/// the strip once it is on the circle, which is what stops it flickering away under its own
+/// arrival.
+const DIVIDER_TOGGLE: f32 = 30.0;
+const DIVIDER_REACH: f32 = 42.0;
+const _: () = assert!(
+    DIVIDER_REACH > DIVIDER_TOGGLE,
+    "the strip must outreach the circle, or the pointer leaves the strip by arriving on the \
+     circle it brought out and the circle goes with it"
+);
+
+/// The glyph inside the circle, which is smaller than [`icons::SIZE`] on purpose.
+///
+/// **An icon in a ring is not an icon in a row.** The set's own size fills a 30-pt circle to
+/// within 5 pt of its edge, and a glyph that close reads as touching the ring rather than sitting
+/// inside it. [`DIVIDER_CLEARANCE`] is the room this leaves instead, and is held to a floor
+/// below, because the two sizes drifting together is exactly how that crowding came back.
+const DIVIDER_GLYPH: f32 = 15.0;
+
+/// The room between the glyph's ink and the ring around it, on every side.
+const DIVIDER_CLEARANCE: f32 = (DIVIDER_TOGGLE - DIVIDER_GLYPH) / 2.0;
+const _: () = assert!(
+    DIVIDER_CLEARANCE >= 7.0,
+    "the glyph in the fold's circle wants air around it, or it reads as touching the ring"
+);
+
+/// The circle on the fold: a raised surface on the line, held by the same hairline as the rule it
+/// covers and lifted off it by the shadow a card takes.
+///
+/// **The one control that is not [`CORNER`]**, and named as one in
+/// `every_control_takes_the_windows_own_corner`. It is drawn on a line rather than on a surface,
+/// and a square on a rule reads as a break in the rule; a circle reads as something sitting on
+/// it. Docker draws the same thing the same way.
+fn divider_toggle(theme: &iced::Theme, status: button::Status) -> button::Style {
+    let surface = match status {
+        button::Status::Hovered | button::Status::Pressed => crate::theme::raised_hovered(theme),
+        button::Status::Active | button::Status::Disabled => crate::theme::raised(theme),
+    };
+    button::Style {
+        background: Some(surface.into()),
+        text_color: theme.extended_palette().primary.base.color,
+        border: iced::Border {
+            color: hairline(theme),
+            width: 1.0,
+            radius: (DIVIDER_TOGGLE / 2.0).into(),
+        },
+        shadow: RAISE,
+        ..button::Style::default()
+    }
+}
+
+/// The mark a lone glyph wears under the pointer, wider than the glyph, as a toolbar icon's halo
+/// is.
 const HALO: f32 = 36.0;
-const HALO_OVERHANG: f32 = (HALO - TOGGLE) / 2.0;
 
 /// An icon on its own: nothing until the pointer finds it, then the mark a toolbar icon wears,
 /// a step past a row's hover so it reads on the rail as well as on the page.
@@ -302,60 +720,43 @@ fn halo(theme: &iced::Theme, status: button::Status) -> button::Style {
 
 /// A head's height, as a toolbar window has one: 19.5 of room over its content, which is what a
 /// window whose titlebar carries a toolbar leaves over the traffic lights in it.
+///
+/// **In the window's own points, not the toolkit's.** This is a measurement of the platform's
+/// titlebar, and the window's buttons sit on its middle; see [`band_height`], which is what the
+/// band is actually laid out to.
 const HEAD_BAR: f32 = 52.0;
 
-/// Where the toggle's circle starts, so its glyph is centred on that same line.
-const TOGGLE_TOP: f32 = (HEAD_BAR - TOGGLE) / 2.0;
+/// The band's height at this scale: [`HEAD_BAR`] of window, whatever Settings is drawing at.
+///
+/// **The band is chrome, so it does not zoom with the content.** The buttons macOS draws on it
+/// are a fixed size at a fixed place, so a band that grew with the app's scale left them above
+/// its middle while everything the app drew stayed centred — the two lines of the same bar
+/// disagreeing, at every scale but one. What zooms is what stands on the band; the band itself
+/// is the platform's line.
+fn band_height(scale: f32) -> f32 {
+    HEAD_BAR / scale
+}
 
-/// The room the sidebar keeps at its own edges, and so where the toggle rests inside it.
-const RAIL_PAD: f32 = 10.0;
+/// Where the sidebar's first tab starts, under the band: the rail's own padding and no more,
+/// since the toggle that used to stand on this line has moved onto the band above it.
+const NAV_TOP: f32 = 12.0;
 
-/// Where the sidebar's first tab starts: under the toggle and the gap after it.
-const NAV_TOP: f32 = TOGGLE_TOP + TOGGLE + 18.0;
+/// The room the sidebar keeps at its own edges, and so how far a tab's pill stops short of the
+/// boundary.
+///
+/// **Wider than the circle reaches back over the rail.** The control on the fold is centred on
+/// the boundary, so it hangs [`DIVIDER_TOGGLE`] / 2 back over the rail's own last column; a pill
+/// that ran to within less than that was drawn under it, and the circle sat on the corner of the
+/// open tab's mark. The relation holds at every fold, since the pill's edge and the circle's are
+/// both measured back from the same boundary.
+const RAIL_PAD: f32 = 20.0;
+const _: () = assert!(
+    RAIL_PAD >= DIVIDER_TOGGLE / 2.0 + 4.0,
+    "a tab's pill would run under the circle on the boundary"
+);
 
 /// The room inside a sidebar row, around its icon and label.
 const TAB_PAD: [f32; 2] = [9.0, 12.0];
-
-/// Where the toggle stands with the rail out and no window buttons on the line: over the column
-/// the tabs' icons stand in, so the four of them read as one column.
-const TOGGLE_OVER_ICONS: f32 = RAIL_PAD + TAB_PAD[1] + icons::SIZE / 2.0 - TOGGLE / 2.0;
-
-/// Where it stands with the rail folded away. There is no icon column left to align to, and the
-/// window's edge is not an alignment, so its hover circle takes the page's own gutter and shares
-/// the margin everything below it has.
-const TOGGLE_FOLDED: f32 = GUTTER + HALO_OVERHANG;
-
-/// Where it stands with the window's buttons on the line and the rail out: its mark's right edge
-/// on the rail's own padding, which is the edge every tab pill under it ends at.
-const TOGGLE_BESIDE_RAIL: f32 = SIDEBAR - RAIL_PAD - TOGGLE - HALO_OVERHANG;
-
-/// Where the toggle stands, given the room `lights` the window's own buttons take. Each platform
-/// slides it between a folded place and an open one along the fold. With lights: its mark begins
-/// where their room ends when folded, and ends on the rail's own padding when out. Without: on the
-/// page's gutter when folded, over the tabs' icon column when out.
-///
-/// **What lines up is the hover mark, never the glyph's box inside it**, because the mark is what
-/// a reader sees against the tab pills and the buttons: hence [`HALO_OVERHANG`] in three of the
-/// four places, and a centre in the fourth.
-fn toggle_at(out: f32, lights: f32) -> f32 {
-    let (folded, open) = if lights > 0.0 {
-        (lights + HALO_OVERHANG, TOGGLE_BESIDE_RAIL)
-    } else {
-        (TOGGLE_FOLDED, TOGGLE_OVER_ICONS)
-    };
-    folded + (open - folded) * out
-}
-
-/// Where a pane's head starts, at this much of the sidebar: at the gutter, out past where the
-/// toggle stands when folded, by as much as the sidebar is folded away.
-fn head_inset_at(out: f32, lights: f32) -> f32 {
-    GUTTER + (toggle_at(0.0, lights) + TOGGLE) * (1.0 - out)
-}
-
-/// Where the head of the pane this window is showing starts.
-fn head_inset(app: &App) -> f32 {
-    head_inset_at(app.sidebar_out(), app.lights())
-}
 
 /// One sidebar tab: its name, an optional count, and the pill it wears while its screen is open.
 fn tab<'a>(
@@ -365,14 +766,26 @@ fn tab<'a>(
     open: bool,
     message: Message,
 ) -> Element<'a, Message> {
+    // The glyph is fixed and the word takes what is left, rather than the word asking for its
+    // own width and the glyph taking what remains: folded, what is left is nothing, so the word
+    // clips to nothing and the icon still stands in its column. Asking the other way round gave
+    // the row more children than it had room for and iced drew none of them.
     let mut line = row![
         icons::glyph(icon),
-        // One line whatever room is left: a label that rewrapped would step down the rail on
-        // every frame of a fold.
-        text(label).size(TAB).wrapping(text::Wrapping::None),
-    ]
-    .spacing(12);
-    line = line.push(space().width(Fill));
+        container(
+            // One line whatever room is left: a label that rewrapped would step down the rail on
+            // every frame of a fold.
+            text(label).size(TAB).wrapping(text::Wrapping::None)
+        )
+        .width(Fill)
+        .padding(iced::Padding {
+            top: 0.0,
+            right: 0.0,
+            bottom: 0.0,
+            left: LABEL_GAP,
+        })
+        .clip(true),
+    ];
     if let Some(count) = count {
         line = line.push(text(count).size(SMALL).style(|t| text::Style {
             color: Some(muted(t)),
@@ -452,7 +865,7 @@ fn tilde(home: Option<&str>, path: &std::path::Path) -> String {
 }
 
 /// The notebook's own knobs, one heading block per area; a later knob joins its block.
-pub(crate) fn settings(app: &App) -> Element<'_, Message> {
+pub(crate) fn settings<'a>(app: &'a App, sheet_of: &'a crate::Settings) -> Element<'a, Message> {
     let modes = row(crate::theme::MODES.iter().map(|mode| {
         let on = *mode == app.mode;
         button(text(mode.to_string()).size(BODY))
@@ -532,8 +945,166 @@ pub(crate) fn settings(app: &App) -> Element<'_, Message> {
     if let Some(status) = &app.status {
         body = body.push(text(status).size(BODY));
     }
-    framed(app, row![head_title("Settings")].into(), body)
+
+    // The foot carries the two answers; the head's way out is the shell's.
+    let foot = row![
+        space().width(Fill),
+        page_button("Close", push).on_press(Message::SettingsClosed),
+        // **Nothing to apply is a button that does nothing**, and the toolkit draws a button with
+        // no message as the refused one it is. `Apply` lights up when a pick differs from what the
+        // sheet opened with, and not before.
+        page_button("Apply", primary).on_press_maybe(
+            sheet_of
+                .changed(app.picks())
+                .then_some(Message::SettingsApplied)
+        ),
+    ]
+    .spacing(12)
+    .align_y(iced::alignment::Vertical::Center);
+
+    sheet(
+        app,
+        "Settings",
+        Message::SettingsClosed,
+        body,
+        Some(foot.into()),
+    )
 }
+
+/// The card a sheet is drawn in: a head with its name and its way out, a body that scrolls
+/// between two rules, and a foot where there is one.
+///
+/// Shared by both sheets, so the settings and the troubleshoot pages cannot come to be two shapes
+/// of the same thing.
+fn sheet<'a>(
+    app: &'a App,
+    title: &'a str,
+    close: Message,
+    body: iced::widget::Column<'a, Message>,
+    foot: Option<Element<'a, Message>>,
+) -> Element<'a, Message> {
+    let mut body = body;
+    if let Some(status) = &app.status {
+        body = body.push(text(status).size(BODY));
+    }
+    let mut inside = column![
+        row![
+            text(title).size(HEAD).font(HEADING).width(Fill),
+            icon_action(icons::CLOSE, "Close", Some(close.clone())),
+        ]
+        .align_y(iced::alignment::Vertical::Center),
+        rule::horizontal(RULE).style(divider),
+        container(scrollable(body).direction(lane()).style(scroll))
+            .height(Fill)
+            .padding(iced::Padding {
+                top: SHEET_PAD,
+                right: 0.0,
+                bottom: SHEET_PAD,
+                left: 0.0,
+            }),
+    ]
+    .spacing(SHEET_PAD);
+    if let Some(foot) = foot {
+        inside = inside
+            .push(rule::horizontal(RULE).style(divider))
+            .push(foot);
+    }
+
+    let shown = container(inside)
+        .padding(SHEET_PAD)
+        .width(Length::Fixed(SHEET.0))
+        .max_height(SHEET.1)
+        .style(card);
+
+    // Over everything, and `opaque`, so nothing behind the sheet answers a press while it is up.
+    // A press on the wash closes it, as Escape does.
+    iced::widget::opaque(
+        mouse_area(iced::widget::center(iced::widget::opaque(shown)).style(scrim)).on_press(close),
+    )
+}
+
+/// The troubleshoot sheet: what this machine has, and the handful of things that put it back.
+///
+/// **The read-only half comes first.** Every act below it either cannot be undone or opens
+/// something outside the window, and the most useful thing this page does is let somebody say
+/// what their machine looks like without having to know where any of it is.
+pub(crate) fn troubleshoot(app: &App) -> Element<'_, Message> {
+    let ended = app.runs.iter().filter(|r| !app.is_live(r)).count();
+    let body = column![
+        stacked(
+            Some(icons::LIFE_BUOY),
+            "What this machine has",
+            "Paths and counts, never contents: the build, the host, and how much of what is \
+             where. This is what a report needs.",
+            column![
+                container(
+                    text(app.diagnostics())
+                        .font(MONO)
+                        .size(SMALL)
+                        .style(|t| text::Style {
+                            color: Some(muted(t)),
+                        })
+                )
+                .width(Fill)
+                .padding(12)
+                .style(|theme: &iced::Theme| container::Style {
+                    background: Some(crate::theme::recessed(theme).into()),
+                    border: iced::Border {
+                        radius: CORNER.into(),
+                        ..iced::Border::default()
+                    },
+                    ..container::Style::default()
+                }),
+                row![
+                    space().width(Fill),
+                    small_button("Copy", push).on_press(Message::CopyDiagnostics),
+                ],
+            ]
+            .spacing(10),
+        ),
+        setting(
+            Some(icons::FOLDER_OPEN),
+            "Where everything is kept",
+            "Runs, snapshots, registries, volumes and images, in one place on this machine.",
+            small_button("Show", push).on_press(Message::RevealData),
+        ),
+        setting(
+            Some(icons::EXTERNAL_LINK),
+            "Report a problem",
+            "Opens the issue tracker. Paste what is above into it.",
+            small_button("Open", push).on_press(Message::ReportProblem),
+        ),
+        rule::horizontal(RULE).style(divider),
+        setting(
+            Some(icons::TRASH),
+            "Sweep the ended runs",
+            "Every ended run's record, captured output and results go. A running sandbox is not \
+             touched.",
+            // Nothing to sweep is a button that does nothing, and the toolkit draws one with no
+            // message as the refused one it is.
+            small_button("Sweep", destructive)
+                .on_press_maybe((ended > 0).then_some(Message::SweepEnded)),
+        ),
+        setting(
+            Some(icons::TRASH),
+            "Remove everything Boxdesk keeps",
+            "Every store, and the settings with them. Volumes included \u{2014} what is in them \
+             goes too, and nothing else has a copy.",
+            small_button("Remove everything", destructive).on_press(Message::ResetEverything),
+        ),
+    ]
+    .spacing(28)
+    .width(Fill);
+
+    sheet(app, "Troubleshoot", Message::Troubleshoot, body, None)
+}
+
+/// How big the settings sheet is: wide enough for a setting's name, its line and its control on
+/// one row, and short enough that the page it is over is still visible around it.
+const SHEET: (f32, f32) = (620.0, 640.0);
+
+/// The room inside the sheet's edge, and between its head, its body and its foot.
+const SHEET_PAD: f32 = 18.0;
 
 /// One setting as a source-list app lays one out: its name over a grey line of what it does,
 /// and the control at the row's right edge.
@@ -774,7 +1345,7 @@ fn card(theme: &iced::Theme) -> container::Style {
 /// **A press fills the form and stops there.** Starting is the form's own button, so an entry from
 /// here is read before it boots like every other run. Each entry shows the `boxdesk` line it is,
 /// built by [`crate::Example::cli`] from the same fields the form takes.
-pub(crate) fn cookbook(app: &App) -> Element<'_, Message> {
+pub(crate) fn cookbook<'a>() -> Element<'a, Message> {
     let mut body = column![].spacing(20);
     for shelf in crate::Shelf::ALL {
         // The subject, then one line on what its runs do: enough to skip a shelf or stop at it
@@ -811,7 +1382,6 @@ pub(crate) fn cookbook(app: &App) -> Element<'_, Message> {
         body = body.push(stack);
     }
     framed(
-        app,
         head_title("Cookbook"),
         column![
             muted_line(
@@ -825,6 +1395,553 @@ pub(crate) fn cookbook(app: &App) -> Element<'_, Message> {
                 .height(Fill),
         ]
         .spacing(14),
+    )
+}
+
+/// The snapshots: sandboxes worth making again, by name.
+///
+/// A row is a template, not a run. Pressing one fills the start form from it — the same form a
+/// re-run fills — so what a snapshot does is put you one press from a sandbox with that posture,
+/// with every knob still open before it boots.
+pub(crate) fn snapshots(app: &App) -> Element<'_, Message> {
+    let head: Element<'_, Message> = row![
+        head_title("Snapshots"),
+        small_button("Create Snapshot", primary).on_press(Message::NewRun),
+    ]
+    .spacing(12)
+    .align_y(iced::alignment::Vertical::Center)
+    .into();
+
+    // The band's field narrows this list too: one search, whichever page is showing.
+    let shown: Vec<&boxdesk_record::Snapshot> = app
+        .snapshots()
+        .iter()
+        .filter(|s| app.matches_snapshot(s))
+        .collect();
+
+    let mut rows = column![].spacing(8);
+    if app.snapshots().is_empty() {
+        rows = rows.push(
+            column![
+                muted_line(
+                    "No snapshots yet. A snapshot is a sandbox worth making again: fill the \
+                     start form, name it, and save it there — or write one with `boxdesk \
+                     snapshot new`.",
+                    BODY,
+                ),
+                small_button("Create Sandbox", push).on_press(Message::NewRun),
+            ]
+            .spacing(12),
+        );
+    } else if shown.is_empty() {
+        rows = rows.push(
+            text(format!(
+                "No snapshot matches \u{201c}{}\u{201d}.",
+                app.search().trim()
+            ))
+            .size(BODY)
+            .style(|t| text::Style {
+                color: Some(muted(t)),
+            }),
+        );
+    } else {
+        rows = rows.push(section("SNAPSHOTS", shown.len()));
+        for snapshot in &shown {
+            rows = rows.push(snapshot_row(snapshot));
+        }
+    }
+
+    framed(
+        head,
+        column![
+            scrollable(rows)
+                .direction(lane())
+                .style(scroll)
+                .height(Fill)
+        ]
+        .spacing(14),
+    )
+}
+
+/// One snapshot's card: its name, what it is for, and the posture a sandbox from it would get.
+///
+/// **The same three lines a run's row shows**, in the same places, because it is the same posture
+/// read a moment earlier: a reader who has learned one row has learned both.
+fn snapshot_row(snapshot: &boxdesk_record::Snapshot) -> Element<'static, Message> {
+    let name = snapshot.name.clone();
+    // What it is for, in the words whoever wrote it chose — or failing that, the command it
+    // would run, which is the next most useful thing to say about a template.
+    let about = if !snapshot.about.is_empty() {
+        snapshot.about.clone()
+    } else if snapshot.command.is_empty() {
+        "a sandbox to exec into".to_string()
+    } else {
+        snapshot.command.join(" ")
+    };
+    let title = row![
+        icons::glyph(icons::BOX),
+        text(snapshot.name.clone()).font(NAME).size(TITLE),
+        space().width(Fill),
+    ]
+    .spacing(8)
+    .align_y(iced::alignment::Vertical::Center);
+    let lines = column![
+        title,
+        text(about)
+            .font(MONO)
+            .size(BODY)
+            .wrapping(text::Wrapping::None)
+            .style(|t| text::Style {
+                color: Some(muted(t)),
+            }),
+        text(posture_tags_of(&snapshot.posture))
+            .size(SMALL)
+            .wrapping(text::Wrapping::None)
+            .style(|t| text::Style {
+                color: Some(muted(t)),
+            }),
+    ]
+    .spacing(4);
+    // Two acts, not the run row's four: a template has nothing to stop and nothing to export.
+    let acts = row![
+        icon_action(
+            icons::PLAY,
+            "Create Sandbox",
+            Some(Message::UseSnapshot(name.clone())),
+        ),
+        icon_action(
+            icons::TRASH,
+            "Delete",
+            Some(Message::ForgetSnapshot(name.clone())),
+        ),
+    ]
+    .spacing(2)
+    .align_y(iced::alignment::Vertical::Center);
+    button(
+        row![container(lines).width(Fill).clip(true), acts]
+            .spacing(12)
+            .align_y(iced::alignment::Vertical::Center),
+    )
+    .width(Fill)
+    .padding(12)
+    .style(row_card)
+    .on_press(Message::UseSnapshot(name))
+    .into()
+}
+
+/// The registries: where images come from, and who this machine is when it asks.
+///
+/// **A row is an address, never a secret.** The store holds a host, a project and a username and
+/// no password at all — one is read from `$BOXDESK_REGISTRY_PASSWORD` at the moment a pull needs
+/// it. This page says so rather than leaving a reader to wonder where the password went.
+pub(crate) fn registries(app: &App) -> Element<'_, Message> {
+    let head = row![
+        head_title("Registries"),
+        small_button("Add Registry", primary).on_press(Message::NewRegistry),
+    ]
+    .spacing(12)
+    .align_y(iced::alignment::Vertical::Center)
+    .into();
+
+    let shown: Vec<&boxdesk_record::Registry> = app
+        .registries()
+        .iter()
+        .filter(|r| app.matches_registry(r))
+        .collect();
+
+    let mut rows = column![].spacing(8);
+    if app.registries().is_empty() {
+        rows = rows.push(
+            column![
+                muted_line(
+                    "No registries yet. A public image needs none — `boxdesk pull alpine:3.20` \
+                     works as it stands. Add one to say who this machine is when it asks a \
+                     registry that wants to know: `boxdesk registry add work ghcr.io --username \
+                     you`.",
+                    BODY,
+                ),
+                muted_line(
+                    "The password is never kept here. It is read from \
+                     $BOXDESK_REGISTRY_PASSWORD at the moment a pull needs it.",
+                    SMALL,
+                ),
+            ]
+            .spacing(12),
+        );
+    } else if shown.is_empty() {
+        rows = rows.push(
+            text(format!(
+                "No registry matches \u{201c}{}\u{201d}.",
+                app.search().trim()
+            ))
+            .size(BODY)
+            .style(|t| text::Style {
+                color: Some(muted(t)),
+            }),
+        );
+    } else {
+        rows = rows.push(section("REGISTRIES", shown.len()));
+        for registry in &shown {
+            rows = rows.push(registry_row(registry));
+        }
+    }
+
+    framed(
+        head,
+        column![
+            scrollable(rows)
+                .direction(lane())
+                .style(scroll)
+                .height(Fill)
+        ]
+        .spacing(14),
+    )
+}
+
+/// The form for a new registry: four boxes, and a line saying where the password is not.
+pub(crate) fn new_registry(app: &App) -> Element<'_, Message> {
+    let form = app.registry_form();
+    let field =
+        |label: &'static str, value: &str, which: crate::RegistryField, hint: &'static str| {
+            column![
+                row![
+                    text(label).width(Length::Fixed(FORM_LABEL)),
+                    text_input("", value)
+                        .style(entry)
+                        .on_input(move |v| Message::RegistryField(which, v))
+                        .font(MONO)
+                        .width(Fill),
+                ]
+                .spacing(8)
+                .align_y(iced::alignment::Vertical::Center),
+                row![
+                    space().width(Length::Fixed(FORM_LABEL)),
+                    muted_line(hint, SMALL),
+                ]
+                .spacing(8),
+            ]
+            .spacing(4)
+        };
+    let mut page = column![
+        field(
+            "Name",
+            &form.name,
+            crate::RegistryField::Name,
+            "what this is listed under here; letters, digits, - and _",
+        ),
+        field(
+            "Host",
+            &form.url,
+            crate::RegistryField::Url,
+            "as it appears in an image reference: ghcr.io, docker.io",
+        ),
+        field(
+            "Project",
+            &form.project,
+            crate::RegistryField::Project,
+            "the namespace or organisation images sit under, if there is one",
+        ),
+        field(
+            "Username",
+            &form.username,
+            crate::RegistryField::Username,
+            "who this machine signs in as; leave it empty for public images",
+        ),
+        rule::horizontal(1).style(divider),
+        // Said on the form, where somebody is looking for the box to type it in.
+        muted_line(
+            "There is no password box. A registry file is a file that gets copied and \
+             backed up, so nothing here keeps one: set $BOXDESK_REGISTRY_PASSWORD and a pull \
+             reads it at the moment it needs it.",
+            BODY,
+        ),
+        row![
+            space().width(Fill),
+            page_button("Cancel", push).on_press(Message::Registries),
+            page_button("Add registry", primary).on_press(Message::AddRegistry),
+        ]
+        .spacing(12),
+    ]
+    .spacing(10)
+    .width(Fill);
+    if let Some(status) = &app.status {
+        page = page.push(text(status).size(BODY));
+    }
+    framed(
+        head_title("New registry"),
+        column![scrollable(page).direction(lane()).style(scroll)].width(Fill),
+    )
+}
+
+/// One registry's card: its handle, where it is, and who this machine is there.
+fn registry_row(registry: &boxdesk_record::Registry) -> Element<'static, Message> {
+    let name = registry.name.clone();
+    let where_it_is = if registry.project.is_empty() {
+        registry.url.clone()
+    } else {
+        format!("{}/{}", registry.url, registry.project)
+    };
+    // Said on every row, because "who am I here" is the question a registry list exists to answer,
+    // and a blank would read as a field nobody filled rather than as a deliberate anonymous pull.
+    let who = if registry.username.is_empty() {
+        "anonymous \u{2014} public images only".to_string()
+    } else {
+        format!("as {}", registry.username)
+    };
+    let title = row![
+        icons::glyph(icons::PACKAGE_OPEN),
+        text(registry.name.clone()).font(NAME).size(TITLE),
+        space().width(Fill),
+    ]
+    .spacing(8)
+    .align_y(iced::alignment::Vertical::Center);
+    let lines = column![
+        title,
+        text(where_it_is)
+            .font(MONO)
+            .size(BODY)
+            .wrapping(text::Wrapping::None)
+            .style(|t| text::Style {
+                color: Some(muted(t)),
+            }),
+        text(who)
+            .size(SMALL)
+            .wrapping(text::Wrapping::None)
+            .style(|t| text::Style {
+                color: Some(muted(t)),
+            }),
+    ]
+    .spacing(4);
+    let acts = row![icon_action(
+        icons::TRASH,
+        "Delete",
+        Some(Message::ForgetRegistry(name)),
+    )]
+    .align_y(iced::alignment::Vertical::Center);
+    container(
+        row![container(lines).width(Fill).clip(true), acts]
+            .spacing(12)
+            .align_y(iced::alignment::Vertical::Center),
+    )
+    .width(Fill)
+    .padding(12)
+    .style(|theme: &iced::Theme| container::Style {
+        background: Some(crate::theme::raised(theme).into()),
+        border: iced::Border {
+            radius: CORNER.into(),
+            ..iced::Border::default()
+        },
+        ..container::Style::default()
+    })
+    .into()
+}
+
+/// The volumes: directories with lives of their own, mounted into sandboxes by name.
+///
+/// **What a row says that a run's row cannot is how much is in it.** A volume exists because its
+/// contents outlived the run that wrote them, so the size is the fact somebody scanning this page
+/// is actually after.
+pub(crate) fn volumes(app: &App) -> Element<'_, Message> {
+    let head: Element<'_, Message> = row![
+        head_title("Volumes"),
+        small_button("Create Volume", primary).on_press(Message::NewVolume),
+    ]
+    .spacing(12)
+    .align_y(iced::alignment::Vertical::Center)
+    .into();
+
+    let shown: Vec<&(boxdesk_record::Volume, u64)> = app
+        .volumes()
+        .iter()
+        .filter(|(v, _)| app.matches_volume(v))
+        .collect();
+
+    let mut rows = column![].spacing(8);
+    if app.volumes().is_empty() {
+        rows = rows.push(
+            column![
+                muted_line(
+                    "No volumes yet. A volume is a directory that outlives the sandbox that \
+                     wrote it: make one here, mount it with `boxdesk run --volume NAME:/work`, \
+                     and what a guest leaves in it is still there for the next one.",
+                    BODY,
+                ),
+                // Said plainly, because the page this is modelled on says the opposite and
+                // somebody arriving from it will be looking for the bucket.
+                muted_line(
+                    "Local only \u{2014} a directory on this machine, not an object store and \
+                     not shared between machines.",
+                    SMALL,
+                ),
+                small_button("Create Volume", push).on_press(Message::NewVolume),
+            ]
+            .spacing(12),
+        );
+    } else if shown.is_empty() {
+        rows = rows.push(
+            text(format!(
+                "No volume matches \u{201c}{}\u{201d}.",
+                app.search().trim()
+            ))
+            .size(BODY)
+            .style(|t| text::Style {
+                color: Some(muted(t)),
+            }),
+        );
+    } else {
+        rows = rows.push(section("VOLUMES", shown.len()));
+        for (volume, held) in &shown {
+            rows = rows.push(volume_row(volume, *held));
+        }
+    }
+
+    framed(
+        head,
+        column![
+            scrollable(rows)
+                .direction(lane())
+                .style(scroll)
+                .height(Fill)
+        ]
+        .spacing(14),
+    )
+}
+
+/// One volume's card: its name, what is in it, and how it is mounted.
+fn volume_row(volume: &boxdesk_record::Volume, held: u64) -> Element<'static, Message> {
+    let name = volume.name.clone();
+    let about = if volume.about.is_empty() {
+        format!("--volume {name}:/work")
+    } else {
+        volume.about.clone()
+    };
+    let title = row![
+        icons::glyph(icons::HARD_DRIVE),
+        text(volume.name.clone()).font(NAME).size(TITLE),
+        space().width(Fill),
+        text(held_as_words(held))
+            .size(SMALL)
+            .style(|t| text::Style {
+                color: Some(muted(t)),
+            }),
+    ]
+    .spacing(8)
+    .align_y(iced::alignment::Vertical::Center);
+    let lines = column![
+        title,
+        text(about)
+            .font(MONO)
+            .size(BODY)
+            .wrapping(text::Wrapping::None)
+            .style(|t| text::Style {
+                color: Some(muted(t)),
+            }),
+    ]
+    .spacing(4);
+    let acts = row![icon_action(
+        icons::TRASH,
+        "Delete",
+        Some(Message::ForgetVolume(name)),
+    )]
+    .align_y(iced::alignment::Vertical::Center);
+    container(
+        row![container(lines).width(Fill).clip(true), acts]
+            .spacing(12)
+            .align_y(iced::alignment::Vertical::Center),
+    )
+    .width(Fill)
+    .padding(12)
+    .style(|theme: &iced::Theme| container::Style {
+        background: Some(crate::theme::raised(theme).into()),
+        border: iced::Border {
+            radius: CORNER.into(),
+            ..iced::Border::default()
+        },
+        ..container::Style::default()
+    })
+    .into()
+}
+
+/// A byte count in the units a directory listing uses. The CLI spells it the same way; this is the
+/// window's copy because the two crates share no formatting.
+fn held_as_words(n: u64) -> String {
+    const UNITS: [&str; 5] = ["B", "KiB", "MiB", "GiB", "TiB"];
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "a size shown to a person, where the last significant figure is not one"
+    )]
+    let mut size = n as f64;
+    let mut unit = 0;
+    while size >= 1024.0 && unit + 1 < UNITS.len() {
+        size /= 1024.0;
+        unit += 1;
+    }
+    if unit == 0 {
+        format!("{n} B")
+    } else {
+        format!("{size:.1} {}", UNITS[unit])
+    }
+}
+
+/// The form for a new volume: a name, and a line about what will be in it.
+pub(crate) fn new_volume(app: &App) -> Element<'_, Message> {
+    let form = app.volume_form();
+    let field =
+        |label: &'static str, value: &str, which: crate::VolumeField, hint: &'static str| {
+            column![
+                row![
+                    text(label).width(Length::Fixed(FORM_LABEL)),
+                    text_input("", value)
+                        .style(entry)
+                        .on_input(move |v| Message::VolumeField(which, v))
+                        .font(MONO)
+                        .width(Fill),
+                ]
+                .spacing(8)
+                .align_y(iced::alignment::Vertical::Center),
+                row![
+                    space().width(Length::Fixed(FORM_LABEL)),
+                    muted_line(hint, SMALL),
+                ]
+                .spacing(8),
+            ]
+            .spacing(4)
+        };
+    let mut page = column![
+        field(
+            "Name",
+            &form.name,
+            crate::VolumeField::Name,
+            "what sandboxes mount it by; letters, digits, - and _",
+        ),
+        field(
+            "About",
+            &form.about,
+            crate::VolumeField::About,
+            "one line saying what will be in it",
+        ),
+        rule::horizontal(1).style(divider),
+        muted_line(
+            "It starts empty. Mount it with `boxdesk run --volume NAME:/work`, and the guest \
+             path has to be a directory the image already has \u{2014} the same rule `--mount` \
+             keeps.",
+            BODY,
+        ),
+        row![
+            space().width(Fill),
+            page_button("Cancel", push).on_press(Message::Volumes),
+            page_button("Create volume", primary).on_press(Message::AddVolume),
+        ]
+        .spacing(12),
+    ]
+    .spacing(10)
+    .width(Fill);
+    if let Some(status) = &app.status {
+        page = page.push(text(status).size(BODY));
+    }
+    framed(
+        head_title("New volume"),
+        column![scrollable(page).direction(lane()).style(scroll)].width(Fill),
     )
 }
 
@@ -846,8 +1963,11 @@ fn entry(theme: &iced::Theme, status: text_input::Status) -> text_input::Style {
 
 /// The notebook: what is running, then what has run.
 pub(crate) fn list(app: &App) -> Element<'_, Message> {
-    let live: Vec<&Record> = app.runs.iter().filter(|r| app.is_live(r)).collect();
-    let past: Vec<&Record> = app.runs.iter().filter(|r| !app.is_live(r)).collect();
+    // The band's field narrows both sections, so a search is one list of what matched rather
+    // than a running section that ignored it and a history that did not.
+    let shown: Vec<&Record> = app.runs.iter().filter(|r| app.matches_search(r)).collect();
+    let live: Vec<&Record> = shown.iter().copied().filter(|r| app.is_live(r)).collect();
+    let past: Vec<&Record> = shown.iter().copied().filter(|r| !app.is_live(r)).collect();
     let start = row![head_title("Sandboxes")];
     let header = match &app.list {
         crate::ListMode::Selecting(ids) => {
@@ -869,7 +1989,9 @@ pub(crate) fn list(app: &App) -> Element<'_, Message> {
             if !past.is_empty() {
                 ordinary = ordinary.push(small_button("Select", push).on_press(Message::Select));
             }
-            ordinary.push(small_button("New run", push).on_press(Message::NewRun))
+            // The page's one filled button, at the end of its own head: the sidebar names features
+            // and this is where the verb for this one lives.
+            ordinary.push(small_button("Create Sandbox", primary).on_press(Message::NewRun))
         }
     }
     .spacing(12)
@@ -888,12 +2010,24 @@ pub(crate) fn list(app: &App) -> Element<'_, Message> {
             rows = rows.push(run_row(app, record));
         }
     }
+    if shown.is_empty() && !app.runs.is_empty() {
+        rows = rows.push(
+            text(format!(
+                "No sandbox matches \u{201c}{}\u{201d}.",
+                app.search().trim()
+            ))
+            .size(BODY)
+            .style(|t| text::Style {
+                color: Some(muted(t)),
+            }),
+        );
+    }
     if app.runs.is_empty() {
         rows = rows.push(
             column![
                 text(
-                    "No runs yet. Start one here, or with `boxdesk run`, `boxdesk shell` or \
-                     `boxdesk up`."
+                    "No sandboxes yet. Create one here, or with `boxdesk run`, `boxdesk shell` \
+                     or `boxdesk up`."
                 )
                 .size(BODY)
                 .style(|t| text::Style {
@@ -917,7 +2051,7 @@ pub(crate) fn list(app: &App) -> Element<'_, Message> {
     if let Some(status) = &app.status {
         body = body.push(text(status).size(BODY));
     }
-    framed(app, header.into(), body)
+    framed(header.into(), body)
 }
 
 /// The width a page of cards stops at, in logical pixels.
@@ -933,12 +2067,11 @@ const PAGE_TOP: f32 = 82.0;
 /// A screen the sidebar opened: its name at the pane's own edge, its content in a column centred
 /// under it at the width a row is still taken in at one glance.
 fn framed<'a>(
-    app: &App,
     head: Element<'a, Message>,
     body: iced::widget::Column<'a, Message>,
 ) -> Element<'a, Message> {
     column![
-        head_bar(app, head),
+        head_bar(head),
         container(body.max_width(PAGE))
             .width(Fill)
             .height(Fill)
@@ -1014,7 +2147,7 @@ fn quit_button<'a>() -> Element<'a, Message> {
 ///
 /// The head fills the line, so whatever it puts at its own right edge stays there and the quit
 /// control sits outside it: on the notebook that puts the quit beyond `New run`.
-fn head_bar<'a>(app: &App, head: Element<'a, Message>) -> Element<'a, Message> {
+fn head_bar<'a>(head: Element<'a, Message>) -> Element<'a, Message> {
     let line: Element<'a, Message> = if crate::chrome::DRAWS_ITS_OWN_QUIT {
         row![container(head).width(Fill), quit_button()]
             .align_y(iced::alignment::Vertical::Center)
@@ -1030,7 +2163,7 @@ fn head_bar<'a>(app: &App, head: Element<'a, Message>) -> Element<'a, Message> {
             top: 0.0,
             right: GUTTER,
             bottom: 0.0,
-            left: head_inset(app),
+            left: GUTTER,
         })
         .width(Fill)
         .into()
@@ -1039,8 +2172,34 @@ fn head_bar<'a>(app: &App, head: Element<'a, Message>) -> Element<'a, Message> {
 /// The sidebar's width: the nav labels plus their counts, and no more.
 pub(crate) const SIDEBAR: f32 = 200.0;
 
+/// The width it folds to: a rail of icons with the words gone.
+///
+/// **Derived, not chosen**, and that is what centres the column. A tab is padded [`TAB_PAD`] on
+/// each side of the icon it starts with, inside a rail padded [`RAIL_PAD`] on each side of the
+/// pill; adding those to the icon is the width at which the icon is exactly centred in its own
+/// pill. So the glyphs do not shift sideways as the labels go — the column stands still and the
+/// words leave it.
+const RAIL_FOLDED: f32 = RAIL_PAD * 2.0 + TAB_PAD[1] * 2.0 + icons::SIZE;
+
+/// The rule between the two panes.
+const RULE: f32 = 1.0;
+
+/// How wide the sidebar stands, at this much of the fold.
+fn rail_width(out: f32) -> f32 {
+    RAIL_FOLDED + (SIDEBAR - RAIL_FOLDED) * out
+}
+
 /// A sidebar row's label, a step up from body text, as a source list sets one.
 const TAB: f32 = 14.0;
+
+/// The gap between a tab's icon and its word.
+///
+/// **Inside the label's own box, not spacing on the row.** Spacing is added between children
+/// whether or not there is room for it, so folded — where what is left for the label is nothing —
+/// a row of icon, spacing and label came to 12 more than the cell it had, overflowed, and drew
+/// its glyph off the centre it was supposed to hold. Padding lives inside the label's width, so
+/// when that width is nothing the gap goes with it and the row is exactly its icon.
+const LABEL_GAP: f32 = 12.0;
 
 /// The one heading style: small, muted and set apart, on a pane and on a section alike.
 fn heading(title: &str) -> Element<'_, Message> {
@@ -1208,20 +2367,97 @@ fn row_card(theme: &iced::Theme, status: button::Status) -> button::Style {
     style
 }
 
-/// What a row can be told to do without opening the run: stop a live one, run an ended one
-/// again, or take its record away. Everything else stays on the run's own screen.
+/// What a row can be told to do, as four icons standing in the same four places on every row.
 ///
+/// **A column holds whether or not the row can use it.** An act a row cannot do is drawn faded
+/// rather than dropped: an icon that moves between rows is an icon the pointer has to hunt for,
+/// and a faded one says *stop it first* where a missing one says nothing. Every glyph carries its
+/// word under the pointer, because an icon alone is a guess until you press it.
+///
+/// **No overflow behind a `\u{2026}`.** Four acts fit four columns; a menu is what a row grows when
+/// it has more to offer than it has room for, and this one does not.
+///
+/// **`Delete` is never live.** That is the same rule the confirm keeps, said a step earlier.
 fn row_actions<'a>(record: &Record, live: bool) -> iced::widget::Row<'a, Message> {
-    if live {
-        return row![
-            small_button("Stop", destructive).on_press(Message::Stop(crate::RunName::of(record)))
-        ];
+    let mut acts = row![].spacing(2);
+    for (icon, word, press) in row_acts(record, live) {
+        acts = acts.push(icon_action(icon, word, press));
     }
-    row![
-        small_button("Re-run", push).on_press(Message::Rerun(crate::RunId::of(record))),
-        small_button("Delete", destructive).on_press(Message::Delete(crate::RunId::of(record))),
+    acts.align_y(iced::alignment::Vertical::Center)
+}
+
+/// The four columns of [`row_actions`], in the order they stand, each with the glyph it wears, the
+/// word it answers to, and what pressing it says — or `None` where this record cannot be told to
+/// do it.
+///
+/// Split out from the drawing so the rule about which acts a record offers is a thing a test can
+/// read. An `Element` is not.
+fn row_acts(record: &Record, live: bool) -> [(icons::Icon, &'static str, Option<Message>); 4] {
+    let id = crate::RunId::of(record);
+    let name = crate::RunName::of(record);
+    let verb = if live {
+        (
+            icons::CIRCLE_STOP,
+            "Stop",
+            Some(Message::Stop(name.clone())),
+        )
+    } else {
+        (icons::PLAY, "Re-run", Some(Message::Rerun(id.clone())))
+    };
+    // Only an `up` sandbox has a guest left waiting to be entered: a `run` ends with its command,
+    // and an ended record has nothing to attach to at all.
+    let shell = (live && record.verb == Verb::Up).then(|| Message::Shell(name));
+    [
+        verb,
+        (icons::SQUARE_TERMINAL, "Shell", shell),
+        (icons::DOWNLOAD, "Export", Some(Message::Export(id.clone()))),
+        (icons::TRASH, "Delete", (!live).then(|| Message::Delete(id))),
     ]
-    .spacing(6)
+}
+
+/// One of a row's icons: the glyph in a square the size the band's icons wear, and its word under
+/// the pointer.
+///
+/// **The glyph is dimmed here rather than by the button.** A button fades a disabled label through
+/// its `text_color`, and [`icons::glyph`] sets a colour of its own, so an icon button left to the
+/// toolkit looks pressable when it is not.
+fn icon_action<'a>(
+    icon: icons::Icon,
+    word: &'a str,
+    press: Option<Message>,
+) -> Element<'a, Message> {
+    let offered = press.is_some();
+    let glyph = icons::glyph(icon)
+        .center()
+        .width(HALO)
+        .style(move |theme: &iced::Theme| text::Style {
+            color: Some(if offered {
+                crate::theme::icon(theme)
+            } else {
+                crate::theme::icon(theme).scale_alpha(0.35)
+            }),
+        });
+    iced::widget::tooltip(
+        button(glyph)
+            .style(halo)
+            .padding(0)
+            .height(HALO)
+            .on_press_maybe(press),
+        container(text(word).size(SMALL).wrapping(text::Wrapping::None))
+            .padding(SMALL_PAD)
+            .style(|theme: &iced::Theme| container::Style {
+                background: Some(crate::theme::raised(theme).into()),
+                border: iced::Border {
+                    color: hairline(theme),
+                    width: 1.0,
+                    radius: CORNER.into(),
+                },
+                shadow: RAISE,
+                ..container::Style::default()
+            }),
+        iced::widget::tooltip::Position::Top,
+    )
+    .into()
 }
 
 /// How big a live sandbox's frame is in the list, in logical pixels. Wide enough to tell two
@@ -1232,7 +2468,11 @@ const THUMBNAIL: (f32, f32) = (160.0, 120.0);
 /// reach. Abbreviations save a few characters and cost the reader the sentence, and this is the
 /// line that says whether a sandbox could touch the network or a directory.
 fn posture_tags(record: &Record) -> String {
-    let p = &record.posture;
+    posture_tags_of(&record.posture)
+}
+
+/// The same, of a posture that is not a record's: what a snapshot promises a sandbox from it.
+fn posture_tags_of(p: &boxdesk_record::Posture) -> String {
     let mut parts = Vec::new();
     if let Some(display) = p.display {
         parts.push(display.as_spec().replace('x', "\u{d7}"));
@@ -1281,7 +2521,6 @@ fn posture_tags(record: &Record) -> String {
 pub(crate) fn run<'a>(app: &'a App, id: &crate::RunId) -> Element<'a, Message> {
     let Some(record) = app.record(id) else {
         return framed(
-            app,
             small_button("← runs", ghost).on_press(Message::Back).into(),
             column![text(format!("the run {id} is no longer in the notebook")).size(BODY)],
         );
@@ -1365,7 +2604,7 @@ pub(crate) fn run<'a>(app: &'a App, id: &crate::RunId) -> Element<'a, Message> {
     .spacing(12)
     .height(Fill);
     let mut page = column![
-        head_bar(app, bar.into()),
+        head_bar(bar.into()),
         container(body).height(Fill).padding(iced::Padding {
             top: 0.0,
             right: GUTTER,
@@ -1712,6 +2951,11 @@ pub(crate) fn new_run<'a>(app: &'a App, form: &'a Form) -> Element<'a, Message> 
         row![
             space().width(Fill),
             page_button("Cancel", push).on_press(Message::Back),
+            // The posture on this form is the thing a snapshot keeps, so this is where one is
+            // written: a snapshot is this sandbox, named and put by, rather than a second form
+            // asking the same questions again. It needs the name, so it is refused without one.
+            page_button("Save as snapshot", push)
+                .on_press_maybe((!form.name.trim().is_empty()).then_some(Message::SaveSnapshot)),
             page_button("Start sandbox", primary).on_press(Message::Start),
         ]
         .spacing(12),
@@ -1722,8 +2966,7 @@ pub(crate) fn new_run<'a>(app: &'a App, form: &'a Form) -> Element<'a, Message> 
         page = page.push(text(status).size(BODY));
     }
     framed(
-        app,
-        head_title("New run"),
+        head_title("New sandbox"),
         column![scrollable(page).direction(lane()).style(scroll)].width(Fill),
     )
 }
@@ -1743,94 +2986,154 @@ fn bytes(n: u64) -> String {
 mod tests {
     use super::*;
 
-    /// Every room the window's own buttons can take: none, and the 91 macOS gives them. The
-    /// geometry takes the room as an argument, so this covers the other platform's layout too
-    /// rather than only the one this build compiles.
-    const ROOMS: [f32; 2] = [0.0, 91.0];
+    /// A record for a run of `verb`, which is all these need: the acts a row offers turn on the
+    /// verb and on whether the run is still up, and on nothing else.
+    fn ran(verb: Verb) -> Record {
+        Record::begin(
+            "sample",
+            verb,
+            vec!["true".to_string()],
+            boxdesk_record::Posture::default(),
+        )
+    }
 
-    /// The toggle and a head cross the window on their own tracks as the sidebar folds. This
-    /// walks the fold and holds the gap between them to the gutter at every step, in both rooms.
+    /// The four columns hold on every row, whatever the row can and cannot do. A column that
+    /// vanished on some rows would move the three beside it, and the pointer would have to read
+    /// each row before it could aim at one.
     #[test]
-    fn the_toggle_keeps_its_room_from_a_head_across_the_whole_fold() {
-        for lights in ROOMS {
-            for step in 0u8..=100 {
-                let out = f32::from(step) / 100.0;
-                let toggle_ends = toggle_at(out, lights) + TOGGLE;
-                let head_starts = SIDEBAR * out + head_inset_at(out, lights);
-                assert!(
-                    head_starts - toggle_ends >= GUTTER,
-                    "at {out} out with {lights} of lights, the head starts at {head_starts} and \
-                     the toggle ends at {toggle_ends}"
+    fn every_row_offers_the_same_four_columns_in_the_same_order() {
+        for verb in [Verb::Run, Verb::Up] {
+            for live in [true, false] {
+                let record = ran(verb);
+                let words: Vec<&str> = row_acts(&record, live)
+                    .iter()
+                    .map(|(_, word, _)| *word)
+                    .collect();
+                assert_eq!(
+                    words,
+                    vec![
+                        if live { "Stop" } else { "Re-run" },
+                        "Shell",
+                        "Export",
+                        "Delete"
+                    ],
+                    "a {verb:?} row, live={live}, stands its acts somewhere else"
                 );
             }
         }
     }
 
-    /// With no window buttons on the line, the toggle has two places to be and slides between
-    /// them: over the tabs' icon column while the rail is out, and on the page's gutter once it
-    /// is folded away, because a folded rail leaves nothing at the icon column to align to. This
-    /// is the Linux layout, and macOS's in full screen, where the titlebar auto-hides.
+    /// **A live run is never offered a delete**, which is the rule the confirm keeps, said a step
+    /// earlier so the press never happens. An ended one is never offered a stop, for the same
+    /// reason from the other side.
     #[test]
-    fn without_lights_the_toggle_runs_between_the_gutter_and_the_icon_column() {
-        let icon_centre = RAIL_PAD + TAB_PAD[1] + icons::SIZE / 2.0;
-        let open_centre = toggle_at(1.0, 0.0) + TOGGLE / 2.0;
+    fn a_live_row_offers_no_delete_and_an_ended_one_offers_no_stop() {
+        let record = ran(Verb::Up);
+        let offered = |live: bool, word: &str| {
+            row_acts(&record, live)
+                .into_iter()
+                .any(|(_, w, press)| w == word && press.is_some())
+        };
         assert!(
-            (open_centre - icon_centre).abs() < 0.01,
-            "out, the toggle is centred at {open_centre} and the icons at {icon_centre}"
+            !offered(true, "Delete"),
+            "a running sandbox was offered a delete"
         );
-        // Folded, what lines up is the hover circle's own edge, since that is the mark a reader
-        // sees, not the glyph's box inside it.
-        let folded_halo_left = toggle_at(0.0, 0.0) - HALO_OVERHANG;
+        assert!(offered(false, "Delete"), "an ended one should be");
         assert!(
-            (folded_halo_left - GUTTER).abs() < 0.01,
-            "folded, the circle starts at {folded_halo_left} and the gutter is {GUTTER}"
+            offered(true, "Stop"),
+            "a running sandbox should be stoppable"
         );
-        // And it is one slide, not a jump: every step is between the two ends.
-        for step in 0u8..=100 {
-            let out = f32::from(step) / 100.0;
-            let at = toggle_at(out, 0.0);
+        assert!(
+            offered(false, "Re-run"),
+            "an ended one should be runnable again"
+        );
+    }
+
+    /// `Shell` is offered only where there is a guest left to enter: an `up` sandbox that is still
+    /// running. Its column is still drawn on every other row, faded, which is why the rule lives
+    /// here rather than in whether the icon exists.
+    #[test]
+    fn only_a_live_up_sandbox_can_be_shelled_into() {
+        let shellable = |verb: Verb, live: bool| {
+            row_acts(&ran(verb), live)
+                .into_iter()
+                .any(|(_, w, press)| w == "Shell" && press.is_some())
+        };
+        assert!(shellable(Verb::Up, true), "a live `up` is the one case");
+        assert!(
+            !shellable(Verb::Up, false),
+            "an ended `up` has no guest left"
+        );
+        assert!(!shellable(Verb::Run, true), "a `run` ends with its command");
+    }
+
+    /// Every room the window's own buttons can take: none, and the 91 macOS gives them. The
+    /// geometry takes the room as an argument, so this covers the other platform's layout too
+    /// rather than only the one this build compiles.
+    const ROOMS: [f32; 2] = [0.0, 91.0];
+
+    /// The band keeps the window's own buttons their room and starts its first control past it,
+    /// and closes that room when full screen takes the buttons off the line. The band is drawn
+    /// where the titlebar would be, so a control that ignored this would be under them.
+    #[test]
+    fn the_band_keeps_the_windows_buttons_their_room() {
+        for lights in ROOMS {
+            let first = band_starts_at(lights);
             assert!(
-                (toggle_at(1.0, 0.0) - 0.01..=toggle_at(0.0, 0.0) + 0.01).contains(&at),
-                "at {out} out the toggle left its own track, at {at}"
+                first >= lights + HEADER_EDGE,
+                "with {lights} of lights the first control starts at {first}, on top of them"
+            );
+        }
+        assert!(
+            band_starts_at(0.0) < band_starts_at(91.0),
+            "the two layouts are the same function of the room, not one layout"
+        );
+        assert_eq!(
+            band_starts_at(0.0),
+            HEADER_EDGE,
+            "full screen should bring the band's contents back to its own edge"
+        );
+    }
+
+    /// Nothing standing on the band is taller than the band, at any scale Settings offers.
+    ///
+    /// **The largest scale is the tight one.** The band holds [`HEAD_BAR`] of window however the
+    /// app is zoomed, so in the lengths a layout is written in it *shrinks* as the scale grows,
+    /// while everything standing on it keeps its number and is drawn larger. 125% is therefore
+    /// where a control runs out of band, and each of these is padded from its own text rather
+    /// than given a height, so one growing would be clipped by the band rather than reported.
+    #[test]
+    fn everything_standing_on_the_band_fits_it_at_every_scale() {
+        let tightest = crate::SCALES
+            .iter()
+            .map(|s| f32::from(s.0) / 100.0)
+            .fold(f32::MIN, f32::max);
+        let band = band_height(tightest);
+        let tall = [
+            ("a glyph's halo", HALO),
+            ("the search field", BODY + SEARCH_PAD[0] * 2.0),
+            ("the badge", BADGE + BADGE_PAD[0] * 2.0),
+            ("the wordmark", HEAD),
+        ];
+        for (what, height) in tall {
+            assert!(
+                height <= band,
+                "{what} is {height} on a band {band} tall at {tightest}x"
             );
         }
     }
 
-    /// With the window's buttons on the line, the toggle aligns the same thing the other layout
-    /// aligns: its hover mark's own edge. Out, that edge is the one every tab pill under it ends
-    /// at; folded, the mark begins where the buttons' room ends. Both were out by
-    /// [`HALO_OVERHANG`], in opposite directions, until 2026-09-10.
+    /// The band is the same amount of window at every scale, which is what keeps the buttons
+    /// macOS draws on it in its middle. They do not zoom, so neither does it.
     #[test]
-    fn with_lights_the_toggles_mark_lines_up_with_the_rail_and_the_buttons() {
-        const ON_THE_LINE: f32 = 91.0;
-        let pill_right = SIDEBAR - RAIL_PAD;
-        let open_mark_right = toggle_at(1.0, ON_THE_LINE) + TOGGLE + HALO_OVERHANG;
-        assert!(
-            (open_mark_right - pill_right).abs() < 0.01,
-            "out, the mark ends at {open_mark_right} and every tab pill at {pill_right}"
-        );
-        let folded_mark_left = toggle_at(0.0, ON_THE_LINE) - HALO_OVERHANG;
-        assert!(
-            (folded_mark_left - ON_THE_LINE).abs() < 0.01,
-            "folded, the mark starts at {folded_mark_left} and the buttons end at {ON_THE_LINE}"
-        );
-    }
-
-    /// Full screen takes the buttons off the head's line, so the room kept for them closes: the
-    /// layout there is the one a platform that never drew them gets. Without this the head on a
-    /// full-screen Mac begins 119 in, past a band holding nothing.
-    #[test]
-    fn full_screen_leaves_no_room_for_buttons_that_are_not_on_the_line() {
-        // The two layouts are not the same function: with the buttons on the line the toggle
-        // starts further in, and the head with it.
-        assert!(
-            toggle_at(0.0, 91.0) > toggle_at(0.0, 0.0),
-            "91 of lights should push the toggle past the icon column"
-        );
-        assert!(
-            head_inset_at(0.0, 91.0) > head_inset_at(0.0, 0.0),
-            "and push a folded head with it"
-        );
+    fn the_band_is_the_same_window_at_every_scale() {
+        for scale in crate::SCALES.iter().map(|s| f32::from(s.0) / 100.0) {
+            let drawn = band_height(scale) * scale;
+            assert!(
+                (drawn - HEAD_BAR).abs() < 0.01,
+                "at {scale}x the band draws as {drawn} of window, not {HEAD_BAR}"
+            );
+        }
     }
 
     /// Every control takes [`CORNER`], so the window has one corner and not a handful that drift
@@ -1876,6 +3179,77 @@ mod tests {
                 slider::HandleShape::Rectangle { border_radius, .. } if border_radius == corner
             ),
             "the slider's handle, which the toolkit draws round as a Circle: {handle:?}"
+        );
+        // The one exception, named rather than hidden, as `CLOSE` is in the icon set: the fold's
+        // control is drawn on a rule rather than on a surface, where a square reads as a break in
+        // the line and a circle reads as something set on it.
+        assert_eq!(
+            divider_toggle(&theme, button::Status::Active).border.radius,
+            (DIVIDER_TOGGLE / 2.0).into(),
+            "the fold's circle is the window's one round control"
+        );
+    }
+
+    /// The circle rides a boundary that is always there, and never reaches far enough into the
+    /// pane beside it to touch a head. While the fold ran to nothing the circle stood on the page
+    /// itself and `Sandboxes` was drawn with it through the `S`; a rail that keeps its icons is
+    /// what took that case away, and this is what holds it away.
+    #[test]
+    fn the_circle_never_reaches_a_head() {
+        assert!(
+            rail_width(0.0) > DIVIDER_TOGGLE / 2.0,
+            "folded, the rail must be wider than the circle's own reach back over it"
+        );
+    }
+
+    /// The fold's strip stays centred on the boundary across the whole fold, and the boundary
+    /// never leaves the window, so there is always a whole circle to work the rail by.
+    #[test]
+    fn the_folds_strip_follows_the_boundary() {
+        for step in 0u8..=100 {
+            let out = f32::from(step) / 100.0;
+            let fold = rail_width(out);
+            let left = reach_at(fold);
+            assert!(left >= 0.0, "at {out} out the strip starts at {left}");
+            assert!(
+                left + DIVIDER_REACH >= fold,
+                "at {out} out the strip ends at {} and misses the boundary at {fold}",
+                left + DIVIDER_REACH
+            );
+        }
+        assert!(
+            rail_width(0.0) < rail_width(1.0),
+            "the rail must widen as the sidebar comes out"
+        );
+    }
+
+    /// A tab's pill stops short of the circle on the boundary, at every fold. Both edges are
+    /// measured back from the same boundary, so one check covers the whole fold: until this, the
+    /// circle was drawn over the corner of the open tab's own mark.
+    #[test]
+    fn a_pill_never_runs_under_the_circle() {
+        for step in 0u8..=100 {
+            let out = f32::from(step) / 100.0;
+            let rail = rail_width(out);
+            let pill_right = rail - RAIL_PAD;
+            let circle_left = rail - DIVIDER_TOGGLE / 2.0;
+            assert!(
+                pill_right < circle_left,
+                "at {out} out the pill ends at {pill_right} and the circle starts at {circle_left}"
+            );
+        }
+    }
+
+    /// Folded, the rail is exactly wide enough to centre the icon each tab starts with, so the
+    /// column of glyphs stands still and only the words leave it.
+    #[test]
+    fn the_folded_rail_centres_its_icons() {
+        let pill = rail_width(0.0) - RAIL_PAD * 2.0;
+        let left = TAB_PAD[1];
+        let right = pill - TAB_PAD[1] - icons::SIZE;
+        assert!(
+            (left - right).abs() < 0.01,
+            "the icon sits {left} from one edge of the pill and {right} from the other"
         );
     }
 

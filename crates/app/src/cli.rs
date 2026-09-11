@@ -65,6 +65,17 @@ pub(crate) enum GuestRoot {
     Unset,
 }
 
+impl GuestRoot {
+    /// The root as one line: where it is, or why there is none.
+    pub(crate) fn spelled(&self) -> String {
+        match self {
+            Self::Present(path) => path.display().to_string(),
+            Self::Absent(path) => format!("{} (nothing there yet)", path.display()),
+            Self::Unset => "none".to_string(),
+        }
+    }
+}
+
 /// Stats what the two chains name; nothing here spawns, so a tick cannot hang on it.
 pub(crate) fn probe() -> Platform {
     let root = match default_root() {
@@ -208,6 +219,99 @@ pub(crate) fn start(boxdesk: &Path, form: &Form) -> Result<crate::RunName, Strin
     // The record is written before the VM boots, so a short wait is all the list needs.
     std::thread::sleep(std::time::Duration::from_millis(300));
     Ok(crate::RunName::started(name))
+}
+
+/// Writes the form as a snapshot named `name`, through `boxdesk snapshot new`.
+///
+/// **Through the binary, not through the store.** The window builds no posture of its own: the
+/// same flags that start a sandbox are the ones that save one, so a snapshot written here and one
+/// written at a terminal are the same file by construction rather than by agreement.
+pub(crate) fn save_snapshot(boxdesk: &Path, form: &Form, name: &str) -> Result<String, String> {
+    let out = Command::new(boxdesk)
+        .args(snapshot_argv(form, name)?)
+        .stdin(Stdio::null())
+        .output()
+        .map_err(|e| format!("run {}: {e}", boxdesk.display()))?;
+    if out.status.success() {
+        Ok(format!("saved the snapshot {name}"))
+    } else {
+        Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+    }
+}
+
+/// The argv `save_snapshot` runs, split out so the flag mapping is testable without a binary.
+///
+/// **`--force`, always.** The window's Save is a button somebody pressed with this name in front
+/// of them, so refusing it and making them find a terminal would be the wrong answer; the CLI's
+/// refusal is for the case where a name was typed blind.
+fn snapshot_argv(form: &Form, name: &str) -> Result<Vec<String>, String> {
+    let posture = posture_args(form, name)?;
+    // `posture_args` leads with `--name NAME`, which `snapshot new` takes as its one positional.
+    let mut argv = vec!["snapshot".to_string(), "new".to_string(), name.to_string()];
+    argv.extend(posture.into_iter().skip(2));
+    argv.push("--force".to_string());
+    let command: Vec<&str> = form.command.split_whitespace().collect();
+    if !command.is_empty() {
+        argv.push("--".to_string());
+        argv.extend(command.iter().map(|word| (*word).to_string()));
+    }
+    Ok(argv)
+}
+
+/// Shows `dirs` in the desktop's file manager, skipping any that are not there.
+///
+/// # Errors
+///
+/// None of them exists, or the platform's opener could not be run.
+pub(crate) fn reveal(dirs: &[(&str, PathBuf)]) -> Result<(), String> {
+    let here: Vec<&PathBuf> = dirs
+        .iter()
+        .map(|(_, dir)| dir)
+        .filter(|d| d.is_dir())
+        .collect();
+    let Some(first) = here.first() else {
+        return Err("nothing is kept yet, so there is nothing to show".to_string());
+    };
+    // The parent, when they share one, so the whole of what this project keeps is in view rather
+    // than one of five windows.
+    let show = first
+        .parent()
+        .filter(|parent| here.iter().all(|d| d.parent() == Some(parent)))
+        .map_or_else(|| (*first).clone(), Path::to_path_buf);
+    opener()
+        .arg(&show)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("showing {}: {e}", show.display()))
+}
+
+/// Opens `url` in the desktop's browser.
+///
+/// # Errors
+///
+/// The platform's opener could not be run.
+pub(crate) fn browse(url: &str) -> Result<(), String> {
+    opener()
+        .arg(url)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("opening {url}: {e}"))
+}
+
+/// The command that hands a path or a URL to the desktop. `open` on macOS, `xdg-open` elsewhere:
+/// the two this project's platforms have.
+fn opener() -> Command {
+    Command::new(if cfg!(target_os = "macos") {
+        "open"
+    } else {
+        "xdg-open"
+    })
 }
 
 /// Stops the run named `name`.
@@ -404,6 +508,54 @@ pub(crate) fn reap(mut child: std::process::Child) {
 
 #[cfg(test)]
 mod tests {
+    /// The window's Save writes the posture the form is showing, through the same verb a
+    /// terminal would use. The name is the positional, never a second `--name`, and the command
+    /// comes after `--` or not at all.
+    #[test]
+    fn saving_a_snapshot_passes_the_forms_posture_to_the_verb() {
+        let mut form = Form {
+            name: "devbox".to_string(),
+            root: "/srv/guest".to_string(),
+            network: true,
+            command: "sleep infinity".to_string(),
+            vcpus: "4".to_string(),
+            mem_mib: "4096".to_string(),
+            results: true,
+            ..Form::default()
+        };
+        let argv = snapshot_argv(&form, "devbox").expect("a well-formed form");
+        assert_eq!(&argv[..3], ["snapshot", "new", "devbox"]);
+        assert!(
+            !argv.iter().any(|a| a == "--name"),
+            "the name is the positional, not a flag: {argv:?}"
+        );
+        for pair in [
+            ["--root", "/srv/guest"],
+            ["--net", "tsi"],
+            ["--vcpus", "4"],
+            ["--mem", "4096"],
+        ] {
+            let at = argv.iter().position(|a| a == pair[0]);
+            assert!(at.is_some(), "{argv:?} never passes {}", pair[0]);
+            let at = at.unwrap_or_default();
+            assert_eq!(argv[at + 1], pair[1], "{} carried the wrong value", pair[0]);
+        }
+        let dashes = argv
+            .iter()
+            .position(|a| a == "--")
+            .expect("a command needs its separator");
+        assert_eq!(argv[dashes + 1..], ["sleep", "infinity"]);
+
+        // A sandbox started to be entered carries no command, and must not end in a bare `--`:
+        // the verb would read the next flag as a word of the command.
+        form.command = String::new();
+        let argv = snapshot_argv(&form, "devbox").expect("a well-formed form");
+        assert!(
+            !argv.iter().any(|a| a == "--"),
+            "an empty command should pass no separator: {argv:?}"
+        );
+    }
+
     use super::*;
 
     /// A bundled app finds the CLI under `Contents/Resources`, and a `target/` pair finds it

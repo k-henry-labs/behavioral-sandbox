@@ -14,8 +14,8 @@ use std::fmt::Write as _;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub(crate) enum Mode {
     Light,
-    #[default]
     Dark,
+    #[default]
     System,
 }
 
@@ -38,7 +38,7 @@ pub(crate) const MODES: [Mode; 3] = [Mode::System, Mode::Light, Mode::Dark];
 /// macOS raises a group off the window under it.
 pub(crate) fn raised(theme: &iced::Theme) -> iced::Color {
     if theme.extended_palette().is_dark {
-        iced::Color::from_rgb8(0x12, 0x12, 0x12)
+        iced::Color::from_rgb8(0x2C, 0x2C, 0x2E)
     } else {
         iced::Color::WHITE
     }
@@ -48,7 +48,7 @@ pub(crate) fn raised(theme: &iced::Theme) -> iced::Color {
 /// macOS sets a source list against the pane beside it.
 pub(crate) fn recessed(theme: &iced::Theme) -> iced::Color {
     if theme.extended_palette().is_dark {
-        iced::Color::from_rgb8(0x05, 0x05, 0x05)
+        iced::Color::from_rgb8(0x16, 0x16, 0x18)
     } else {
         iced::Color::from_rgb8(0xEC, 0xEC, 0xEE)
     }
@@ -122,9 +122,9 @@ fn dark() -> iced::Theme {
     iced::Theme::custom(
         "Dark",
         iced::theme::Palette {
-            background: iced::Color::from_rgb8(0x0A, 0x0A, 0x0A),
-            text: iced::Color::from_rgb8(0xEC, 0xEC, 0xEC),
-            primary: iced::Color::from_rgb8(0xE8, 0x41, 0x42),
+            background: iced::Color::from_rgb8(0x1C, 0x1C, 0x1E),
+            text: iced::Color::from_rgb8(0xF5, 0xF5, 0xF7),
+            primary: iced::Color::from_rgb8(0x0A, 0x84, 0xFF),
             success: iced::Color::from_rgb8(0x30, 0xD1, 0x58),
             warning: iced::Color::from_rgb8(0xFF, 0x9F, 0x0A),
             danger: iced::Color::from_rgb8(0xFF, 0x45, 0x3A),

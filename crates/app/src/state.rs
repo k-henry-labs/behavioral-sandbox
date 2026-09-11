@@ -15,7 +15,7 @@ const FILE: &str = "app-state";
 const SCALE: std::ops::RangeInclusive<u16> = 50..=200;
 
 /// Everything the notebook remembers, one `key value` line each; an absent key is no pick.
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug, Default, PartialEq)]
 pub(crate) struct Saved {
     /// The palette, by the name the toolkit prints it under.
     pub(crate) theme: Option<String>,
@@ -23,6 +23,8 @@ pub(crate) struct Saved {
     pub(crate) scale: Option<u16>,
     /// The screen a plain launch opens on, in the `--open` flag's spelling.
     pub(crate) open: Option<String>,
+    /// How wide the notifications panel is, in logical pixels.
+    pub(crate) panel: Option<f32>,
 }
 
 /// The state file's path: beside the runs directory, or inside it when there is no beside.
@@ -70,6 +72,9 @@ fn render(saved: &Saved) -> String {
     if let Some(open) = &saved.open {
         out.push_str(&format!("open {open}\n"));
     }
+    if let Some(panel) = saved.panel {
+        out.push_str(&format!("panel {panel}\n"));
+    }
     out
 }
 
@@ -86,6 +91,10 @@ fn parse(text: &str) -> Saved {
             saved.scale = scale.parse().ok().filter(|pct| SCALE.contains(pct));
         } else if let Some(open) = line.strip_prefix("open ") {
             saved.open = Some(open.to_owned());
+        } else if let Some(panel) = line.strip_prefix("panel ") {
+            // A width that will not parse, or one from a build whose bounds were different, is
+            // dropped rather than honoured: `panel_within` clamps whatever survives.
+            saved.panel = panel.parse().ok().filter(|w: &f32| w.is_finite());
         }
     }
     saved
@@ -100,6 +109,7 @@ mod tests {
             theme: Some("Nord".to_owned()),
             scale: Some(110),
             open: Some("list".to_owned()),
+            panel: Some(340.0),
         }
     }
 
@@ -166,7 +176,7 @@ mod tests {
         save_at(&path, &every_pick()).expect("saved");
         assert_eq!(
             std::fs::read_to_string(&path).expect("read"),
-            "state 1\ntheme Nord\nscale 110\nopen list\n"
+            "state 1\ntheme Nord\nscale 110\nopen list\npanel 340\n"
         );
         assert!(!tmp_of(&path).exists(), "no temporary stays");
         let blocked = dir.path().join("a-directory");

@@ -133,7 +133,9 @@ impl OpenScreen {
         match self {
             Self::List => Screen::List,
             Self::New => Screen::New,
-            Self::Settings => Screen::Settings,
+            // There is no settings screen to land on: `--open settings` opens the notebook with
+            // the sheet over it, which `App::new` puts up.
+            Self::Settings => Screen::List,
         }
     }
 
@@ -167,6 +169,50 @@ pub(crate) enum ListMode {
     Selecting(BTreeSet<String>),
 }
 
+/// One thing the window told the operator, and when it said it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Notice {
+    /// When it was said, milliseconds since the Unix epoch.
+    pub(crate) at_ms: u64,
+    /// What was said, in the words the status line used.
+    pub(crate) text: String,
+}
+
+/// How many notices are kept. **A window that ran all week is not a log file**, and the ones worth
+/// reading are the recent ones; the oldest go first when this is reached.
+const NOTICES: usize = 200;
+
+/// Where a problem is reported. The repository this build came from, which is the only address
+/// this project has.
+const ISSUES: &str = "https://github.com/kendricklawton/boxdesk/issues";
+
+/// The settings a sheet edits, together, so a draft can be compared with what was there.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Picks {
+    pub(crate) mode: theme::Mode,
+    pub(crate) scale: u16,
+    pub(crate) opens_on: OpenScreen,
+}
+
+/// The settings sheet, and the picks the window had when it opened.
+///
+/// **A pick previews at once and is written down on Apply.** Trying a theme should show you the
+/// theme, so every control here takes effect the moment it is pressed; what `Close` does is put
+/// back what was there, which is what makes trying one free. Nothing reaches the state file until
+/// `Apply`.
+#[derive(Debug, Clone)]
+pub(crate) struct Settings {
+    /// What to put back if this sheet is closed rather than applied.
+    was: Picks,
+}
+
+impl Settings {
+    /// Whether anything has been changed since the sheet opened, which is what `Apply` is for.
+    pub(crate) fn changed(&self, now: Picks) -> bool {
+        self.was != now
+    }
+}
+
 /// What a destructive press is waiting on, and the only thing that draws the modal.
 ///
 /// **Nothing is removed until [`Message::DeleteConfirmed`] answers one of these.** One value for
@@ -177,14 +223,22 @@ pub(crate) enum Confirm {
     One(RunId),
     /// The list's selection, which a cancel leaves selected.
     Selected(BTreeSet<String>),
+    /// One volume, and everything in it. **A volume is the thing that was not ephemeral**, so
+    /// this is the one question in the window whose answer destroys something a run had kept.
+    Volume(String),
+    /// Every ended run, with the count so the question can say how many.
+    Swept(usize),
+    /// Every store this project keeps. The largest answer in the window.
+    Everything,
 }
 
 impl Confirm {
     /// How many records answering yes would remove.
     pub(crate) fn len(&self) -> usize {
         match self {
-            Self::One(_) => 1,
+            Self::One(_) | Self::Volume(_) | Self::Everything => 1,
             Self::Selected(ids) => ids.len(),
+            Self::Swept(n) => *n,
         }
     }
 }
@@ -219,7 +273,7 @@ impl std::fmt::Display for Scale {
 }
 
 /// The scales Settings offers.
-const SCALES: [Scale; 4] = [Scale(90), Scale(100), Scale(110), Scale(125)];
+pub(crate) const SCALES: [Scale; 4] = [Scale(90), Scale(100), Scale(110), Scale(125)];
 
 /// The window as a source-list app opens one: on macOS the title is hidden and the titlebar is
 /// transparent over the content, so the sidebar runs to the top with the traffic lights on it.
@@ -296,6 +350,7 @@ fn main() -> ExitCode {
     let open = cli.open;
     let scale = saved.scale.unwrap_or(100);
     let opens_on = saved.open.as_deref().and_then(OpenScreen::from_name);
+    let panel = saved.panel;
     let boot = move || {
         let mut app = App::new(
             store.clone(),
@@ -308,6 +363,9 @@ fn main() -> ExitCode {
         app.theme_overridden = theme_overridden;
         app.scale = scale;
         app.opens_on = opens_on.unwrap_or(OpenScreen::List);
+        if let Some(panel) = panel {
+            app.panel = screens::panel_within(panel);
+        }
         if app.status.is_none() {
             app.status = theme_note.clone();
         }
@@ -416,8 +474,16 @@ enum Screen {
     New,
     /// Runs worth trying, each one press from a filled form.
     Cookbook,
-    /// The notebook's own knobs.
-    Settings,
+    /// The sandboxes worth making again, by name.
+    Snapshots,
+    /// Where images come from, and who this machine is when it asks.
+    Registries,
+    /// The form for a new registry.
+    NewRegistry,
+    /// Directories with lives of their own.
+    Volumes,
+    /// The form for a new volume.
+    NewVolume,
 }
 
 /// Which captured file the output pane shows.
@@ -799,12 +865,26 @@ impl Form {
 
     /// The form filled from a record, for a re-run: its command and posture again.
     fn from_record(record: &Record) -> Self {
-        let p = &record.posture;
+        Self::from_posture(&record.posture, &record.command, String::new())
+    }
+
+    /// The form filled from a snapshot, which is what pressing one does: its posture, its command
+    /// and its name, ready to be started or edited first.
+    ///
+    /// Through the same filler as [`from_record`](Self::from_record), because a snapshot and a
+    /// record carry the same posture: two fillers would be two answers to one question, and the
+    /// second is the one a new posture field gets missed in.
+    fn from_snapshot(snapshot: &boxdesk_record::Snapshot) -> Self {
+        Self::from_posture(&snapshot.posture, &snapshot.command, snapshot.name.clone())
+    }
+
+    /// The form a posture and a command describe, under `name`.
+    fn from_posture(p: &boxdesk_record::Posture, command: &[String], name: String) -> Self {
         Self {
-            name: String::new(),
+            name,
             root: p.root.display().to_string(),
             writable_root: p.rootfs == boxdesk_record::Rootfs::Writable,
-            command: record.command.join(" "),
+            command: command.join(" "),
             mounts: p
                 .mounts
                 .iter()
@@ -828,6 +908,64 @@ impl Form {
             vcpus: p.vcpus.to_string(),
             mem_mib: p.mem_mib.to_string(),
         }
+    }
+}
+
+/// The fields of the add-a-registry form. Four boxes, because a registry record is four things
+/// and a password is not one of them.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct RegistryForm {
+    pub(crate) name: String,
+    pub(crate) url: String,
+    pub(crate) project: String,
+    pub(crate) username: String,
+}
+
+/// The boxes of the make-a-volume form. Two, because a volume is a name and a line about it; the
+/// directory is made here and the contents arrive from a guest.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct VolumeForm {
+    pub(crate) name: String,
+    pub(crate) about: String,
+}
+
+/// Which box of [`VolumeForm`] a keystroke went into.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum VolumeField {
+    Name,
+    About,
+}
+
+/// Which box of [`RegistryForm`] a keystroke went into.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RegistryField {
+    Name,
+    Url,
+    Project,
+    Username,
+}
+
+impl RegistryForm {
+    /// The registry these boxes describe, or what is wrong with them.
+    ///
+    /// **Refused here rather than by the store**, so the message names the box to go back to: a
+    /// name that is not a file name and a host that is empty are the two ways this goes wrong.
+    fn registry(&self) -> Result<boxdesk_record::Registry, String> {
+        let name = self.name.trim();
+        let url = self.url.trim();
+        if name.is_empty() {
+            return Err("a registry needs a name to be listed under".to_string());
+        }
+        if !boxdesk_record::valid_id(name) {
+            return Err(format!(
+                "{name:?} is not a usable name: letters, digits, `-` and `_`"
+            ));
+        }
+        if url.is_empty() {
+            return Err("a registry needs a host, as it appears in an image reference".to_string());
+        }
+        Ok(boxdesk_record::Registry::new(name, url)
+            .signed_in_as(self.project.trim(), self.username.trim()))
     }
 }
 
@@ -883,6 +1021,32 @@ pub(crate) enum Message {
     SetTheme(theme::Mode),
     /// The toolkit's report of what the desktop is showing, at start and on every change.
     DesktopTheme(iced::theme::Mode),
+    /// Open the troubleshoot sheet, or close it.
+    Troubleshoot,
+    /// Put what this machine has on the clipboard, for pasting into a report.
+    CopyDiagnostics,
+    /// Show the directory everything is kept in.
+    RevealData,
+    /// Open where a problem is reported.
+    ReportProblem,
+    /// Ask before removing every ended run.
+    SweepEnded,
+    /// Ask before removing every store this project keeps.
+    ResetEverything,
+    /// Open the notifications panel, or close it.
+    Notifications,
+    /// Forget everything the window has said.
+    ClearNotices,
+    /// The panel's edge was taken hold of.
+    PanelGrabbed,
+    /// The pointer moved while the edge was held.
+    PanelDragged(iced::Point),
+    /// The edge was let go, or the pointer left the window still holding it.
+    PanelDropped,
+    /// Put back what the settings were when the sheet opened, and take it down.
+    SettingsClosed,
+    /// Write the settings down, and take the sheet down.
+    SettingsApplied,
     /// Draw at this scale from now on, and remember it.
     SetScale(Scale),
     /// Open the next plain launch on this screen, and remember it.
@@ -891,9 +1055,43 @@ pub(crate) enum Message {
     ResetSettings,
     /// Fold the sidebar away, or bring it back.
     ToggleSidebar,
+    /// The band's field was typed in: narrow the list to this.
+    Search(String),
+    /// Put the cursor in the band's field, which is what the chord it advertises does.
+    FocusSearch,
+    /// The pointer arrived on the fold, or left it: whether to draw the control there.
+    HoverDivider(bool),
     NewRun,
     /// Open the cookbook.
     Cookbook,
+    /// Open the snapshots.
+    Snapshots,
+    /// Open the registries.
+    Registries,
+    /// Take a registry away. The images already pulled from it are untouched.
+    ForgetRegistry(String),
+    /// Open the form for a new registry.
+    NewRegistry,
+    /// A box of that form was typed in.
+    RegistryField(RegistryField, String),
+    /// Write the form as a registry.
+    AddRegistry,
+    /// Open the volumes.
+    Volumes,
+    /// Open the form for a new volume.
+    NewVolume,
+    /// A box of that form was typed in.
+    VolumeField(VolumeField, String),
+    /// Make the volume the form describes.
+    AddVolume,
+    /// Ask before taking a volume and everything in it away.
+    ForgetVolume(String),
+    /// Fill the start form from a snapshot and show it, rather than starting it.
+    UseSnapshot(String),
+    /// Write the start form as a snapshot, under the name the form carries.
+    SaveSnapshot,
+    /// Take a snapshot away. The sandboxes already made from it are untouched.
+    ForgetSnapshot(String),
     /// Fill the start form from a cookbook entry, and show it rather than start it.
     Example(Example),
     Field(Field, String),
@@ -944,6 +1142,20 @@ pub(crate) enum Message {
 
 pub(crate) struct App {
     store: Store,
+    /// Where the snapshots are, or `None` on a machine with nowhere to put them. The window still
+    /// opens without one: a notebook that refused to start because a directory could not be named
+    /// would be a notebook nobody could read their runs in.
+    snapshots_store: Option<boxdesk_record::SnapshotStore>,
+    /// Every snapshot, by name, as of the last tick.
+    snapshots: Vec<boxdesk_record::Snapshot>,
+    /// Where the registries are, `None` on a machine with nowhere to keep them.
+    registries_store: Option<boxdesk_record::RegistryStore>,
+    /// Every registry, by name, as of the last tick.
+    registries: Vec<boxdesk_record::Registry>,
+    /// Where the volumes are, `None` on a machine with nowhere to keep them.
+    volumes_store: Option<boxdesk_record::VolumeStore>,
+    /// Every volume, by name, with what it holds, as of the last tick.
+    volumes: Vec<(boxdesk_record::Volume, u64)>,
     screen: Screen,
     /// Every run, newest first, as of the last tick.
     runs: Vec<Record>,
@@ -952,6 +1164,10 @@ pub(crate) struct App {
     /// Where `boxdesk` and the guest root are, as of the last tick: what the menu reports.
     platform: cli::Platform,
     form: Form,
+    /// The boxes of the add-a-registry form.
+    registry_form: RegistryForm,
+    /// The boxes of the make-a-volume form.
+    volume_form: VolumeForm,
     /// The last thing worth telling the operator: an error, or what just happened.
     status: Option<String>,
     output: Output,
@@ -980,12 +1196,34 @@ pub(crate) struct App {
     /// The question a destructive press is waiting on. `None` is a window with nothing to answer,
     /// and is the only state in which anything can be removed.
     confirm: Option<Confirm>,
+    /// The settings sheet, while one is up. A sheet rather than a screen, so what it is changing
+    /// stays visible behind it.
+    settings: Option<Settings>,
+    /// Everything the window has said, newest first. **The status line holds one thing and the
+    /// next thing destroys it**; this is where the one before went.
+    notices: Vec<Notice>,
+    /// How many have arrived since the panel was last opened.
+    unread: usize,
+    /// Whether the notifications panel is open.
+    notices_open: bool,
+    /// Whether the troubleshoot sheet is open.
+    trouble_open: bool,
+    /// How wide that panel is, in logical pixels, which the divider beside it drags.
+    panel: f32,
+    /// Where the pointer was at the last move of a divider drag, or `None` when none is under
+    /// way. A drag is tracked as a delta, so it needs no knowledge of how wide the window is.
+    dragging: Option<f32>,
     /// Whether the sidebar is out, and where it stands while that is changing.
     sidebar: Animation<bool>,
     /// The instant the last frame was drawn at, which every animation is read at.
     now: std::time::Instant,
     /// The window this is drawing in, once it is open: what a zoom is asked of.
     window: Option<iced::window::Id>,
+    /// What the band's field holds: the words the list is narrowed by. Not saved, because a
+    /// filter is what is being looked at now rather than how this window is set up.
+    search: String,
+    /// Whether the pointer is on the fold, which is the only thing that draws the control there.
+    divider_hovered: bool,
     /// Whether the window is full screen. Only macOS moves its buttons off the head's line for
     /// it, but the field is not `cfg`-gated: a screen asks [`lights`](Self::lights), and one
     /// answer for every platform is one layout to reason about.
@@ -1011,11 +1249,19 @@ impl App {
     ) -> Self {
         let mut app = Self {
             store,
+            snapshots_store: boxdesk_record::SnapshotStore::open().ok(),
+            snapshots: Vec::new(),
+            registries_store: boxdesk_record::RegistryStore::open().ok(),
+            registries: Vec::new(),
+            volumes_store: boxdesk_record::VolumeStore::open().ok(),
+            volumes: Vec::new(),
             screen: Screen::List,
             runs: Vec::new(),
             live: BTreeSet::new(),
             platform: cli::Platform::default(),
             form: Form::blank(),
+            registry_form: RegistryForm::default(),
+            volume_form: VolumeForm::default(),
             status: None,
             output: Output::default(),
             results: Vec::new(),
@@ -1030,10 +1276,19 @@ impl App {
             opens_on: OpenScreen::List,
             list: ListMode::Browsing,
             confirm: None,
+            settings: None,
+            notices: Vec::new(),
+            unread: 0,
+            notices_open: false,
+            trouble_open: false,
+            panel: screens::PANEL_DEFAULT,
+            dragging: None,
             sidebar: Animation::new(true).quick().easing(Easing::EaseInOut),
             now: std::time::Instant::now(),
             window: None,
             // A window opens windowed; the first resize answers for the rest.
+            search: String::new(),
+            divider_hovered: false,
             fullscreen: false,
         };
         app.refresh();
@@ -1054,10 +1309,14 @@ impl App {
 
     fn title(&self) -> String {
         match &self.screen {
-            Screen::Settings => format!("{NAME} › settings"),
             Screen::List => format!("{NAME} › sandboxes"),
             Screen::New => format!("{NAME} › new run"),
             Screen::Cookbook => format!("{NAME} › cookbook"),
+            Screen::Snapshots => format!("{NAME} › snapshots"),
+            Screen::Registries => format!("{NAME} › registries"),
+            Screen::NewRegistry => format!("{NAME} › new registry"),
+            Screen::Volumes => format!("{NAME} › volumes"),
+            Screen::NewVolume => format!("{NAME} › new volume"),
             Screen::Run(id) => format!(
                 "{NAME} › {}",
                 self.record(id).map_or(id.as_str(), |r| r.name.as_str())
@@ -1069,7 +1328,104 @@ impl App {
     /// screen, where macOS hides the titlebar carrying them, and none where the platform never
     /// drew them on that line.
     pub(crate) fn lights(&self) -> f32 {
-        if self.fullscreen { 0.0 } else { chrome::LIGHTS }
+        if self.fullscreen {
+            0.0
+        } else {
+            chrome::LIGHTS / self.scale_factor()
+        }
+    }
+
+    /// What every layout length is multiplied by before it is drawn, which is what Settings'
+    /// scale sets.
+    ///
+    /// **Anything that has to line up with the platform's own chrome is divided by this.** The
+    /// window's buttons are drawn by macOS in the window's own points and do not scale with the
+    /// app's; a length handed to the toolkit is in points the toolkit then scales. So 91 of room
+    /// asked for at 125% reserved 114 of window for buttons that still took 91, and the band's
+    /// own height stretched past the line the buttons sit on. Dividing turns a measurement of the
+    /// platform's chrome into the length that draws as that measurement.
+    pub(crate) fn scale_factor(&self) -> f32 {
+        f32::from(self.scale) / 100.0
+    }
+
+    /// What the band's field holds, for the field to draw.
+    pub(crate) fn search(&self) -> &str {
+        &self.search
+    }
+
+    /// Whether the fold is showing the control that works it.
+    pub(crate) fn divider_hovered(&self) -> bool {
+        self.divider_hovered
+    }
+
+    /// The mode the band's sun-and-moon steps to: the next of [`theme::MODES`], wrapping, so one
+    /// glyph walks the three rather than the band carrying a picker Settings already has.
+    pub(crate) fn next_mode(&self) -> theme::Mode {
+        let modes = theme::MODES;
+        let at = modes.iter().position(|m| *m == self.mode).unwrap_or(0);
+        modes[(at + 1) % modes.len()]
+    }
+
+    /// Whether `record` is one of what the band's field is asking for: its name or the command it
+    /// ran holding the words typed, folded to one case so a name is found however it is spelled.
+    ///
+    /// An empty field asks for everything, which is what makes the field's absence and its being
+    /// empty the same list.
+    /// Every snapshot, by name, as of the last tick.
+    pub(crate) fn snapshots(&self) -> &[boxdesk_record::Snapshot] {
+        &self.snapshots
+    }
+
+    /// The boxes of the add-a-registry form, as they stand.
+    pub(crate) fn registry_form(&self) -> &RegistryForm {
+        &self.registry_form
+    }
+
+    /// Every registry, by name, as of the last tick.
+    pub(crate) fn registries(&self) -> &[boxdesk_record::Registry] {
+        &self.registries
+    }
+
+    /// Every volume, by name, with what it holds, as of the last tick.
+    pub(crate) fn volumes(&self) -> &[(boxdesk_record::Volume, u64)] {
+        &self.volumes
+    }
+
+    /// The boxes of the make-a-volume form, as they stand.
+    pub(crate) fn volume_form(&self) -> &VolumeForm {
+        &self.volume_form
+    }
+
+    /// Whether a volume answers the band's field: its name and the line beside it.
+    pub(crate) fn matches_volume(&self, volume: &boxdesk_record::Volume) -> bool {
+        asked_for(&self.search, &format!("{} {}", volume.name, volume.about))
+    }
+
+    /// Whether a registry answers the band's field: its name, its host and its project.
+    pub(crate) fn matches_registry(&self, registry: &boxdesk_record::Registry) -> bool {
+        asked_for(
+            &self.search,
+            &format!(
+                "{} {} {} {}",
+                registry.name, registry.url, registry.project, registry.username
+            ),
+        )
+    }
+
+    /// Whether a snapshot answers the band's field, by the same rule a run does: its name and the
+    /// words beside it, every word of the search present somewhere.
+    pub(crate) fn matches_snapshot(&self, snapshot: &boxdesk_record::Snapshot) -> bool {
+        asked_for(
+            &self.search,
+            &format!("{} {}", snapshot.name, snapshot.about),
+        )
+    }
+
+    pub(crate) fn matches_search(&self, record: &Record) -> bool {
+        asked_for(
+            &self.search,
+            &format!("{} {}", record.name, record.command.join(" ")),
+        )
     }
 
     /// The ids a selection may hold: every run that has ended. A live run is refused a delete, so
@@ -1105,6 +1461,32 @@ impl App {
                 found
                     .into_iter()
                     .map(|f| RunName::started(f.name))
+                    .collect()
+            })
+            .unwrap_or_default();
+        self.snapshots = self
+            .snapshots_store
+            .as_ref()
+            .map(boxdesk_record::SnapshotStore::list)
+            .unwrap_or_default();
+        self.registries = self
+            .registries_store
+            .as_ref()
+            .map(boxdesk_record::RegistryStore::list)
+            .unwrap_or_default();
+        // The size is walked here, once a tick, rather than in `view`, which iced rebuilds on
+        // every message: a directory walk per frame is what that would be.
+        self.volumes = self
+            .volumes_store
+            .as_ref()
+            .map(|store| {
+                store
+                    .list()
+                    .into_iter()
+                    .map(|v| {
+                        let held = store.size_of(&v.name);
+                        (v, held)
+                    })
                     .collect()
             })
             .unwrap_or_default();
@@ -1178,7 +1560,14 @@ impl App {
     fn watches(&self) -> Vec<lease::Watch> {
         let open = match &self.screen {
             Screen::Run(id) => self.record(id).map(RunName::of),
-            Screen::Settings | Screen::Cookbook => return Vec::new(),
+            Screen::Cookbook
+            | Screen::Snapshots
+            | Screen::Registries
+            | Screen::NewRegistry
+            | Screen::Volumes
+            | Screen::NewVolume => {
+                return Vec::new();
+            }
             Screen::List | Screen::New => None,
         };
         let mut watches = Vec::new();
@@ -1213,11 +1602,179 @@ impl App {
     }
 
     /// What Settings persists, gathered whole so every save writes every knob.
+    /// The settings as they stand, which is what a sheet drafts against.
+    pub(crate) fn picks(&self) -> Picks {
+        Picks {
+            mode: self.mode,
+            scale: self.scale,
+            opens_on: self.opens_on,
+        }
+    }
+
+    /// Puts `picks` back, without writing anything down: what closing a sheet does.
+    fn restore(&mut self, picks: Picks) {
+        self.mode = picks.mode;
+        self.scale = picks.scale;
+        self.opens_on = picks.opens_on;
+    }
+
+    /// The settings sheet, while one is up.
+    pub(crate) fn settings_sheet(&self) -> Option<&Settings> {
+        self.settings.as_ref()
+    }
+
+    /// Whether the troubleshoot sheet is open.
+    pub(crate) fn trouble_open(&self) -> bool {
+        self.trouble_open
+    }
+
+    /// Every directory this project keeps something in, by the name it is known by.
+    ///
+    /// **One list, because two would be a reset that missed one.** The page that says where
+    /// things are and the act that removes them read the same list, so a store added to the
+    /// project and forgotten here would be visibly missing from both rather than quietly
+    /// surviving a wipe.
+    pub(crate) fn data_dirs(&self) -> Vec<(&'static str, PathBuf)> {
+        let each: [(&str, std::io::Result<PathBuf>); 5] = [
+            ("runs", boxdesk_record::runs_dir()),
+            ("snapshots", boxdesk_record::snapshots_dir()),
+            ("registries", boxdesk_record::registries_dir()),
+            ("volumes", boxdesk_record::volumes_dir()),
+            ("images", boxdesk_record::images_dir()),
+        ];
+        each.into_iter()
+            .filter_map(|(name, dir)| dir.ok().map(|dir| (name, dir)))
+            .collect()
+    }
+
+    /// What this machine has, as the text somebody pastes into a report.
+    ///
+    /// **Paths and counts, never contents.** A run's command, a registry's username and what a
+    /// guest wrote are this person's business; what a report needs is which build, which host,
+    /// and how much of what is where.
+    pub(crate) fn diagnostics(&self) -> String {
+        let mut out = format!(
+            "boxdesk {}\nhost {} {}\n",
+            env!("CARGO_PKG_VERSION"),
+            std::env::consts::OS,
+            std::env::consts::ARCH,
+        );
+        out.push_str(&format!(
+            "cli {}\n",
+            self.platform
+                .boxdesk
+                .as_ref()
+                .map_or_else(|| "not found".to_string(), |p| p.display().to_string())
+        ));
+        out.push_str(&format!("guest root {}\n", self.platform.root.spelled()));
+        out.push_str(&format!(
+            "runs {} ({} live)\nsnapshots {}\nregistries {}\nvolumes {}\n",
+            self.runs.len(),
+            self.live.len(),
+            self.snapshots.len(),
+            self.registries.len(),
+            self.volumes.len(),
+        ));
+        for (name, dir) in self.data_dirs() {
+            out.push_str(&format!("{name} dir {}\n", dir.display()));
+        }
+        out
+    }
+
+    /// Removes every store this project keeps, and reports what went.
+    ///
+    /// **Each directory by name, never a computed parent.** `$BOXDESK_RUNS_DIR` can point
+    /// anywhere, so reaching for its parent and handing that to `remove_dir_all` would be a reset
+    /// that removed whatever happened to be beside it.
+    fn wipe(&mut self) -> String {
+        let mut gone = Vec::new();
+        let mut failed: Option<String> = None;
+        for (name, dir) in self.data_dirs() {
+            match std::fs::remove_dir_all(&dir) {
+                Ok(()) => gone.push(name),
+                // One that was never there is one already in the state being asked for.
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => gone.push(name),
+                Err(e) => {
+                    failed.get_or_insert_with(|| format!("{name}: {e}"));
+                }
+            }
+        }
+        self.mode = theme::Mode::default();
+        self.scale = 100;
+        self.opens_on = OpenScreen::List;
+        self.panel = screens::PANEL_DEFAULT;
+        let _ = state::save(&self.saved());
+        self.refresh();
+        match failed {
+            Some(why) => format!("removed {}, then {why}", gone.join(", ")),
+            None => format!("removed {}, and put the settings back", gone.join(", ")),
+        }
+    }
+
+    /// Everything the window has said, newest first.
+    pub(crate) fn notices(&self) -> &[Notice] {
+        &self.notices
+    }
+
+    /// How many have arrived since the panel was last opened.
+    pub(crate) fn unread(&self) -> usize {
+        self.unread
+    }
+
+    /// Whether the notifications panel is open.
+    pub(crate) fn notices_open(&self) -> bool {
+        self.notices_open
+    }
+
+    /// How wide that panel is.
+    pub(crate) fn panel(&self) -> f32 {
+        self.panel
+    }
+
+    /// Whether the panel's edge is being dragged.
+    pub(crate) fn dragging(&self) -> bool {
+        self.dragging.is_some()
+    }
+
+    /// Keeps `text` as a notice, newest first, dropping the oldest past [`NOTICES`].
+    fn note(&mut self, text: String) {
+        self.notices.insert(
+            0,
+            Notice {
+                at_ms: boxdesk_record::now_ms(),
+                text,
+            },
+        );
+        self.notices.truncate(NOTICES);
+        // Read as it arrives when the panel is open, so the bell is not marked for something the
+        // reader is already looking at.
+        if !self.notices_open {
+            self.unread += 1;
+        }
+    }
+
+    /// What a pick does: previewed while a sheet is up, written down at once when one is not.
+    ///
+    /// **The band's theme toggle is the reason for the second half.** It is not part of the sheet,
+    /// so pressing it is a decision rather than a draft, and it should survive the next launch
+    /// without anybody pressing Apply.
+    fn picked(&mut self, said: String) {
+        if self.settings.is_some() {
+            self.status = None;
+            return;
+        }
+        self.status = match state::save(&self.saved()) {
+            Ok(()) => Some(said),
+            Err(e) => Some(format!("{said} for this window; not saved: {e}")),
+        };
+    }
+
     fn saved(&self) -> state::Saved {
         state::Saved {
             theme: Some(self.mode.to_string()),
             scale: Some(self.scale),
             open: Some(self.opens_on.to_string()),
+            panel: Some(self.panel),
         }
     }
 
@@ -1236,7 +1793,23 @@ impl App {
         self.runs.iter().find(|r| r.name == name.as_str())
     }
 
+    /// Runs `message`, and keeps whatever it decided to say.
+    ///
+    /// **One place, so a message that reports something cannot forget to record it.** Thirty
+    /// handlers assign to the status line and the next one destroys what the last one wrote; this
+    /// notices the change instead of asking each of them to remember.
     fn update(&mut self, message: Message) -> Task<Message> {
+        let said = self.status.clone();
+        let task = self.act(message);
+        if self.status != said
+            && let Some(now) = self.status.clone()
+        {
+            self.note(now);
+        }
+        task
+    }
+
+    fn act(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::Tick => {
                 self.refresh();
@@ -1254,9 +1827,101 @@ impl App {
                 Task::none()
             }
             Message::Settings => {
-                self.leave();
-                self.set_screen(Screen::Settings);
+                // A sheet over whatever is showing, not a screen instead of it: what the scale
+                // and the theme are changing stays visible behind the card while they change.
+                self.settings = Some(Settings { was: self.picks() });
                 self.status = None;
+                Task::none()
+            }
+            Message::Troubleshoot => {
+                self.trouble_open = !self.trouble_open;
+                Task::none()
+            }
+            Message::CopyDiagnostics => {
+                self.status = Some("what this machine has is on the clipboard".to_string());
+                iced::clipboard::write(self.diagnostics())
+            }
+            Message::RevealData => {
+                self.status = match cli::reveal(&self.data_dirs()) {
+                    Ok(()) => Some("showed where everything is kept".to_string()),
+                    Err(e) => Some(e),
+                };
+                Task::none()
+            }
+            Message::ReportProblem => {
+                self.status = match cli::browse(ISSUES) {
+                    Ok(()) => Some(format!("opened {ISSUES}")),
+                    Err(e) => Some(e),
+                };
+                Task::none()
+            }
+            Message::SweepEnded => {
+                let ended = self.runs.iter().filter(|r| !self.is_live(r)).count();
+                if ended == 0 {
+                    self.status = Some("there are no ended runs to sweep".to_string());
+                    return Task::none();
+                }
+                self.confirm = Some(Confirm::Swept(ended));
+                Task::none()
+            }
+            Message::ResetEverything => {
+                self.confirm = Some(Confirm::Everything);
+                Task::none()
+            }
+            Message::Notifications => {
+                self.notices_open = !self.notices_open;
+                if self.notices_open {
+                    self.unread = 0;
+                }
+                Task::none()
+            }
+            Message::ClearNotices => {
+                self.notices.clear();
+                self.unread = 0;
+                Task::none()
+            }
+            Message::PanelGrabbed => {
+                // `None` until the first move: a press says a drag has begun, and the move after
+                // it is what says where from.
+                self.dragging = Some(f32::NAN);
+                Task::none()
+            }
+            Message::PanelDragged(at) => {
+                if let Some(last) = self.dragging {
+                    if last.is_finite() {
+                        // The edge is on the panel's left, so the pointer moving left widens it.
+                        self.panel = screens::panel_within(self.panel + (last - at.x));
+                    }
+                    self.dragging = Some(at.x);
+                }
+                Task::none()
+            }
+            Message::PanelDropped => {
+                if self.dragging.take().is_some() {
+                    // Written down on release rather than on every move: a drag is one decision,
+                    // not sixty.
+                    if let Err(e) = state::save(&self.saved()) {
+                        self.status = Some(format!("the panel's width was not saved: {e}"));
+                    }
+                }
+                Task::none()
+            }
+            Message::SettingsClosed => {
+                if let Some(sheet) = self.settings.take() {
+                    // Put back what was here. Every pick took effect the moment it was pressed, so
+                    // this is the only thing that makes trying one free.
+                    self.restore(sheet.was);
+                    self.status = None;
+                }
+                Task::none()
+            }
+            Message::SettingsApplied => {
+                if self.settings.take().is_some() {
+                    self.status = match state::save(&self.saved()) {
+                        Ok(()) => Some("settings applied".to_string()),
+                        Err(e) => Some(format!("applied for this window; not saved: {e}")),
+                    };
+                }
                 Task::none()
             }
             Message::Keyboard(event) => {
@@ -1267,12 +1932,23 @@ impl App {
                 }
                 Task::none()
             }
+            Message::Search(words) => {
+                self.search = words;
+                Task::none()
+            }
+            Message::HoverDivider(on) => {
+                self.divider_hovered = on;
+                Task::none()
+            }
+            Message::FocusSearch => {
+                // The field narrows the list, so the chord shows the list it narrows: focusing it
+                // from the form or a run's pane would filter a screen the reader cannot see.
+                self.leave();
+                iced::widget::operation::focus(iced::widget::Id::new(screens::SEARCH_ID))
+            }
             Message::SetTheme(mode) => {
                 self.mode = mode;
-                self.status = match state::save(&self.saved()) {
-                    Ok(()) => Some(format!("drawing in {mode}")),
-                    Err(e) => Some(format!("drawing in {mode} for this window; not saved: {e}")),
-                };
+                self.picked(format!("drawing in {mode}"));
                 Task::none()
             }
             Message::ToggleSidebar => {
@@ -1306,10 +1982,7 @@ impl App {
                 self.mode = theme::Mode::default();
                 self.scale = 100;
                 self.opens_on = OpenScreen::List;
-                self.status = match state::save(&self.saved()) {
-                    Ok(()) => Some("settings reset".to_string()),
-                    Err(e) => Some(format!("settings reset for this window; not saved: {e}")),
-                };
+                self.picked("settings reset".to_string());
                 Task::none()
             }
             Message::DesktopTheme(desktop) => {
@@ -1318,21 +1991,12 @@ impl App {
             }
             Message::SetScale(Scale(pct)) => {
                 self.scale = pct;
-                self.status = match state::save(&self.saved()) {
-                    Ok(()) => Some(format!("drawn at {}", Scale(pct))),
-                    Err(e) => Some(format!(
-                        "drawn at {} for this window; not saved: {e}",
-                        Scale(pct)
-                    )),
-                };
+                self.picked(format!("drawn at {}", Scale(pct)));
                 Task::none()
             }
             Message::SetOpensOn(open) => {
                 self.opens_on = open;
-                self.status = match state::save(&self.saved()) {
-                    Ok(()) => Some(format!("a plain launch now opens on the {open} screen")),
-                    Err(e) => Some(format!("not saved: {e}")),
-                };
+                self.picked(format!("a plain launch now opens on the {open} screen"));
                 Task::none()
             }
             Message::NewRun => {
@@ -1368,6 +2032,152 @@ impl App {
             }
             Message::Cookbook => {
                 self.set_screen(Screen::Cookbook);
+                Task::none()
+            }
+            Message::Snapshots => {
+                self.set_screen(Screen::Snapshots);
+                Task::none()
+            }
+            Message::Registries => {
+                self.set_screen(Screen::Registries);
+                Task::none()
+            }
+            Message::NewRegistry => {
+                self.registry_form = RegistryForm::default();
+                self.set_screen(Screen::NewRegistry);
+                Task::none()
+            }
+            Message::RegistryField(which, value) => {
+                let form = &mut self.registry_form;
+                match which {
+                    RegistryField::Name => form.name = value,
+                    RegistryField::Url => form.url = value,
+                    RegistryField::Project => form.project = value,
+                    RegistryField::Username => form.username = value,
+                }
+                Task::none()
+            }
+            Message::AddRegistry => {
+                match self.registry_form.registry() {
+                    Ok(registry) => {
+                        let saved = self
+                            .registries_store
+                            .as_ref()
+                            .ok_or_else(|| "there is nowhere to keep registries".to_string())
+                            .and_then(|store| store.save(&registry).map_err(|e| e.to_string()));
+                        match saved {
+                            Ok(()) => {
+                                self.status = Some(format!("added the registry {}", registry.name));
+                                self.refresh();
+                                self.set_screen(Screen::Registries);
+                            }
+                            Err(said) => self.status = Some(said),
+                        }
+                    }
+                    Err(said) => self.status = Some(said),
+                }
+                Task::none()
+            }
+            Message::Volumes => {
+                self.set_screen(Screen::Volumes);
+                Task::none()
+            }
+            Message::NewVolume => {
+                self.volume_form = VolumeForm::default();
+                self.set_screen(Screen::NewVolume);
+                Task::none()
+            }
+            Message::VolumeField(which, value) => {
+                match which {
+                    VolumeField::Name => self.volume_form.name = value,
+                    VolumeField::About => self.volume_form.about = value,
+                }
+                Task::none()
+            }
+            Message::AddVolume => {
+                let name = self.volume_form.name.trim().to_string();
+                let made = if name.is_empty() {
+                    Err("a volume needs a name to be mounted by".to_string())
+                } else if !boxdesk_record::valid_id(&name) {
+                    Err(format!(
+                        "{name:?} is not a usable name: letters, digits, `-` and `_`"
+                    ))
+                } else {
+                    match self.volumes_store.as_ref() {
+                        None => Err("there is nowhere to keep volumes".to_string()),
+                        Some(store) if store.holds(&name) => {
+                            Err(format!("a volume named {name:?} is already here"))
+                        }
+                        Some(store) => {
+                            let volume = boxdesk_record::Volume::new(&name)
+                                .about(self.volume_form.about.trim());
+                            store.create(&volume).map(|_| ()).map_err(|e| e.to_string())
+                        }
+                    }
+                };
+                match made {
+                    Ok(()) => {
+                        self.status = Some(format!("made the volume {name}"));
+                        self.refresh();
+                        self.set_screen(Screen::Volumes);
+                    }
+                    Err(said) => self.status = Some(said),
+                }
+                Task::none()
+            }
+            // Through the same question every other destructive press goes through, because this
+            // is the one that takes away what a run had deliberately kept.
+            Message::ForgetVolume(name) => {
+                self.confirm = Some(Confirm::Volume(name));
+                Task::none()
+            }
+            Message::ForgetRegistry(name) => {
+                match self.registries_store.as_ref().map(|s| s.remove(&name)) {
+                    Some(Ok(())) => self.status = Some(format!("removed the registry {name}")),
+                    Some(Err(e)) => self.status = Some(e.to_string()),
+                    None => self.status = Some("there is nowhere to keep registries".to_string()),
+                }
+                self.refresh();
+                Task::none()
+            }
+            Message::UseSnapshot(name) => {
+                match self.snapshots.iter().find(|s| s.name == name) {
+                    Some(snapshot) => {
+                        self.form = Form::from_snapshot(snapshot);
+                        self.set_screen(Screen::New);
+                    }
+                    // The list is a tick old, so a snapshot removed at a terminal since then is
+                    // gone rather than broken: say so and show what is actually there.
+                    None => {
+                        self.status = Some(format!("the snapshot {name} is no longer here"));
+                        self.refresh();
+                    }
+                }
+                Task::none()
+            }
+            Message::SaveSnapshot => {
+                let name = self.form.name.trim().to_string();
+                if name.is_empty() {
+                    self.status =
+                        Some("a snapshot needs a name: fill the sandbox's name in".to_string());
+                    return Task::none();
+                }
+                match cli::save_snapshot(&cli::boxdesk_path(), &self.form, &name) {
+                    Ok(said) => {
+                        self.status = Some(said);
+                        self.refresh();
+                    }
+                    Err(said) => self.status = Some(said),
+                }
+                Task::none()
+            }
+            Message::ForgetSnapshot(name) => {
+                match self.snapshots_store.as_ref().map(|s| s.remove(&name)) {
+                    Some(Ok(())) => self.status = Some(format!("removed the snapshot {name}")),
+                    Some(Err(e)) => self.status = Some(e.to_string()),
+                    None => self.status = Some("there is nowhere to keep snapshots".to_string()),
+                }
+                self.refresh();
                 Task::none()
             }
             Message::Example(example) => {
@@ -1458,8 +2268,12 @@ impl App {
                 }
                 Task::none()
             }
+            // Escape lands here, so it is the one way out of whichever card is up. A question
+            // outranks the sheet: it is the one drawn over it.
             Message::DeleteCancelled => {
-                self.confirm = None;
+                if self.confirm.take().is_none() {
+                    return self.act(Message::SettingsClosed);
+                }
                 Task::none()
             }
             Message::DeleteConfirmed => {
@@ -1471,6 +2285,40 @@ impl App {
                             Ok(()) => Some(format!("removed {id}")),
                             Err(e) => Some(format!("removing {id}: {e}")),
                         };
+                        self.set_screen(Screen::List);
+                    }
+                    // `force`, because the question has already been asked: the card said what
+                    // would go, and this is the answer.
+                    Some(Confirm::Volume(name)) => {
+                        self.status = match self.volumes_store.as_ref() {
+                            None => Some("there is nowhere to keep volumes".to_string()),
+                            Some(store) => match store.remove(&name, true) {
+                                Ok(()) => Some(format!("removed the volume {name}")),
+                                Err(e) => Some(format!("removing {name}: {e}")),
+                            },
+                        };
+                        self.set_screen(Screen::Volumes);
+                    }
+                    Some(Confirm::Swept(_)) => {
+                        self.leave();
+                        let ended: Vec<String> = self
+                            .runs
+                            .iter()
+                            .filter(|r| !self.is_live(r))
+                            .map(|r| r.id.clone())
+                            .collect();
+                        let mut gone = 0usize;
+                        for id in &ended {
+                            if self.store.remove(id).is_ok() {
+                                gone += 1;
+                            }
+                        }
+                        self.status = Some(format!("swept {}", ended_runs(gone)));
+                        self.set_screen(Screen::List);
+                    }
+                    Some(Confirm::Everything) => {
+                        self.leave();
+                        self.status = Some(self.wipe());
                         self.set_screen(Screen::List);
                     }
                     Some(Confirm::Selected(ids)) => {
@@ -1591,10 +2439,14 @@ impl App {
 
     fn view(&self) -> Element<'_, Message> {
         let content = match &self.screen {
-            Screen::Settings => screens::settings(self),
             Screen::List => screens::list(self),
             Screen::New => screens::new_run(self, &self.form),
-            Screen::Cookbook => screens::cookbook(self),
+            Screen::Cookbook => screens::cookbook(),
+            Screen::Snapshots => screens::snapshots(self),
+            Screen::Registries => screens::registries(self),
+            Screen::NewRegistry => screens::new_registry(self),
+            Screen::Volumes => screens::volumes(self),
+            Screen::NewVolume => screens::new_volume(self),
             Screen::Run(id) => screens::run(self, id),
         };
         screens::chrome(self, content)
@@ -1644,6 +2496,14 @@ fn hotkey(key: &iced::keyboard::Key, modifiers: iced::keyboard::Modifiers) -> Op
     match key {
         iced::keyboard::Key::Character(c) if c == "," && modifiers.command() => {
             Some(Message::Settings)
+        }
+        iced::keyboard::Key::Character(c) if c == "k" && modifiers.command() => {
+            Some(Message::FocusSearch)
+        }
+        // The sidebar names features, not verbs, so starting a run is a chord and a button on the
+        // notebook rather than a fifth tab.
+        iced::keyboard::Key::Character(c) if c == "n" && modifiers.command() => {
+            Some(Message::NewRun)
         }
         iced::keyboard::Key::Named(iced::keyboard::key::Named::Escape) => {
             Some(Message::DeleteCancelled)
@@ -1711,9 +2571,46 @@ pub(crate) fn frame_program(app: &App, name: &RunName) -> Option<frame::Program>
     })
 }
 
+/// Whether `haystack` is what `wanted` asks for: every word of it somewhere in the text, folded
+/// to one case.
+///
+/// **Every word, not the whole string**, so `py 3` finds a run named `py-sandbox` that ran
+/// `python3`; typing more narrows rather than having to be typed in the order the row happens to
+/// read. An empty ask matches everything, which is what makes an empty field and no field the
+/// same list.
+fn asked_for(wanted: &str, haystack: &str) -> bool {
+    let wanted = wanted.trim().to_lowercase();
+    if wanted.is_empty() {
+        return true;
+    }
+    let haystack = haystack.to_lowercase();
+    wanted
+        .split_whitespace()
+        .all(|word| haystack.contains(word))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The band's field narrows by every word it holds, in any order and in any case, and an
+    /// empty one narrows nothing. A field that matched the whole string would find nothing the
+    /// moment a second word was typed, which is the point at which a person is narrowing.
+    #[test]
+    fn the_bands_field_asks_for_every_word_it_holds() {
+        let row = "py-sandbox python3 -c print(6*7)";
+        assert!(asked_for("", row), "an empty field asks for everything");
+        assert!(asked_for("   ", row), "and so does one holding only spaces");
+        assert!(asked_for("py", row), "one word");
+        assert!(asked_for("PY-SANDBOX", row), "however it is cased");
+        assert!(asked_for("py 3", row), "two words, in the order they read");
+        assert!(asked_for("3 py", row), "and in the other order");
+        assert!(
+            !asked_for("py rust", row),
+            "a word that is not there refuses"
+        );
+        assert!(!asked_for("java", row), "and so does one on its own");
+    }
 
     /// The platform's command with `,` opens Settings; the pieces alone open nothing.
     #[test]
@@ -1732,6 +2629,70 @@ mod tests {
             hotkey(&Key::Character("q".into()), Modifiers::COMMAND).is_none(),
             "no other chord is taken"
         );
+    }
+
+    /// Starting a run left the sidebar when the sidebar became four features, so the chord is
+    /// now one of its two doors and is checked rather than assumed.
+    #[test]
+    fn the_platforms_command_and_n_start_a_run() {
+        use iced::keyboard::{Key, Modifiers};
+        let n = Key::Character("n".into());
+        assert!(matches!(
+            hotkey(&n, Modifiers::COMMAND),
+            Some(Message::NewRun)
+        ));
+        assert!(hotkey(&n, Modifiers::empty()).is_none(), "bare n types");
+    }
+
+    /// Every tab in the rail opens its own page and never another.
+    ///
+    /// **This is the test that earned its keep.** `Registries` used to be wired to the cookbook:
+    /// a tab named after one thing opening a working screen about another. All four are real
+    /// features now, so the check is that each one still goes where its word says.
+    #[test]
+    fn every_sidebar_tab_opens_its_own_page_and_never_another() {
+        let mut app = app_with(Vec::new(), &[]);
+        let tabs: [(Message, Screen); 4] = [
+            (Message::Snapshots, Screen::Snapshots),
+            (Message::Registries, Screen::Registries),
+            (Message::Volumes, Screen::Volumes),
+            (Message::List, Screen::List),
+        ];
+        for (press, page) in tabs {
+            let asked = format!("{press:?}");
+            let _ = app.update(press);
+            assert_eq!(app.screen, page, "{asked} opened something else");
+        }
+    }
+
+    /// **A volume is the thing that was not ephemeral**, so the press that removes one asks
+    /// first, like every other destructive press in the window. Nothing goes until the question
+    /// is answered.
+    #[test]
+    fn a_volume_is_never_removed_without_the_question() {
+        let dir = boxdesk_test_support::ScratchDir::created("app-volume-confirm");
+        let store = boxdesk_record::VolumeStore::at(dir.path().join("volumes")).expect("a store");
+        let data = store
+            .create(&boxdesk_record::Volume::new("datasets"))
+            .expect("created");
+        std::fs::write(data.join("corpus.bin"), b"keep me").expect("wrote");
+
+        let mut app = app_with(Vec::new(), &[]);
+        app.volumes_store = Some(store.clone());
+        let _ = app.update(Message::ForgetVolume("datasets".to_string()));
+        assert_eq!(
+            app.confirm,
+            Some(Confirm::Volume("datasets".to_string())),
+            "the press should raise the question"
+        );
+        assert!(store.holds("datasets"), "and take nothing away yet");
+
+        let _ = app.update(Message::DeleteConfirmed);
+        assert!(
+            !store.holds("datasets"),
+            "answering yes takes it and what was in it"
+        );
+        std::mem::forget(dir);
     }
 
     /// One run is not "1 runs": both places that count them spell it through one helper.
@@ -1782,6 +2743,17 @@ mod tests {
             .then(|| boxdesk_record::DisplayMode::parse("640x480"))
             .flatten();
         Record::begin(name, boxdesk_record::Verb::Run, vec!["true".into()], p)
+    }
+
+    /// A record for a run that has ended, and one for a run that is still up.
+    fn ended(name: &str) -> Record {
+        let mut record = displayed(name, false);
+        record.finish(boxdesk_record::End::Exit(0));
+        record
+    }
+
+    fn open_run(name: &str) -> Record {
+        displayed(name, false)
     }
 
     fn app_with(runs: Vec<Record>, live: &[&str]) -> App {
@@ -1981,20 +2953,293 @@ mod tests {
         assert_eq!(landing(None, None), OpenScreen::List);
     }
 
-    /// Every screen the flag can name maps to itself, so `--open list` is the list.
+    /// Every screen the flag can name maps to one, so `--open list` is the list.
+    ///
+    /// **`--open settings` lands on the notebook**, because settings stopped being a screen: it
+    /// is a sheet over whatever is showing, and the flag opens the notebook with it up.
     #[test]
     fn the_open_flag_maps_to_its_screens() {
         assert_eq!(OpenScreen::List.screen(), Screen::List);
         assert_eq!(OpenScreen::New.screen(), Screen::New);
-        assert_eq!(OpenScreen::Settings.screen(), Screen::Settings);
+        assert_eq!(OpenScreen::Settings.screen(), Screen::List);
     }
 
-    /// Settings leases nothing: no thumbnail spins up behind a screen with no display on it.
+    /// **One list, because two would be a reset that missed one.** The page that says where
+    /// things are kept and the act that removes them read the same list, so a store added to the
+    /// project and forgotten would be visibly missing from the page rather than quietly surviving
+    /// a wipe.
     #[test]
-    fn settings_leases_no_displays() {
-        let mut app = app_with(vec![displayed("alpha", true)], &["alpha"]);
-        app.screen = Screen::Settings;
-        assert!(app.watches().is_empty(), "settings asks for no leases");
+    fn what_is_shown_as_kept_is_exactly_what_a_reset_removes() {
+        let app = app_with(Vec::new(), &[]);
+        let named: Vec<&str> = app.data_dirs().iter().map(|(name, _)| *name).collect();
+        assert_eq!(
+            named,
+            vec!["runs", "snapshots", "registries", "volumes", "images"],
+            "every store this project keeps has to be in the one list"
+        );
+        let said = app.diagnostics();
+        for name in named {
+            assert!(
+                said.contains(&format!("{name} dir ")),
+                "the diagnostics say nothing about where {name} is:\n{said}"
+            );
+        }
+    }
+
+    /// **Paths and counts, never contents.** A run's command, a registry's username and what a
+    /// guest wrote are this person's business; what a report needs is which build, which host and
+    /// how much of what is where.
+    #[test]
+    fn the_diagnostics_carry_no_contents() {
+        let mut app = app_with(vec![ended("secret-project")], &[]);
+        app.registries =
+            vec![boxdesk_record::Registry::new("work", "ghcr.io").signed_in_as("acme", "buildbot")];
+        app.snapshots = vec![boxdesk_record::Snapshot::new(
+            "devbox",
+            boxdesk_record::Posture::default(),
+            vec!["curl".to_string(), "https://example.invalid".to_string()],
+        )];
+
+        let said = app.diagnostics();
+        for private in [
+            "secret-project",
+            "buildbot",
+            "ghcr.io",
+            "example.invalid",
+            "devbox",
+        ] {
+            assert!(
+                !said.contains(private),
+                "{private:?} is this person's business, not a report's:\n{said}"
+            );
+        }
+        assert!(said.contains("runs 1"), "counts are the point: {said}");
+        assert!(said.contains("registries 1"), "{said}");
+        assert!(said.contains(env!("CARGO_PKG_VERSION")), "{said}");
+    }
+
+    /// Sweeping takes every ended run and leaves a live one where it is, and it asks first.
+    #[test]
+    fn sweeping_asks_first_and_never_takes_a_live_run() {
+        let mut app = app_with(vec![ended("gone"), open_run("alive")], &["alive"]);
+        // Into the store as well, because sweeping removes from the store and the assertion has
+        // to be about what is on disk rather than about a list a refresh rebuilds.
+        for record in &app.runs {
+            app.store.create(record).expect("filed");
+        }
+
+        let _ = app.update(Message::SweepEnded);
+        assert_eq!(
+            app.confirm,
+            Some(Confirm::Swept(1)),
+            "the question should name how many"
+        );
+
+        let _ = app.update(Message::DeleteConfirmed);
+        let left: Vec<String> = app
+            .store
+            .list()
+            .expect("read back")
+            .iter()
+            .map(|r| r.name.clone())
+            .collect();
+        assert_eq!(left, vec!["alive"], "the live one stayed");
+    }
+
+    /// Nothing to sweep is refused rather than asked about: a question whose answer removes
+    /// nothing is a question nobody should be made to read.
+    #[test]
+    fn sweeping_nothing_asks_nothing() {
+        let mut app = app_with(vec![open_run("alive")], &["alive"]);
+        let _ = app.update(Message::SweepEnded);
+        assert!(app.confirm.is_none(), "no question was raised");
+        assert!(
+            app.status
+                .as_deref()
+                .is_some_and(|s| s.contains("no ended runs")),
+            "and it says why: {:?}",
+            app.status
+        );
+    }
+
+    /// **The largest answer in the window asks first, like every other one.** Pressing it raises
+    /// the question and removes nothing.
+    #[test]
+    fn removing_everything_asks_before_it_removes_anything() {
+        let mut app = app_with(vec![ended("kept")], &[]);
+        let _ = app.update(Message::ResetEverything);
+        assert_eq!(app.confirm, Some(Confirm::Everything));
+        assert_eq!(app.runs.len(), 1, "nothing went on the press");
+    }
+
+    /// **The status line holds one thing and the next thing destroys it.** Every one of them is
+    /// kept, newest first, which is the whole reason the panel exists: a run that ended while you
+    /// were reading another page used to be a sentence you missed.
+    #[test]
+    fn everything_the_window_says_is_kept_newest_first() {
+        let mut app = app_with(Vec::new(), &[]);
+        let _ = app.update(Message::SetTheme(theme::Mode::Dark));
+        let _ = app.update(Message::SetTheme(theme::Mode::Light));
+
+        assert_eq!(app.notices().len(), 2, "both were kept");
+        assert!(
+            app.notices()[0].text.contains("Light"),
+            "newest first: {:?}",
+            app.notices()[0].text
+        );
+        assert_eq!(app.unread(), 2, "and the bell says so");
+
+        // Opening the panel reads them; the count does not come back.
+        let _ = app.update(Message::Notifications);
+        assert!(app.notices_open());
+        assert_eq!(app.unread(), 0);
+        let _ = app.update(Message::SetTheme(theme::Mode::Dark));
+        assert_eq!(
+            app.unread(),
+            0,
+            "what arrives while the panel is open is already read"
+        );
+
+        let _ = app.update(Message::ClearNotices);
+        assert!(app.notices().is_empty());
+    }
+
+    /// A window left running is not a log file: the oldest go once the cap is reached, and the
+    /// newest are the ones kept.
+    #[test]
+    fn the_notices_are_capped_and_the_oldest_go_first() {
+        let mut app = app_with(Vec::new(), &[]);
+        for n in 0..NOTICES + 10 {
+            app.note(format!("notice {n}"));
+        }
+        assert_eq!(app.notices().len(), NOTICES);
+        assert_eq!(
+            app.notices()[0].text,
+            format!("notice {}", NOTICES + 9),
+            "the newest is at the front"
+        );
+        assert!(
+            !app.notices().iter().any(|n| n.text == "notice 0"),
+            "and the oldest went"
+        );
+    }
+
+    /// **The drag is a delta**, so nothing about it has to know how wide the window is, and the
+    /// edge is on the panel's left: a pointer moving left widens it.
+    #[test]
+    fn dragging_the_panels_edge_widens_it_towards_the_pointer() {
+        let mut app = app_with(Vec::new(), &[]);
+        let at = |x: f32| iced::Point::new(x, 0.0);
+        let start = app.panel();
+
+        let _ = app.update(Message::PanelGrabbed);
+        assert!(app.dragging(), "a press begins the drag");
+        // The first move only says where from: an edge that jumped on the press would jump to
+        // wherever the pointer happened to be.
+        let _ = app.update(Message::PanelDragged(at(900.0)));
+        assert_eq!(app.panel(), start, "the first move moves nothing");
+
+        let _ = app.update(Message::PanelDragged(at(860.0)));
+        assert_eq!(app.panel(), start + 40.0, "leftwards is wider");
+        let _ = app.update(Message::PanelDragged(at(900.0)));
+        assert_eq!(app.panel(), start, "and rightwards is narrower again");
+
+        let _ = app.update(Message::PanelDropped);
+        assert!(!app.dragging(), "letting go ends it");
+    }
+
+    /// A drag cannot make the panel unreadable or make the page beside it the narrower of the
+    /// two, however far the pointer goes.
+    #[test]
+    fn a_drag_cannot_take_the_panel_outside_its_bounds() {
+        let mut app = app_with(Vec::new(), &[]);
+        let at = |x: f32| iced::Point::new(x, 0.0);
+
+        let _ = app.update(Message::PanelGrabbed);
+        let _ = app.update(Message::PanelDragged(at(1000.0)));
+        let _ = app.update(Message::PanelDragged(at(-9000.0)));
+        let wide = app.panel();
+        assert_eq!(
+            wide,
+            screens::panel_within(f32::INFINITY),
+            "held at the ceiling"
+        );
+
+        let _ = app.update(Message::PanelDragged(at(9000.0)));
+        assert_eq!(
+            app.panel(),
+            screens::panel_within(f32::NEG_INFINITY),
+            "and at the floor"
+        );
+        assert!(app.panel() < wide, "the two bounds are not the same number");
+    }
+
+    /// **A pick previews at once and is written down on Apply.** Closing puts back what was here,
+    /// which is the whole of what makes trying a theme free — and the only thing standing between
+    /// a look at a palette and living with it.
+    #[test]
+    fn closing_the_settings_sheet_puts_back_what_it_opened_with() {
+        let mut app = app_with(Vec::new(), &[]);
+        let before = app.picks();
+
+        let _ = app.update(Message::Settings);
+        assert!(app.settings_sheet().is_some(), "the press opens the sheet");
+
+        let _ = app.update(Message::SetScale(Scale(125)));
+        assert_eq!(app.scale, 125, "a pick takes effect while the sheet is up");
+        assert!(
+            app.settings_sheet().is_some_and(|s| s.changed(app.picks())),
+            "and Apply should have something to do"
+        );
+
+        let _ = app.update(Message::SettingsClosed);
+        assert!(app.settings_sheet().is_none(), "the sheet goes");
+        assert_eq!(app.picks(), before, "and takes the change with it");
+    }
+
+    /// Apply keeps what was drafted and takes the sheet down; Escape after that has nothing to
+    /// put back.
+    #[test]
+    fn applying_the_settings_sheet_keeps_what_was_drafted() {
+        let mut app = app_with(Vec::new(), &[]);
+        let _ = app.update(Message::Settings);
+        let _ = app.update(Message::SetScale(Scale(125)));
+        let _ = app.update(Message::SettingsApplied);
+
+        assert!(app.settings_sheet().is_none(), "the sheet goes");
+        assert_eq!(app.scale, 125, "and the pick stays");
+
+        let _ = app.update(Message::DeleteCancelled);
+        assert_eq!(app.scale, 125, "escape with no sheet up puts nothing back");
+    }
+
+    /// **A question outranks the sheet.** Escape answers whichever card is on top, and the
+    /// confirm is the one drawn over the sheet, so it is the one that goes first.
+    #[test]
+    fn escape_answers_the_card_on_top_first() {
+        let mut app = app_with(Vec::new(), &[]);
+        let _ = app.update(Message::Settings);
+        app.confirm = Some(Confirm::Volume("datasets".to_string()));
+
+        let _ = app.update(Message::DeleteCancelled);
+        assert!(app.confirm.is_none(), "the question goes first");
+        assert!(app.settings_sheet().is_some(), "and the sheet is still up");
+
+        let _ = app.update(Message::DeleteCancelled);
+        assert!(app.settings_sheet().is_none(), "then the sheet");
+    }
+
+    /// The band's theme toggle is not part of the sheet, so pressing it is a decision rather than
+    /// a draft: it should survive the next launch without anybody pressing Apply.
+    #[test]
+    fn a_pick_made_outside_the_sheet_is_written_down_at_once() {
+        let mut app = app_with(Vec::new(), &[]);
+        assert!(app.settings_sheet().is_none(), "no sheet is up");
+        let _ = app.update(Message::SetTheme(theme::Mode::Dark));
+        assert!(
+            app.status.is_some(),
+            "a pick with no sheet up reports what it wrote, or why it could not"
+        );
     }
 
     /// A cookbook entry fills the form and stops there: the posture sentence is read before
@@ -2296,7 +3541,7 @@ mod tests {
         let _ = app.update(Message::SelectToggle(RunId(two)));
         assert!(app.list.selected().is_empty(), "a second press unselects");
 
-        app.set_screen(Screen::Settings);
+        app.set_screen(Screen::New);
         assert_eq!(app.list, ListMode::Browsing, "leaving the list disarms");
         drop(listener);
         let _ = std::fs::remove_file(&sock);
