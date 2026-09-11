@@ -94,9 +94,14 @@ fn a_run_is_ephemeral_unless_it_is_told_to_keep() {
     let scratch = ScratchDir::created("run-ephemeral");
     let runs = scratch.path().join("runs");
 
+    let root = scratch.path().join("rootfs");
+    std::fs::create_dir(&root).expect("a rootfs dir");
+
     // The parser's side: `--keep` is a flag on `run`, and absent means ephemeral.
     let out = boxdesk(&runs)
-        .args(["run", "--keep", "--dry-run", "--json", "--", "true"])
+        .args(["run", "--root"])
+        .arg(&root)
+        .args(["--keep", "--dry-run", "--json", "--", "true"])
         .output()
         .expect("the binary runs");
     assert!(
