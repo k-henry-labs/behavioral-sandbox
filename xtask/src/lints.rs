@@ -160,6 +160,101 @@ mod tests {
         );
     }
 
+    /// **Every posture flag `tormoni run` takes is one the Go SDK knows.**
+    ///
+    /// Go is the one SDK still built on an argv: Python, JS and Rust call `execute_sandbox`
+    /// directly, so a renamed field is a compile error for them and no lint is needed. Go's
+    /// options are typed out by hand against a command line, which a flag added to the CLI moves
+    /// out from under — its tests feed a stub binary, so the suite stays green while the thing it
+    /// wraps has changed. That is exactly how `--keep` arrived and sat unknown to every SDK back
+    /// when all four were wrappers.
+    ///
+    /// Matched on the flag as a QUOTED STRING, which is what an SDK building an argv writes. A
+    /// looser match on the spelling anywhere in the source passes on a doc comment that merely
+    /// mentions the flag — watched happen, with `--keep` deleted from the Go options and its own
+    /// comment keeping the lint green.
+    #[test]
+    fn every_run_flag_is_one_the_sdks_know() {
+        let repo = workspace_root();
+        let parser = std::fs::read_to_string(repo.join("crates/cli/src/run.rs"))
+            .expect("crates/cli/src/run.rs");
+
+        // clap's explicit `long = "..."` spellings, else the one derived from the field name.
+        // An explicit spelling WINS: the field `mounts` carries `long = "mount"`, and a lint that
+        // took both would demand a `--mounts` nothing accepts.
+        let mut taken: Vec<String> = Vec::new();
+        let mut named_by_attribute: Option<String> = None;
+        for line in parser.lines() {
+            if line.trim_start().starts_with("#[arg(") {
+                named_by_attribute = line.find("long = \"").and_then(|at| {
+                    let rest = &line[at + 8..];
+                    rest.find('"').map(|end| rest[..end].to_string())
+                });
+            }
+            let Some(field) = line
+                .strip_prefix("    pub(crate) ")
+                .and_then(|f| f.split(':').next())
+            else {
+                continue;
+            };
+            let spelling = named_by_attribute
+                .take()
+                .unwrap_or_else(|| field.replace('_', "-"));
+            taken.push(format!("--{spelling}"));
+        }
+        taken.sort();
+        taken.dedup();
+        // Not a posture an SDK offers. `--json` is how one reads anything at all and `--dry-run`
+        // has its own method; `--screenshot` and `--frame-log` are the measurement flags the
+        // benches drive, named nowhere in the posture table the book publishes.
+        taken.retain(|f| {
+            !matches!(
+                f.as_str(),
+                "--json" | "--dry-run" | "--command" | "--screenshot" | "--frame-log"
+            )
+        });
+        assert!(
+            taken.len() >= 10,
+            "expected the run verb's flag set, found {taken:?}"
+        );
+
+        let sdks = [("go", "sdk/go")];
+        let mut unknown: Vec<String> = Vec::new();
+        for (name, dir) in sdks {
+            let Ok(entries) = walk(&repo.join(dir)) else {
+                continue;
+            };
+            let source: String = entries.join("\n");
+            for flag in &taken {
+                if !source.contains(&format!("\"{flag}\"")) {
+                    unknown.push(format!("{name} does not pass {flag}"));
+                }
+            }
+        }
+        assert!(
+            unknown.is_empty(),
+            "`tormoni run` takes flags the SDKs have never heard of:\n  {}",
+            unknown.join("\n  ")
+        );
+    }
+
+    /// Every source file under `dir`, read, for a lint that only wants to grep a tree.
+    fn walk(dir: &Path) -> std::io::Result<Vec<String>> {
+        let mut out = Vec::new();
+        for entry in std::fs::read_dir(dir)? {
+            let path = entry?.path();
+            if path.is_dir() {
+                out.extend(walk(&path)?);
+            } else if path
+                .extension()
+                .is_some_and(|e| matches!(e.to_str(), Some("py" | "ts" | "go" | "rs")))
+            {
+                out.push(std::fs::read_to_string(&path)?);
+            }
+        }
+        Ok(out)
+    }
+
     /// Every `"--flag"` literal on a line the predicate accepts, deduplicated, in sorted order.
     fn flags(src: &str, keep: impl Fn(&str) -> bool) -> Vec<String> {
         let mut out: Vec<String> = src
