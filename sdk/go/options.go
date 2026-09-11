@@ -6,6 +6,17 @@ package boxdesk
 
 import "strconv"
 
+// Volume names a volume made by `boxdesk volume new` and the guest path to
+// mount it at. Unlike Mount, the host side is boxdesk's to know: a volume is a
+// directory it made and can list, so a caller names it rather than a path.
+//
+// The guest path must already be a directory in the image, which is the rule
+// Mount keeps for the same reason — a virtiofs mount needs its mount point.
+type Volume struct {
+	Name  string
+	Guest string
+}
+
 // RunOptions maps one-to-one onto the flags `boxdesk run` accepts. Every field
 // is optional: a zero value means "do not pass the flag", and the CLI's own
 // default stands. This package adds no defaults of its own.
@@ -33,6 +44,21 @@ type RunOptions struct {
 	// Shares are --share TAG=HOSTPATH, one flag per entry, in order. Each adds
 	// a virtiofs device the guest mounts by tag.
 	Shares []Share
+
+	// Volumes are --volume NAME:GUESTDIR, one flag per entry, in order. Each
+	// mounts a volume made by `boxdesk volume new` at a guest path, which the
+	// image must already have as a directory.
+	Volumes []Volume
+
+	// Image is --image REF, an OCI image pulled by `boxdesk pull`, booted
+	// instead of a guest root on disk. Mutually exclusive with Root: the CLI
+	// refuses both, and that refusal reaches you as an *Error.
+	Image string
+
+	// Snapshot is --snapshot NAME, a named posture written by
+	// `boxdesk snapshot new`. Every other field set here speaks over it, so a
+	// snapshot is where a run starts rather than what it is held to.
+	Snapshot string
 
 	// Net is --net, "none" (the CLI default, no network at all) or "tsi" (the
 	// guest reaches what the host can). Passed through unvalidated.
@@ -98,6 +124,15 @@ func (o *RunOptions) args() []string {
 	}
 	for _, s := range o.Shares {
 		a = append(a, "--share", s.Tag+"="+s.Host)
+	}
+	for _, v := range o.Volumes {
+		a = append(a, "--volume", v.Name+":"+v.Guest)
+	}
+	if o.Image != "" {
+		a = append(a, "--image", o.Image)
+	}
+	if o.Snapshot != "" {
+		a = append(a, "--snapshot", o.Snapshot)
 	}
 	if o.Net != "" {
 		a = append(a, "--net", o.Net)

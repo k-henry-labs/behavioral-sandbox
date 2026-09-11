@@ -12,6 +12,7 @@
 
 mod agent;
 mod frames;
+mod image;
 mod input;
 mod json;
 mod lifecycle;
@@ -20,8 +21,10 @@ mod pty;
 mod run;
 mod serve;
 mod shell;
+mod snapshot;
 mod up;
 mod vmm;
+mod volume;
 mod window;
 
 use std::process::ExitCode;
@@ -78,6 +81,16 @@ enum Cmd {
     Export(lifecycle::ExportArgs),
     /// Remove one run's record and everything it captured.
     Rm(lifecycle::RmArgs),
+    /// Sandboxes worth making again, kept by name: `new`, `ls`, `show`, `rm`.
+    Snapshot(snapshot::SnapshotArgs),
+    /// Fetch an OCI image and flatten it into a guest root this machine can boot.
+    Pull(image::PullArgs),
+    /// The images pulled onto this machine: `ls`, `rm`.
+    Image(image::ImageArgs),
+    /// Where images come from, and who this machine is when it asks: `add`, `ls`, `rm`.
+    Registry(image::RegistryArgs),
+    /// Directories with lives of their own, mounted into sandboxes by name: `new`, `ls`, `show`, `rm`.
+    Volume(volume::VolumeArgs),
     /// Run sandboxes for a caller over HTTP: one box, one token, one tenant.
     Serve(serve::ServeArgs),
     /// Send runs to the console and read back what it holds.
@@ -105,6 +118,11 @@ fn main() -> ExitCode {
         Cmd::Show(args) => lifecycle::show(&args),
         Cmd::Export(args) => lifecycle::export(&args),
         Cmd::Rm(args) => lifecycle::rm(&args),
+        Cmd::Snapshot(args) => snapshot::run(&args),
+        Cmd::Pull(args) => image::run_pull(&args),
+        Cmd::Image(args) => image::run_image(&args),
+        Cmd::Registry(args) => image::run_registry(&args),
+        Cmd::Volume(args) => volume::run(&args),
         Cmd::Serve(args) => serve::run(&args),
         Cmd::Vmm(args) => vmm::run(&args),
         Cmd::Frames(args) => frames::run(&args),

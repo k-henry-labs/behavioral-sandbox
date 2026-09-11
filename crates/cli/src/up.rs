@@ -43,12 +43,23 @@ pub(crate) struct UpArgs {
     /// An extra virtiofs device, as `TAG=HOSTPATH`. Repeatable.
     #[arg(long = "share", value_name = "TAG=HOSTPATH")]
     pub(crate) shares: Vec<String>,
-    /// The network posture: `none` (default) or `tsi`.
-    #[arg(long, value_name = "POSTURE", default_value = "none")]
-    pub(crate) net: crate::posture::NetArg,
-    /// What the guest may do to its root: `read-only` (default) or `writable`.
-    #[arg(long, value_name = "POSTURE", default_value = "read-only")]
-    pub(crate) rootfs: crate::posture::RootFsArg,
+    /// Start from a snapshot: a named posture written by `boxdesk snapshot new`. Every flag given
+    /// beside it speaks over it.
+    #[arg(long, value_name = "NAME")]
+    pub(crate) snapshot: Option<String>,
+    /// Boot an image pulled by `boxdesk pull`, as `NAME[:TAG]`, instead of a guest root on disk.
+    #[arg(long, value_name = "REF", conflicts_with = "root")]
+    pub(crate) image: Option<String>,
+    /// Mount a volume made by `boxdesk volume new`, as `NAME:GUESTDIR`. Repeatable. The guest
+    /// path must exist in the image, as `--mount`'s must.
+    #[arg(long = "volume", value_name = "NAME:GUESTDIR")]
+    pub(crate) volumes: Vec<String>,
+    /// The network posture: `none` (the default) or `tsi`.
+    #[arg(long, value_name = "POSTURE")]
+    pub(crate) net: Option<crate::posture::NetArg>,
+    /// What the guest may do to its root: `read-only` (the default) or `writable`.
+    #[arg(long, value_name = "POSTURE")]
+    pub(crate) rootfs: Option<crate::posture::RootFsArg>,
     /// Print what this sandbox would share and exit, without booting anything.
     #[arg(long)]
     pub(crate) dry_run: bool,
@@ -105,7 +116,18 @@ pub(crate) fn run(args: &UpArgs) -> ExitCode {
 }
 
 fn start(args: &UpArgs) -> Result<Outcome, String> {
-    let root = boxdesk::resolve_root(args.root.as_deref())?;
+    let snapshot = crate::posture::asked_for(args.snapshot.as_deref())?;
+    let snapshot = snapshot.as_ref();
+    // An image outranks a snapshot's root and is refused if it was never pulled: `--image` names
+    // a thing, and quietly booting a different tree because that thing is absent is the wrong
+    // answer to a caller who said which one they wanted.
+    let image = crate::image::asked_for(args.image.as_deref())?;
+    let root = boxdesk::resolve_root(
+        image
+            .as_deref()
+            .or(args.root.as_deref())
+            .or_else(|| snapshot.map(|s| s.posture.root.as_path())),
+    )?;
     let name = args
         .name
         .clone()
@@ -138,20 +160,37 @@ fn start(args: &UpArgs) -> Result<Outcome, String> {
     // Not the caller's stderr: this VM outlives this command, and an inherited pipe would be one
     // it holds open after the caller has gone.
     cfg.log = Some(log.clone());
-    cfg.net = args.net.into_net();
-    cfg.rootfs = args.rootfs.into_rootfs();
-    cfg.sound = args.sound;
-    cfg.gpu = args.gpu;
+    // The snapshot first, as the base every flag below speaks over.
+    if let Some(snapshot) = snapshot {
+        crate::posture::lay_snapshot(&mut cfg, snapshot);
+    }
+    if let Some(net) = args.net {
+        cfg.net = net.into_net();
+    }
+    if let Some(rootfs) = args.rootfs {
+        cfg.rootfs = rootfs.into_rootfs();
+    }
+    cfg.sound |= args.sound;
+    cfg.gpu |= args.gpu;
     crate::run::apply_display(
         &mut cfg,
-        args.display,
+        args.display
+            .or_else(|| crate::posture::snapshot_display(snapshot)),
         args.screenshot.as_deref(),
         args.frame_log.as_deref(),
     )?;
-    if let Some(v) = crate::run::resolve_limit(args.vcpus, "BOXDESK_VCPUS")? {
+    if let Some(v) = crate::posture::limit(
+        args.vcpus,
+        snapshot.map(|s| s.posture.vcpus),
+        "BOXDESK_VCPUS",
+    )? {
         cfg.vcpus = v;
     }
-    if let Some(m) = crate::run::resolve_limit(args.mem, "BOXDESK_MEM_MIB")? {
+    if let Some(m) = crate::posture::limit(
+        args.mem,
+        snapshot.map(|s| s.posture.mem_mib),
+        "BOXDESK_MEM_MIB",
+    )? {
         cfg.mem_mib = m;
     }
     for spec in &args.shares {
@@ -168,6 +207,9 @@ fn start(args: &UpArgs) -> Result<Outcome, String> {
         };
         cfg.mounts.push((guest.to_path_buf(), host.to_path_buf()));
     }
+    // A volume is an ordinary mount, resolved to one here: nothing downstream — the config, the
+    // record, the posture a run prints — needs to know the word.
+    cfg.mounts.extend(crate::volume::mounts_for(&args.volumes)?);
 
     let results = !args.no_results;
     if args.dry_run {

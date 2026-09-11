@@ -62,12 +62,23 @@ pub(crate) struct RunArgs {
     /// Repeatable; `--mount` is the one that also mounts.
     #[arg(long = "share", value_name = "TAG=HOSTPATH")]
     pub(crate) shares: Vec<String>,
-    /// The network posture: `none` (default) or `tsi`.
-    #[arg(long, value_name = "POSTURE", default_value = "none")]
-    pub(crate) net: NetArg,
-    /// What the guest may do to its root: `read-only` (default) or `writable`.
-    #[arg(long, value_name = "POSTURE", default_value = "read-only")]
-    pub(crate) rootfs: RootFsArg,
+    /// Start from a snapshot: a named posture written by `boxdesk snapshot new`. Every flag given
+    /// beside it speaks over it.
+    #[arg(long, value_name = "NAME")]
+    pub(crate) snapshot: Option<String>,
+    /// Boot an image pulled by `boxdesk pull`, as `NAME[:TAG]`, instead of a guest root on disk.
+    #[arg(long, value_name = "REF", conflicts_with = "root")]
+    pub(crate) image: Option<String>,
+    /// Mount a volume made by `boxdesk volume new`, as `NAME:GUESTDIR`. Repeatable. The guest
+    /// path must exist in the image, as `--mount`'s must.
+    #[arg(long = "volume", value_name = "NAME:GUESTDIR")]
+    pub(crate) volumes: Vec<String>,
+    /// The network posture: `none` (the default) or `tsi`.
+    #[arg(long, value_name = "POSTURE")]
+    pub(crate) net: Option<NetArg>,
+    /// What the guest may do to its root: `read-only` (the default) or `writable`.
+    #[arg(long, value_name = "POSTURE")]
+    pub(crate) rootfs: Option<RootFsArg>,
     /// A `KEY=VALUE` entry for the guest environment. Repeatable.
     #[arg(long = "env", value_name = "KEY=VALUE")]
     pub(crate) env: Vec<String>,
@@ -117,7 +128,7 @@ pub(crate) struct RunArgs {
     pub(crate) json: bool,
     /// The command, after `--`. The first word is resolved by the guest (its `PATH`, not the
     /// host's), so `echo` runs the guest's `echo`.
-    #[arg(last = true, required = true, value_name = "COMMAND")]
+    #[arg(last = true, value_name = "COMMAND")]
     pub(crate) command: Vec<String>,
 }
 
@@ -133,14 +144,30 @@ pub(crate) fn run(args: &RunArgs) -> ExitCode {
 
 /// The verb's fallible body, one error path, one printer: the same shape as `shell`'s `session`.
 fn execute(args: &RunArgs) -> Result<u8, String> {
-    let root = boxdesk::resolve_root(args.root.as_deref())?;
-    let cfg = to_config(args, root)?;
+    let snapshot = crate::posture::asked_for(args.snapshot.as_deref())?;
+    let snapshot = snapshot.as_ref();
+    // The root a snapshot names stands in for the flag, so it goes through the same resolution:
+    // a snapshot pointing at a tree that is not there should fail the way `--root` does.
+    // An image outranks a snapshot's root and is refused if it was never pulled: `--image` names
+    // a thing, and quietly booting a different tree because that thing is absent is the wrong
+    // answer to a caller who said which one they wanted.
+    let image = crate::image::asked_for(args.image.as_deref())?;
+    let root = boxdesk::resolve_root(
+        image
+            .as_deref()
+            .or(args.root.as_deref())
+            .or_else(|| snapshot.map(|s| s.posture.root.as_path())),
+    )?;
+    let command = crate::posture::command_for(&args.command, snapshot)?;
+    let cfg = to_config(args, root, snapshot, &command)?;
     let name = args
         .name
         .clone()
         .unwrap_or_else(|| format!("run-{}", std::process::id()));
     crate::check_name(&name)?;
-    let results = !args.no_results;
+    // `--no-results` subtracts from whatever the snapshot said, because it is the one posture
+    // flag that takes away rather than adds.
+    let results = snapshot.is_none_or(|s| s.posture.results) && !args.no_results;
 
     if args.dry_run && !args.json {
         print_posture(&name, &cfg, results, &mut std::io::stdout()).map_err(|e| e.to_string())?;
@@ -149,7 +176,7 @@ fn execute(args: &RunArgs) -> Result<u8, String> {
 
     let opts = boxdesk::SandboxOptions {
         name: name.clone(),
-        command: args.command.clone(),
+        command: command.clone(),
         cfg,
         results,
         keep: args.keep,
@@ -308,25 +335,47 @@ pub(crate) fn apply_display(
 
 /// The [`VmConfig`] for `args`, against `root`. Split from [`run`] so the flag-to-field mapping is
 /// testable without booting anything.
-fn to_config(args: &RunArgs, root: PathBuf) -> Result<VmConfig, String> {
-    let Some((program, rest)) = args.command.split_first() else {
+fn to_config(
+    args: &RunArgs,
+    root: PathBuf,
+    snapshot: Option<&boxdesk_record::Snapshot>,
+    command: &[String],
+) -> Result<VmConfig, String> {
+    let Some((program, rest)) = command.split_first() else {
         return Err("no command after `--`".to_string());
     };
     let mut cfg = VmConfig::new(root, program);
-    cfg.net = args.net.into_net();
-    cfg.rootfs = args.rootfs.into_rootfs();
-    cfg.sound = args.sound;
-    cfg.gpu = args.gpu;
+    // The snapshot first, as the base every flag below speaks over.
+    if let Some(snapshot) = snapshot {
+        crate::posture::lay_snapshot(&mut cfg, snapshot);
+    }
+    if let Some(net) = args.net {
+        cfg.net = net.into_net();
+    }
+    if let Some(rootfs) = args.rootfs {
+        cfg.rootfs = rootfs.into_rootfs();
+    }
+    cfg.sound |= args.sound;
+    cfg.gpu |= args.gpu;
     apply_display(
         &mut cfg,
-        args.display,
+        args.display
+            .or_else(|| crate::posture::snapshot_display(snapshot)),
         args.screenshot.as_deref(),
         args.frame_log.as_deref(),
     )?;
-    if let Some(v) = resolve_limit(args.vcpus, "BOXDESK_VCPUS")? {
+    if let Some(v) = crate::posture::limit(
+        args.vcpus,
+        snapshot.map(|s| s.posture.vcpus),
+        "BOXDESK_VCPUS",
+    )? {
         cfg.vcpus = v;
     }
-    if let Some(m) = resolve_limit(args.mem, "BOXDESK_MEM_MIB")? {
+    if let Some(m) = crate::posture::limit(
+        args.mem,
+        snapshot.map(|s| s.posture.mem_mib),
+        "BOXDESK_MEM_MIB",
+    )? {
         cfg.mem_mib = m;
     }
     cfg.workdir = args.workdir.clone();
@@ -346,6 +395,9 @@ fn to_config(args: &RunArgs, root: PathBuf) -> Result<VmConfig, String> {
         };
         cfg.mounts.push((guest.to_path_buf(), host.to_path_buf()));
     }
+    // A volume is an ordinary mount, resolved to one here: nothing downstream — the config, the
+    // record, the posture a run prints — needs to know the word.
+    cfg.mounts.extend(crate::volume::mounts_for(&args.volumes)?);
     Ok(cfg)
 }
 
@@ -408,7 +460,8 @@ mod tests {
         let Cmd::Run(args) = cli.cmd else {
             panic!("run must parse");
         };
-        let cfg = to_config(&args, PathBuf::from("/root-tree")).expect("a well-formed config");
+        let cfg = to_config(&args, PathBuf::from("/root-tree"), None, &args.command)
+            .expect("a well-formed config");
         assert_eq!(cfg.root, Path::new("/root-tree"));
         assert_eq!(cfg.exec, Path::new("prog"));
         assert_eq!(cfg.args, [OsString::from("-x")]);
@@ -459,7 +512,7 @@ mod tests {
         let Cmd::Run(args) = cli.cmd else {
             panic!("run must parse");
         };
-        assert_eq!(args.net, NetArg::None, "no --net means no network");
+        assert_eq!(args.net, None, "no --net means the posture is unsaid");
     }
 
     /// `run` with no `--rootfs` cannot write the image tree every sandbox on the host boots
@@ -470,8 +523,9 @@ mod tests {
         let Cmd::Run(args) = cli.cmd else {
             panic!("run must parse");
         };
-        assert_eq!(args.rootfs, RootFsArg::ReadOnly);
-        let cfg = to_config(&args, PathBuf::from("/r")).expect("a well-formed config");
+        assert_eq!(args.rootfs, None, "no --rootfs means the posture is unsaid");
+        let cfg = to_config(&args, PathBuf::from("/r"), None, &args.command)
+            .expect("a well-formed config");
         assert_eq!(cfg.rootfs, boxdesk_supervisor::RootFs::ReadOnly);
     }
 
@@ -498,7 +552,8 @@ mod tests {
         let Cmd::Run(args) = cli.cmd else {
             panic!("run must parse");
         };
-        let cfg = to_config(&args, PathBuf::from("/root-tree")).expect("a well-formed config");
+        let cfg = to_config(&args, PathBuf::from("/root-tree"), None, &args.command)
+            .expect("a well-formed config");
         let mut out = Vec::new();
         print_posture("vm-under-test", &cfg, false, &mut out).expect("a Vec never fails to write");
         let text = String::from_utf8(out).expect("the printer writes UTF-8");
@@ -534,7 +589,8 @@ mod tests {
         let Cmd::Run(args) = cli.cmd else {
             panic!("run must parse");
         };
-        let cfg = to_config(&args, PathBuf::from("/root-tree")).expect("a well-formed config");
+        let cfg = to_config(&args, PathBuf::from("/root-tree"), None, &args.command)
+            .expect("a well-formed config");
         assert_eq!(
             cfg.env,
             [
@@ -634,7 +690,65 @@ mod tests {
         let Cmd::Run(args) = cli.cmd else {
             panic!("run must parse");
         };
-        let err = to_config(&args, PathBuf::from("/r")).expect_err("half a share is refused");
+        let err = to_config(&args, PathBuf::from("/r"), None, &args.command)
+            .expect_err("half a share is refused");
         assert!(err.contains("nopath"), "{err}");
+    }
+    /// **A flag speaks over the snapshot, including when the flag is the closed one.**
+    ///
+    /// This is the reason `--net` and `--rootfs` stopped carrying a clap `default_value`: with
+    /// one, a caller who typed `--net none` was indistinguishable from a caller who typed
+    /// nothing, so a snapshot asking for `tsi` would have opened a network the caller had just
+    /// said no to. There is no worse bug available in this file.
+    #[test]
+    fn a_posture_flag_speaks_over_the_snapshot_even_when_it_closes_one() {
+        let mut posture = boxdesk_record::Posture::new(
+            PathBuf::from("/srv/guest"),
+            std::num::NonZeroU8::new(1).expect("non-zero"),
+            std::num::NonZeroU32::new(512).expect("non-zero"),
+        );
+        posture.network = boxdesk_record::Network::Tsi;
+        posture.rootfs = boxdesk_record::Rootfs::Writable;
+        let snapshot = boxdesk_record::Snapshot::new("open", posture, vec!["true".to_string()]);
+
+        let parsed = |argv: &[&str]| {
+            let Cmd::Run(args) = Cli::parse_from(argv).cmd else {
+                panic!("run parses as run")
+            };
+            args
+        };
+
+        let open = parsed(&["boxdesk", "run", "--", "true"]);
+        let cfg = to_config(&open, PathBuf::from("/r"), Some(&snapshot), &open.command)
+            .expect("a well-formed config");
+        assert_eq!(
+            cfg.net,
+            boxdesk_supervisor::Net::Tsi,
+            "with no --net the snapshot's posture should stand"
+        );
+        assert_eq!(cfg.rootfs, boxdesk_supervisor::RootFs::Writable);
+
+        let shut = parsed(&[
+            "boxdesk",
+            "run",
+            "--net",
+            "none",
+            "--rootfs",
+            "read-only",
+            "--",
+            "true",
+        ]);
+        let cfg = to_config(&shut, PathBuf::from("/r"), Some(&snapshot), &shut.command)
+            .expect("a well-formed config");
+        assert_eq!(
+            cfg.net,
+            boxdesk_supervisor::Net::None,
+            "typing --net none must close a network the snapshot opened"
+        );
+        assert_eq!(
+            cfg.rootfs,
+            boxdesk_supervisor::RootFs::ReadOnly,
+            "and typing --rootfs read-only must close the root"
+        );
     }
 }
