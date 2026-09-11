@@ -1129,15 +1129,22 @@ fn run_row<'a>(app: &'a App, record: &'a Record) -> Element<'a, Message> {
         }
     };
     let dot = record.clone();
-    let title = row![
+    let mut title = row![
         text("●").size(SMALL).style(move |t| text::Style {
             color: Some(status_colour(t, &dot, live))
         }),
         text(&record.name).font(NAME).size(TITLE),
-        space().width(Fill),
     ]
     .spacing(8)
     .align_y(iced::alignment::Vertical::Center);
+    // **Which machine it ran on, said rather than inferred.** A remote run looks like any other
+    // until you press something that reaches a socket it does not have, so the row says so first.
+    if app.is_remote(&record.id) {
+        title = title.push(text("cloud").size(SMALL).style(|t| text::Style {
+            color: Some(muted(t)),
+        }));
+    }
+    let title = title.push(space().width(Fill));
     // The command is one line and clipped, never wrapped: a long one reflowing a card pushes
     // every card below it out of place. The whole of it is on the run's own screen.
     let command = text(command)
@@ -1203,7 +1210,7 @@ fn run_row<'a>(app: &'a App, record: &'a Record) -> Element<'a, Message> {
         // What this row can be told to do, at its own end: a sandbox is stopped where it is
         // listed rather than only on its own screen. There is no pause, because libkrun has no
         // suspend.
-        body = body.push(row_actions(record, live));
+        body = body.push(row_actions(record, live, app.is_remote(&record.id)));
     }
     let body = body.spacing(12).align_y(iced::alignment::Vertical::Center);
     // A button rather than a container under a `mouse_area`: the row is a thing you click, so it
@@ -1240,7 +1247,16 @@ fn row_card(theme: &iced::Theme, status: button::Status) -> button::Style {
 
 /// What a row can be told to do without opening the run: stop a live one, run an ended one
 /// again, or take its record away. Everything else stays on the run's own screen.
-fn row_actions<'a>(record: &Record, live: bool) -> iced::widget::Row<'a, Message> {
+///
+/// **A remote run is offered neither Stop nor Delete.** Both reach a socket and a record
+/// directory on the machine the run is actually on. Re-run is offered, because it fills this
+/// machine's start form from a posture rather than touching the other one.
+fn row_actions<'a>(record: &Record, live: bool, remote: bool) -> iced::widget::Row<'a, Message> {
+    if remote {
+        return row![
+            small_button("Re-run", push).on_press(Message::Rerun(crate::RunId::of(record)))
+        ];
+    }
     if live {
         return row![
             small_button("Stop", destructive).on_press(Message::Stop(crate::RunName::of(record)))
@@ -1334,7 +1350,13 @@ pub(crate) fn run<'a>(app: &'a App, id: &crate::RunId) -> Element<'a, Message> {
     .align_y(iced::alignment::Vertical::Center);
     bar =
         bar.push(small_button("Export", push).on_press(Message::Export(crate::RunId::of(record))));
-    if live {
+    // Stop, Shell and Delete each reach a control socket or a record directory on the machine the
+    // run is on. For a run this window only READ from a console, there is nothing here to reach;
+    // Re-run is still offered, because it fills this machine's form from a posture.
+    if app.is_remote(&record.id) {
+        bar = bar
+            .push(small_button("Re-run", push).on_press(Message::Rerun(crate::RunId::of(record))));
+    } else if live {
         if record.verb == Verb::Up {
             bar = bar.push(
                 small_button("Shell", push).on_press(Message::Shell(crate::RunName::of(record))),

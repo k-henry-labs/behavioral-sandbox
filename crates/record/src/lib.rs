@@ -185,7 +185,9 @@ impl Verb {
         }
     }
 
-    fn from_word(word: &str) -> Option<Self> {
+    /// The verb a word names, for a reader of a record or of a console's answer about one.
+    #[must_use]
+    pub fn from_word(word: &str) -> Option<Self> {
         match word {
             "run" => Some(Self::Run),
             "shell" => Some(Self::Shell),

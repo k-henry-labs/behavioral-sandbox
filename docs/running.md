@@ -125,7 +125,14 @@ readable.
 
 `Tormoni` opens on the notebook, with a sidebar reaching four tabs:
 
-- **The list**: every run, newest first, live ones with a thumbnail of their display. `Select`
+- **The list**: every run, newest first, live ones with a thumbnail of their display. While
+  signed in it also holds what the console keeps, marked `cloud` and asked for on its own slower
+  clock than the window's own tick. A run in both places is **this machine's**, because only this
+  machine's copy can be stopped, shelled into or watched. A remote run is read, exported and
+  re-run here and nothing else: Stop, Shell and Delete each reach a control socket or a record
+  directory on the machine the run is actually on, and a display is a sealed memfd over a local
+  socket, which is not a thing that crosses a network.
+  `a_consoles_runs_merge_beside_this_machines_and_never_over_them` holds the merge to that. `Select`
   turns each ended row into a tick box, `All` takes every one of them, and `Remove` asks about what
   was selected. A live run has no box: it is refused a delete until it stops.
 - **One run**: its posture, output and results beside its live display (keyboard and pointer go

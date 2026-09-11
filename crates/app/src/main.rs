@@ -22,6 +22,7 @@ mod fonts;
 mod frame;
 mod icons;
 mod lease;
+mod remote;
 mod screens;
 mod state;
 mod theme;
@@ -65,6 +66,12 @@ const OUTPUT_TAIL: u64 = 256 * 1024;
 /// The shortest gap between two presents a thumbnail in the list is redrawn for. A thumbnail is
 /// a glance, not a screen, and every present it takes is a whole window rebuild.
 const THUMBNAIL_EVERY: std::time::Duration = std::time::Duration::from_millis(100);
+/// How often the console is asked what it holds.
+///
+/// The window's own tick is a second, which is the right rate for a list of processes on this
+/// machine and far too fast for a network. A run that landed on a console thirty seconds ago is
+/// not news worth a request a second.
+const ASK_CONSOLE_EVERY_MS: u64 = 30_000;
 
 /// The most live displays the list leases at once, newest first. Each costs a thread, a socket
 /// and a scanout mapping.
@@ -966,6 +973,10 @@ pub(crate) enum Message {
     SignedOut(Result<(), String>),
     /// A token an earlier launch left behind was handed back, or was not.
     Retired(Result<(), String>),
+    /// The console's runs, for the next refresh to merge beside this machine's.
+    Fetched(Vec<Record>),
+    /// What a run held on a console printed, for the screen that is open on it.
+    RemoteOutput(RunId, Result<String, String>),
     /// Open one of the console's pages in the browser: Manage and Upgrade.
     Console(account::Page),
     /// Something the operator should see in the window rather than on a stderr they may not have.
@@ -988,6 +999,17 @@ pub(crate) struct App {
     status: Option<String>,
     /// Who this window is signed in as. Nothing on any screen needs one.
     account: account::Account,
+    /// The run ids this window got from a console rather than from its own notebook.
+    ///
+    /// Held beside the runs rather than on them: a [`Record`] is the wire format, and where a
+    /// copy of one was read is this window's fact, not the record's.
+    remote: remote::Remote,
+    /// What the last ask of the console brought back, waiting for the next refresh to merge it.
+    /// Fetched off the window's thread, because a console is a network away.
+    fetched: Vec<Record>,
+    /// When the console was last asked. The window ticks once a second and a console is a network
+    /// away, so the list is refreshed on its own, slower clock.
+    asked_ms: u64,
     /// The console the account is signed in to, and whose pages Manage and Upgrade open.
     console: String,
     /// Where this device's key and token live. A field, not a call, so a test never reaches the
@@ -1057,6 +1079,9 @@ impl App {
             form: Form::blank(),
             status: None,
             account: account::Account::default(),
+            remote: remote::Remote::new(),
+            fetched: Vec::new(),
+            asked_ms: 0,
             console: account::DEFAULT.to_string(),
             device_dir: account::dir().unwrap_or_default(),
             output: Output::default(),
@@ -1152,6 +1177,17 @@ impl App {
             .unwrap_or_default();
         let mut runs = self.store.list().unwrap_or_default();
         settle_gone(&self.store, &mut runs, &self.live);
+        // A console's runs are merged in rather than replacing anything: a person signed in on a
+        // laptop still has their own, and a run that is in both places is this machine's, because
+        // only this machine's copy can be stopped, shelled into or watched.
+        let mine: std::collections::BTreeSet<String> = runs.iter().map(|r| r.id.clone()).collect();
+        for record in std::mem::take(&mut self.fetched) {
+            if !mine.contains(&record.id) {
+                self.remote.insert(record.id.clone());
+                runs.push(record);
+            }
+        }
+        runs.sort_by(|a, b| b.started_ms.cmp(&a.started_ms).then(b.id.cmp(&a.id)));
         self.runs = runs;
         if let Screen::Run(id) = &self.screen {
             let id = id.clone();
@@ -1172,6 +1208,13 @@ impl App {
             Some(s) if streams.contains(&s) => Some(s),
             _ => streams.first().copied(),
         };
+        // A run this window read from a console has no directory here, so there is nothing local
+        // to tail: its output is asked for once, on the way in.
+        if self.remote.contains(id.as_str()) {
+            self.results = Vec::new();
+            self.output = Output::default();
+            return;
+        }
         let dir = self.store.dir_of(id.as_str());
         self.results = dir.result_files().unwrap_or_default();
         self.output = match stream {
@@ -1257,6 +1300,43 @@ impl App {
             scale: Some(self.scale),
             open: Some(self.opens_on.to_string()),
         }
+    }
+
+    /// Whether this run happened somewhere else, so the buttons that reach a control socket are
+    /// not offered for it.
+    ///
+    /// A remote run can be read, exported and re-run here; it cannot be stopped, shelled into or
+    /// watched, because those reach a socket on the machine it is actually on.
+    pub(crate) fn is_remote(&self, id: &str) -> bool {
+        self.remote.contains(id)
+    }
+
+    /// Asks the console again if it has been long enough, and otherwise does nothing.
+    fn ask_console_if_due(&mut self) -> Task<Message> {
+        let now = tormoni_record::now_ms();
+        if now.saturating_sub(self.asked_ms) < ASK_CONSOLE_EVERY_MS {
+            return Task::none();
+        }
+        self.asked_ms = now;
+        self.fetch_remote()
+    }
+
+    /// Asks the console for its runs, off this thread.
+    ///
+    /// Only while signed in: a window with no token would be asking a console that will refuse,
+    /// once a tick, for ever.
+    fn fetch_remote(&self) -> Task<Message> {
+        if !matches!(self.account, account::Account::SignedIn(_)) {
+            return Task::none();
+        }
+        let Some(cli) = self.platform.tormoni.clone() else {
+            return Task::none();
+        };
+        let console = self.console.clone();
+        Task::perform(
+            async move { remote::list(&cli, Some(&console)).unwrap_or_default() },
+            Message::Fetched,
+        )
     }
 
     /// Drops what was mapped for a run this window no longer leases, so a display left behind
@@ -1350,6 +1430,37 @@ impl App {
         match message {
             Message::Tick => {
                 self.refresh();
+                self.ask_console_if_due()
+            }
+            Message::Open(id) if self.is_remote(id.as_str()) => {
+                self.open(id.clone());
+                self.status = None;
+                let Some(cli) = self.platform.tormoni.clone() else {
+                    return Task::none();
+                };
+                let console = self.console.clone();
+                let asked = id.clone();
+                Task::perform(
+                    async move { remote::output(&cli, Some(&console), asked.as_str()) },
+                    move |text| Message::RemoteOutput(id.clone(), text),
+                )
+            }
+            Message::RemoteOutput(id, text) => {
+                // Dropped if the screen moved on: a console's answer that arrives after the run
+                // was closed belongs to a screen nobody is looking at.
+                if self.screen == Screen::Run(id) {
+                    match text {
+                        Ok(text) => {
+                            self.output = Output {
+                                stream: None,
+                                size: text.len() as u64,
+                                text,
+                                capped: false,
+                            };
+                        }
+                        Err(why) => self.status = Some(why),
+                    }
+                }
                 Task::none()
             }
             Message::Open(id) => {
@@ -1607,6 +1718,11 @@ impl App {
                 ));
                 Task::none()
             }
+            Message::Fetched(runs) => {
+                self.fetched = runs;
+                self.refresh();
+                Task::none()
+            }
             Message::Retired(Ok(())) => Task::none(),
             Message::Retired(Err(why)) => {
                 self.status = Some(format!(
@@ -1717,6 +1833,24 @@ impl App {
                 }
                 self.refresh();
                 Task::none()
+            }
+            Message::Export(id) if self.is_remote(id.as_str()) => {
+                let (console, store) = (self.console.clone(), self.store.clone());
+                let Some(cli) = self.platform.tormoni.clone() else {
+                    self.status =
+                        Some("no `tormoni` beside this app to reach the console with".into());
+                    return Task::none();
+                };
+                Task::perform(
+                    async move {
+                        let home = std::env::var_os("HOME").map(PathBuf::from);
+                        let dest = export_destination(home, &store).join(format!("{id}.tar"));
+                        remote::pull(&cli, Some(&console), id.as_str(), &dest)
+                            .map(|_| format!("exported to {}", dest.display()))
+                            .map_err(|why| format!("exporting {id}: {why}"))
+                    },
+                    Message::Acted,
+                )
             }
             Message::Export(id) => {
                 let store = self.store.clone();
@@ -2181,6 +2315,56 @@ mod tests {
                 .is_some_and(|s| s.contains("still lists this device")),
             "{:?}",
             app.status
+        );
+    }
+
+    /// **A console's runs land beside this machine's, and a run in both places is this
+    /// machine's.** Only the local copy can be stopped, shelled into or watched, so marking it
+    /// remote would take away buttons that work.
+    #[test]
+    fn a_consoles_runs_merge_beside_this_machines_and_never_over_them() {
+        let dir = tormoni_test_support::ScratchDir::created("app-remote-merge");
+        let store = Store::at(dir.path().join("runs")).expect("a store");
+        let mut mine = displayed("ours", false);
+        mine.id = "1756860007001-ours".to_string();
+        mine.started_ms = 1_756_860_007_001;
+        store.create(&mine).expect("created");
+        store.save(&mine).expect("saved");
+
+        let sinks = Arc::new(frame::Sinks::open(None, None).expect("sinks"));
+        let mut app = App::new(store, None, None, sinks, false);
+        // The same run the console holds a copy of, plus one only it has.
+        let mut theirs = mine.clone();
+        theirs.name = "from-the-console".to_string();
+        let mut only_theirs = displayed("elsewhere", false);
+        only_theirs.id = "1756860007002-elsewhere".to_string();
+        only_theirs.started_ms = 1_756_860_007_002;
+
+        let _ = app.update(Message::Fetched(vec![theirs, only_theirs]));
+
+        let ids: Vec<&str> = app.runs.iter().map(|r| r.id.as_str()).collect();
+        assert_eq!(
+            ids,
+            ["1756860007002-elsewhere", "1756860007001-ours"],
+            "newest first, both sources"
+        );
+        assert!(
+            app.is_remote("1756860007002-elsewhere"),
+            "the console's own run is marked"
+        );
+        assert!(
+            !app.is_remote("1756860007001-ours"),
+            "a run in both places is this machine's"
+        );
+        // And the local copy is the one kept, name and all.
+        let kept = app
+            .runs
+            .iter()
+            .find(|r| r.id == "1756860007001-ours")
+            .expect("the local copy");
+        assert_eq!(
+            kept.name, "ours",
+            "the console's copy overwrote the local one"
         );
     }
 
