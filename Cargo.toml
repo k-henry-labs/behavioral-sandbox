@@ -19,7 +19,10 @@ members = [
 ]
 # `fuzz` is the `cargo fuzz` harness: nightly + libFuzzer, its own detached workspace, never part of
 # the everyday stable gate. Excluded here too so `cargo build --workspace` ignores it.
-exclude = ["fuzz"]
+# `fuzz` has its own lockfile and toolchain; `sdk/rust` is a published client of the CLI's
+# contract rather than a part of the sandbox, so it carries its own version and is not built by
+# the gate's workspace commands.
+exclude = ["fuzz", "sdk/rust", "sdk/python", "sdk/js"]
 
 [workspace.package]
 version = "0.0.1"

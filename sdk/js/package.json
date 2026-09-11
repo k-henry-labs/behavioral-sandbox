@@ -1,0 +1,83 @@
+{
+  "name": "tormoni",
+  "version": "0.1.0",
+  "description": "The JS SDK for Tormoni: run untrusted code in a hardware-isolated VM",
+  "license": "Apache-2.0",
+  "author": "Kendrick Lawton",
+  "homepage": "https://github.com/kendricklawton/tormoni",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kendricklawton/tormoni.git",
+    "directory": "sdk/js"
+  },
+  "keywords": [
+    "tormoni",
+    "sandbox",
+    "vm",
+    "microvm",
+    "libkrun",
+    "isolation",
+    "untrusted-code"
+  ],
+  "type": "commonjs",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "index.js",
+    "index.d.ts",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "napi build --platform --release && tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "verify": "npm run typecheck && npm run build && npm test"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^2.14.7",
+    "@types/node": "^22.20.2",
+    "tsup": "^8.0.2",
+    "typescript": "^5.4.5",
+    "vitest": "^1.6.0"
+  },
+  "napi": {
+    "name": "tormoni-js",
+    "triples": {
+      "defaults": false,
+      "additional": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+        "x86_64-unknown-linux-gnu",
+        "aarch64-unknown-linux-gnu"
+      ]
+    },
+    "package": {
+      "name": "@tormoni/js"
+    }
+  },
+  "optionalDependencies": {
+    "@tormoni/js-darwin-arm64": "0.1.0",
+    "@tormoni/js-darwin-x64": "0.1.0",
+    "@tormoni/js-linux-x64-gnu": "0.1.0",
+    "@tormoni/js-linux-arm64-gnu": "0.1.0"
+  }
+}

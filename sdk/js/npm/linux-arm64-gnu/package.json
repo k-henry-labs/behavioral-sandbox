@@ -1,0 +1,38 @@
+{
+  "name": "@tormoni/js-linux-arm64-gnu",
+  "version": "0.1.0",
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "main": "tormoni-js.linux-arm64-gnu.node",
+  "files": [
+    "tormoni-js.linux-arm64-gnu.node"
+  ],
+  "description": "The JS SDK for Tormoni: run untrusted code in a hardware-isolated VM",
+  "keywords": [
+    "tormoni",
+    "sandbox",
+    "vm",
+    "microvm",
+    "libkrun",
+    "isolation",
+    "untrusted-code"
+  ],
+  "author": "Kendrick Lawton",
+  "homepage": "https://github.com/kendricklawton/tormoni",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kendricklawton/tormoni.git",
+    "directory": "sdk/js"
+  },
+  "libc": [
+    "glibc"
+  ]
+}

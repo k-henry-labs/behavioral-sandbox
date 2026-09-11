@@ -1,0 +1,45 @@
+"""Exception types raised by the Tormoni SDK.
+
+The dividing line these types encode is the one the CLI draws: a guest command
+that exits non-zero is *not* an error, it is a :class:`~tormoni.models.Run`
+with a non-zero ``end_code``.  Only a failure of Tormoni itself -- a missing
+binary, an absent guest root, a hypervisor that does not answer -- reaches
+here.
+"""
+
+from typing import Optional
+
+
+class TormoniException(Exception):
+    """Base class for every exception this package raises."""
+
+
+class TormoniNotFound(TormoniException, FileNotFoundError):
+    """A path the sandbox needs is not there -- most often the guest root.
+
+    Also a :class:`FileNotFoundError`, so callers written against the earlier
+    subprocess SDK, where this meant a missing binary, keep working.
+    """
+
+
+class TormoniError(TormoniException, RuntimeError):
+    """The sandbox itself failed: no hypervisor, a posture that cannot be met,
+    a run store that cannot be opened.
+
+    ``stderr`` is the CLI's own message, passed through verbatim: it is written
+    for a person and maintained upstream, so this package never rewords it.
+    ``exit_code`` is the process exit status, which for a successful run would
+    have been the *guest command's* status and so carries no meaning of its own.
+    """
+
+    def __init__(
+        self, stderr: str, exit_code: int, detail: Optional[str] = None
+    ) -> None:
+        self.stderr = stderr
+        self.exit_code = exit_code
+        # Tormoni's own words win whenever it wrote any; `detail` only fills
+        # the gap when it exited silently.
+        silent = (
+            f"tormoni exited with status {exit_code} without printing a JSON document"
+        )
+        super().__init__(stderr.strip() or detail or silent)

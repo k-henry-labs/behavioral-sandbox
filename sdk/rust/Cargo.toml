@@ -1,0 +1,31 @@
+[package]
+name = "tormoni"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.98"
+description = "Rust SDK for Tormoni: run untrusted code in a hardware-isolated VM on your own machine"
+repository = "https://github.com/kendricklawton/tormoni"
+homepage = "https://github.com/kendricklawton/tormoni"
+license = "Apache-2.0"
+readme = "README.md"
+keywords = ["sandbox", "vm", "libkrun", "isolation", "sdk"]
+categories = ["api-bindings", "virtualization", "development-tools"]
+# NOT publishable, and not because nobody got round to it: this depends on `crates/cli` by path,
+# and every crate in that workspace is `publish = false`. A path dependency on an unpublished
+# crate cannot go to crates.io at any version, so `cargo package` refuses it — which is honest,
+# and better than a manifest advertising a docs.rs page that can never exist. Publishing this
+# means publishing the core crates under real names first.
+publish = false
+include = ["src/**/*", "tests/**/*", "examples/**/*", "README.md", "CHANGELOG.md", "LICENSE"]
+
+[dependencies]
+tormoni-core = { package = "tormoni", path = "../../crates/cli" }
+tormoni-record = { path = "../../crates/record" }
+tormoni-supervisor = { path = "../../crates/supervisor" }
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+missing_debug_implementations = "warn"
+unreachable_pub = "warn"
+rust_2018_idioms = { level = "warn", priority = -1 }
