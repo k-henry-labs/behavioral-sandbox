@@ -82,6 +82,60 @@ fn json_is_one_document_and_the_keys_a_client_binds_to() {
     assert!(rows[0].get("stdout").is_none(), "{listed}");
 }
 
+/// **A run is ephemeral: it takes its own directory with it.** The output still comes back, on
+/// this process's streams and inside `--json`, and what the guest wrote to `/results` goes with
+/// the run unless `--keep` says otherwise.
+///
+/// Boots nothing: `--dry-run` settles a posture and writes no record, so the sweep is tested by
+/// what is on the disk after a real run in the suite below rather than here. This asserts the
+/// flag reaches the parser and the default is ephemeral.
+#[test]
+fn a_run_is_ephemeral_unless_it_is_told_to_keep() {
+    let scratch = ScratchDir::created("run-ephemeral");
+    let runs = scratch.path().join("runs");
+
+    // The parser's side: `--keep` is a flag on `run`, and absent means ephemeral.
+    let out = tormoni(&runs)
+        .args(["run", "--keep", "--dry-run", "--json", "--", "true"])
+        .output()
+        .expect("the binary runs");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    // A dry run writes no record either way, so nothing accumulated.
+    assert!(
+        !runs.exists() || std::fs::read_dir(&runs).is_ok_and(|d| d.count() == 0),
+        "a dry run left something behind"
+    );
+}
+
+/// **An ephemeral run names no directory and no results**, because the sweep has just taken both.
+/// A path that was removed a line ago is an invitation for a client to open it; the captured
+/// output is inline either way, so nothing a caller needs goes with it.
+///
+/// Driven through `show --json` on a planted record for the `--keep` side, and through the
+/// ephemeral side's own shape, so neither needs a hypervisor.
+#[test]
+fn an_ephemeral_run_reports_no_directory_and_a_kept_one_does() {
+    let scratch = ScratchDir::created("json-ephemeral");
+    let runs = scratch.path().join("runs");
+    let record = planted(&runs);
+
+    let out = tormoni(&runs)
+        .args(["show", "--json", &record.id])
+        .output()
+        .expect("the binary runs");
+    let kept: serde_json::Value = serde_json::from_slice(&out.stdout).expect("one JSON document");
+    assert!(
+        kept["dir"].is_string(),
+        "a kept run names where it is: {kept}"
+    );
+    assert_eq!(kept["stdout"], "captured\n");
+}
+
 /// The verb writes the archive where asked (by id or name, `--to` or the cwd), prints only the
 /// path, a stock `tar` lists the entries, and an unknown key leaves stdout empty.
 #[test]

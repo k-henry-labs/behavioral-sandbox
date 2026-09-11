@@ -111,6 +111,12 @@ impl Job {
     /// another at a keyboard.
     fn argv(&self, verb: &str, name: &str) -> Vec<String> {
         let mut argv = vec![verb.to_string(), "--name".to_string(), name.to_string()];
+        // A run is ephemeral at a keyboard, and a served one cannot be: the archive lane hands
+        // back the bytes `tormoni export` writes, and there is nothing to export from a directory
+        // the run took with it. The box sweeps its own after a caller has had them.
+        if verb == "run" {
+            argv.push("--keep".to_string());
+        }
         let mut push = |flag: &str, value: &str| {
             argv.push(flag.to_string());
             argv.push(value.to_string());
@@ -571,6 +577,7 @@ mod tests {
                 "run",
                 "--name",
                 "job-1",
+                "--keep",
                 "--vcpus",
                 "2",
                 "--mem",
@@ -606,7 +613,7 @@ mod tests {
                 "{flag} was invented: {argv:?}"
             );
         }
-        assert_eq!(argv, ["run", "--name", "job-1", "--", "true"]);
+        assert_eq!(argv, ["run", "--name", "job-1", "--keep", "--", "true"]);
     }
 
     /// An allocation is what a job asked for, and the CLI's defaults where it asked for nothing:

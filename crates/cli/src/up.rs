@@ -105,7 +105,7 @@ pub(crate) fn run(args: &UpArgs) -> ExitCode {
 }
 
 fn start(args: &UpArgs) -> Result<Outcome, String> {
-    let root = crate::run::resolve_root(args.root.as_deref())?;
+    let root = tormoni::resolve_root(args.root.as_deref())?;
     let name = args
         .name
         .clone()
@@ -180,7 +180,7 @@ fn start(args: &UpArgs) -> Result<Outcome, String> {
         &name,
         tormoni_record::Verb::Up,
         Vec::new(),
-        crate::run::posture_of(&cfg, results),
+        tormoni::posture_of(&cfg, results),
     );
     let run = store.create(&record).map_err(|e| e.to_string())?;
     if results {

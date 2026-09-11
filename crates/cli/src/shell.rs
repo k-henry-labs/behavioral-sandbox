@@ -102,7 +102,7 @@ pub(crate) fn run(args: &ShellArgs) -> ExitCode {
 }
 
 fn session(args: &ShellArgs) -> Result<u8, String> {
-    let root = crate::run::resolve_root(args.root.as_deref())?;
+    let root = tormoni::resolve_root(args.root.as_deref())?;
     for entry in &args.env {
         if !crate::vmm::well_formed_env(entry) {
             return Err(format!("--env {entry:?} is not KEY=VALUE"));
@@ -175,7 +175,7 @@ fn session(args: &ShellArgs) -> Result<u8, String> {
         &name,
         tormoni_record::Verb::Shell,
         command.clone(),
-        crate::run::posture_of(&cfg, results),
+        tormoni::posture_of(&cfg, results),
     );
     let run = store.create(&record).map_err(|e| e.to_string())?;
     if results {

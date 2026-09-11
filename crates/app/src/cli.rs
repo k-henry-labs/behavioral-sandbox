@@ -162,6 +162,19 @@ pub(crate) fn posture_args(form: &Form, name: &str) -> Result<Vec<String>, Strin
     Ok(args)
 }
 
+/// The argv for a run this window started.
+///
+/// **The notebook keeps what it starts.** A run at a keyboard is a one-off and is ephemeral by
+/// default; a run started from a window is one somebody means to look at afterwards, which is the
+/// whole of what this app is. `Remove` is how one goes.
+fn run_argv(posture: &[String], command: &[&str]) -> Vec<String> {
+    let mut argv = vec!["run".to_string(), "--keep".to_string()];
+    argv.extend(posture.iter().cloned());
+    argv.push("--".to_string());
+    argv.extend(command.iter().map(|word| (*word).to_string()));
+    argv
+}
+
 /// Starts the run the form describes and returns its name: `tormoni run` for a command, detached,
 /// or `tormoni up` for a sandbox with none.
 pub(crate) fn start(tormoni: &Path, form: &Form) -> Result<crate::RunName, String> {
@@ -185,10 +198,7 @@ pub(crate) fn start(tormoni: &Path, form: &Form) -> Result<crate::RunName, Strin
         return Ok(crate::RunName::started(name));
     }
     let child = Command::new(tormoni)
-        .arg("run")
-        .args(&args)
-        .arg("--")
-        .args(&command)
+        .args(run_argv(&args, &command))
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -398,6 +408,25 @@ mod tests {
 
     /// A bundled app finds the CLI under `Contents/Resources`, and a `target/` pair finds it
     /// beside the executable; the beside place is looked at first either way.
+    /// **A run this window starts is kept.** The CLI sweeps a run's directory when it ends, so a
+    /// notebook that did not ask for the record would list what it started for a moment and then
+    /// lose it.
+    #[test]
+    fn a_run_the_window_starts_asks_to_keep_its_record() {
+        let argv = run_argv(&["--net".to_string(), "tsi".to_string()], &["echo", "hi"]);
+        assert_eq!(
+            argv,
+            ["run", "--keep", "--net", "tsi", "--", "echo", "hi"],
+            "the flag goes before the posture and the command stays last"
+        );
+        assert!(
+            argv.iter()
+                .position(|a| a == "--keep")
+                .is_some_and(|at| at < argv.iter().position(|a| a == "--").unwrap_or(usize::MAX)),
+            "a flag after `--` is a word for the guest: {argv:?}"
+        );
+    }
+
     #[test]
     fn a_bundled_app_finds_the_cli_in_resources() {
         assert_eq!(

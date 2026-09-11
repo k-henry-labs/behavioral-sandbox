@@ -136,14 +136,18 @@ mod tests {
     use tormoni_test_support::ScratchDir;
 
     /// The default this writes to is the default `tormoni` reads from. Two crates, one path, and no
-    /// constant either can share: the CLI's resolution is private to it.
+    /// constant either can share.
+    ///
+    /// It reads `crates/cli/src/lib.rs`, where `resolve_root` moved when the SDKs began calling it:
+    /// a binding that built its own default would look somewhere `xtask init` never writes. This
+    /// test caught that move, which is the whole reason it greps a file rather than trusting one.
     #[test]
     fn the_default_guest_root_is_the_one_the_cli_looks_in() {
-        let cli = std::fs::read_to_string(crate::workspace_root().join("crates/cli/src/run.rs"))
+        let cli = std::fs::read_to_string(crate::workspace_root().join("crates/cli/src/lib.rs"))
             .expect("read the CLI's root resolution");
         assert!(
             cli.contains(&format!("join(\"{GUEST_ROOT_UNDER_DATA}\")")),
-            "crates/cli/src/run.rs no longer joins {GUEST_ROOT_UNDER_DATA:?} onto the data \
+            "crates/cli/src/lib.rs no longer joins {GUEST_ROOT_UNDER_DATA:?} onto the data \
              directory, so `xtask init` would write a tree `tormoni` does not look for"
         );
     }

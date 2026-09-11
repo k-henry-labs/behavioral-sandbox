@@ -16,8 +16,8 @@ use std::process::ExitCode;
 
 use clap::Args;
 
-use tormoni_record::{End, Posture, RESULTS_GUEST_PATH, Record, Store, Verb};
-use tormoni_supervisor::{Console, Display, Exit, Vm, VmConfig};
+use tormoni_record::RESULTS_GUEST_PATH;
+use tormoni_supervisor::{Display, VmConfig};
 
 use crate::EXIT_OPERATIONAL;
 use crate::posture::{NetArg, RootFsArg};
@@ -77,6 +77,14 @@ pub(crate) struct RunArgs {
     /// Print what this sandbox would share and exit, without booting anything.
     #[arg(long)]
     pub(crate) dry_run: bool,
+    /// Keep the run's record after it ends: its posture, its captured output, and whatever the
+    /// guest wrote to `/results`.
+    ///
+    /// A run is ephemeral by default. It boots, its output comes back on this process's streams
+    /// (or inside `--json`), and the directory it worked in goes with it, so nothing accumulates
+    /// on a machine that only wanted an answer.
+    #[arg(long)]
+    pub(crate) keep: bool,
     /// Give the guest a display of `WIDTHxHEIGHT`, shown in a window for as long as the sandbox
     /// runs; `WIDTHxHEIGHT@HZ` also tells the guest its refresh rate. Closing the window stops
     /// the sandbox.
@@ -125,8 +133,8 @@ pub(crate) fn run(args: &RunArgs) -> ExitCode {
 
 /// The verb's fallible body, one error path, one printer: the same shape as `shell`'s `session`.
 fn execute(args: &RunArgs) -> Result<u8, String> {
-    let root = resolve_root(args.root.as_deref())?;
-    let mut cfg = to_config(args, root)?;
+    let root = tormoni::resolve_root(args.root.as_deref())?;
+    let cfg = to_config(args, root)?;
     let name = args
         .name
         .clone()
@@ -134,164 +142,39 @@ fn execute(args: &RunArgs) -> Result<u8, String> {
     crate::check_name(&name)?;
     let results = !args.no_results;
 
-    if args.dry_run {
-        if args.json {
-            let record = Record::begin(
-                &name,
-                Verb::Run,
-                args.command.clone(),
-                posture_of(&cfg, results),
-            );
-            println!("{}", crate::json::record_json(&record));
-            return Ok(0);
-        }
+    if args.dry_run && !args.json {
         print_posture(&name, &cfg, results, &mut std::io::stdout()).map_err(|e| e.to_string())?;
         return Ok(0);
     }
-    // The record first, so the results directory exists to mount; the output goes through this
-    // process on its way to the record, and the caller's stdout still gets every byte.
-    let store = Store::open().map_err(|e| e.to_string())?;
-    let mut record = Record::begin(
-        &name,
-        Verb::Run,
-        args.command.clone(),
-        posture_of(&cfg, results),
-    );
-    let run = store.create(&record).map_err(|e| e.to_string())?;
-    if results {
-        cfg.mounts
-            .push((PathBuf::from(RESULTS_GUEST_PATH), run.results()));
-    }
-    cfg.console = Console::Piped;
-    let mut vm = Vm::spawn(name, &cfg).map_err(|e| e.to_string())?;
-    record.pid = Some(vm.pid());
-    store.save(&record).map_err(|e| e.to_string())?;
-    // With `--json` this process's streams carry the document and nothing else: a byte of guest
-    // output in front of it is a document no client can parse. The capture is unaffected, so the
-    // output is not lost — it comes back inside the document.
-    let (to_out, to_err): (
-        Box<dyn std::io::Write + Send>,
-        Box<dyn std::io::Write + Send>,
-    ) = if args.json {
-        (Box::new(std::io::sink()), Box::new(std::io::sink()))
-    } else {
-        (Box::new(std::io::stdout()), Box::new(std::io::stderr()))
+
+    let opts = tormoni::SandboxOptions {
+        name: name.clone(),
+        command: args.command.clone(),
+        cfg,
+        results,
+        keep: args.keep,
+        dry_run: args.dry_run,
+        quiet: args.json,
     };
-    let out = tee(
-        vm.take_stdout(),
-        to_out,
-        run.append(&run.stdout()).map_err(|e| e.to_string())?,
-    );
-    let err = tee(
-        vm.take_stderr(),
-        to_err,
-        run.append(&run.stderr()).map_err(|e| e.to_string())?,
-    );
-    let waited = vm.wait();
-    let _ = out.join();
-    let _ = err.join();
-    let exit = match waited {
-        Ok(exit) => exit,
-        Err(e) => {
-            record.finish(End::Failed);
-            let _ = store.save(&record);
-            return Err(e.to_string());
-        }
-    };
-    record.finish(match exit {
-        Exit::Code(code) => End::Exit(code),
-        Exit::Signal(sig) => End::Signal(sig),
-        _ => End::Failed,
-    });
-    store.save(&record).map_err(|e| e.to_string())?;
+
+    let (record, run_opt, exit_code) = tormoni::execute_sandbox(opts)?;
+
     if args.json {
-        println!("{}", crate::json::complete(&record, &run));
-    }
-    Ok(exit_code_of(exit))
-}
-
-/// Copies `from` to `to` and to `keep` on a thread of its own, until `from` ends. `from` being
-/// `None` is a VM whose console was not piped, which copies nothing.
-fn tee(
-    from: Option<impl std::io::Read + Send + 'static>,
-    mut to: impl std::io::Write + Send + 'static,
-    mut keep: tormoni_record::Capped,
-) -> std::thread::JoinHandle<()> {
-    use std::io::Write;
-    std::thread::spawn(move || {
-        let Some(mut from) = from else { return };
-        let mut buf = [0u8; 8192];
-        loop {
-            let n = match from.read(&mut buf) {
-                Ok(0) | Err(_) => break,
-                Ok(n) => n,
-            };
-            let _ = keep.write_all(&buf[..n]);
-            if to.write_all(&buf[..n]).is_err() || to.flush().is_err() {
-                break;
-            }
+        let mut value = if let Some(run) = run_opt {
+            crate::json::complete(&record, &run)
+        } else {
+            crate::json::record_json(&record)
+        };
+        if !args.keep
+            && let Some(object) = value.as_object_mut()
+        {
+            object.insert("dir".into(), serde_json::Value::Null);
+            object.insert("files".into(), serde_json::Value::Array(Vec::new()));
         }
-    })
-}
-
-/// The record's spelling of a config's root posture.
-///
-/// The two enums are separate because `tormoni-record` is dependency-free and cannot name a type from
-/// the crate that links libkrun; `the_record_and_the_config_spell_the_posture_alike` holds them in
-/// step, and the wildcard is what `#[non_exhaustive]` requires of a match from another crate.
-fn record_rootfs(rootfs: tormoni_supervisor::RootFs) -> tormoni_record::Rootfs {
-    match rootfs {
-        tormoni_supervisor::RootFs::Writable => tormoni_record::Rootfs::Writable,
-        _ => tormoni_record::Rootfs::ReadOnly,
+        println!("{value}");
     }
-}
 
-/// The record's spelling of a config's network posture.
-fn record_network(net: tormoni_supervisor::Net) -> tormoni_record::Network {
-    match net {
-        tormoni_supervisor::Net::Tsi => tormoni_record::Network::Tsi,
-        _ => tormoni_record::Network::None,
-    }
-}
-
-/// The record's spelling of a config's display.
-fn record_display(display: tormoni_supervisor::Display) -> tormoni_record::DisplayMode {
-    let mode = tormoni_record::DisplayMode::new(display.width, display.height);
-    match display.refresh {
-        Some(hz) => mode.with_refresh(hz),
-        None => mode,
-    }
-}
-
-/// The record's posture for `cfg`: the same facts [`print_posture`] prints, in the record's
-/// shape.
-pub(crate) fn posture_of(cfg: &VmConfig, results: bool) -> Posture {
-    let mut p = Posture::new(cfg.root.clone(), cfg.vcpus, cfg.mem_mib);
-    p.rootfs = record_rootfs(cfg.rootfs);
-    p.mounts = cfg
-        .mounts
-        .iter()
-        .map(|(guest, host)| tormoni_record::Mount::new(guest.clone(), host.clone()))
-        .collect();
-    p.shares = cfg
-        .shares
-        .iter()
-        .map(|(tag, host)| tormoni_record::Share::new(tag.clone(), host.clone()))
-        .collect();
-    p.network = record_network(cfg.net);
-    p.display = cfg.display.map(record_display);
-    p.sound = cfg.sound;
-    p.gpu = cfg.gpu;
-    p.results = results;
-    // The names, never what they are set to: a value is the caller's secret often enough that
-    // the record is not the place for one. `tormoni_record::env_key` is the same cut the record
-    // writer makes.
-    p.env = cfg
-        .env
-        .iter()
-        .map(|entry| tormoni_record::env_key(&entry.to_string_lossy()).to_string())
-        .collect();
-    p
+    Ok(exit_code)
 }
 
 /// Writes what this sandbox shares, one element to a line, in the order the guest meets them.
@@ -369,48 +252,6 @@ pub(crate) fn print_posture(
     writeln!(out, "exec     {}", cfg.exec.display())
 }
 
-/// The guest root: the flag, else `$TORMONI_GUEST_ROOT`, else the per-user data directory. The same
-/// order as every other layered knob here (flag, then env, then default), with the config file
-/// layer deliberately absent until phase 3's config work decides its shape.
-pub(crate) fn resolve_root(flag: Option<&Path>) -> Result<PathBuf, String> {
-    resolve_root_from(
-        flag.map(Path::to_path_buf),
-        std::env::var_os("TORMONI_GUEST_ROOT"),
-        std::env::var_os("XDG_DATA_HOME"),
-        std::env::var_os("HOME"),
-    )
-}
-
-/// [`resolve_root`] with the environment reads lifted out, so the precedence is a pure decision a
-/// test can drive without mutating the test process's environment (which is `unsafe` in this
-/// edition).
-fn resolve_root_from(
-    flag: Option<PathBuf>,
-    env_root: Option<OsString>,
-    xdg_data: Option<OsString>,
-    home: Option<OsString>,
-) -> Result<PathBuf, String> {
-    let root = flag
-        .or_else(|| env_root.map(PathBuf::from))
-        .or_else(|| data_dir(xdg_data, home).map(|d| d.join("tormoni/rootfs")));
-    let Some(root) = root else {
-        return Err(
-            "no guest root: pass --root, set TORMONI_GUEST_ROOT, or install a tree at \
-             ~/.local/share/tormoni/rootfs (a checkout puts one there with `cargo xtask init`, or \
-             builds the full image on Linux with `cargo xtask build-rootfs`)"
-                .to_string(),
-        );
-    };
-    if !root.is_dir() {
-        return Err(format!(
-            "the guest root {} is not a directory (a checkout builds one with \
-             `cargo xtask build-rootfs`)",
-            root.display()
-        ));
-    }
-    Ok(root)
-}
-
 /// A resource limit from its flag, else its `TORMONI_*` variable, else `None` (the supervisor's
 /// default). The same flag-then-env order as the guest root, with the config-file layer still
 /// deferred with it.
@@ -441,13 +282,6 @@ fn resolve_limit_from<T: std::str::FromStr>(
     text.parse().map(Some).map_err(|_| {
         format!("{var}={text:?} is not a usable limit (a non-zero number that fits the knob)")
     })
-}
-
-/// `$XDG_DATA_HOME`, else `$HOME/.local/share`, else nothing to derive a default from.
-fn data_dir(xdg_data: Option<OsString>, home: Option<OsString>) -> Option<PathBuf> {
-    xdg_data
-        .map(PathBuf::from)
-        .or_else(|| home.map(|h| PathBuf::from(h).join(".local/share")))
 }
 
 /// Puts a `--display`, `--screenshot` and `--frame-log` on `cfg`, refusing the spellings the
@@ -515,19 +349,6 @@ fn to_config(args: &RunArgs, root: PathBuf) -> Result<VmConfig, String> {
     Ok(cfg)
 }
 
-/// This process's exit code for how the helper ended. The guest's own code passes through; a
-/// signalled VM reports as `128 + signal`, the shell convention, so a stopped sandbox and a
-/// command that returned that number are at least spelled the same way everywhere else.
-fn exit_code_of(exit: Exit) -> u8 {
-    match exit {
-        Exit::Code(code) => guest_code(code),
-        Exit::Signal(sig) => 128u8.saturating_add(u8::try_from(sig).unwrap_or(u8::MAX)),
-        // `Exit` is `#[non_exhaustive]`: a variant this build does not know is an operational
-        // failure to report, not a guest answer to invent.
-        _ => EXIT_OPERATIONAL,
-    }
-}
-
 /// A guest's `i32` exit code as this process's `u8` one, shared by both verbs. Out-of-range
 /// values cannot come from a Unix wait status, but a lossy cast that quietly wrapped one would
 /// report a wrong code as a right one, so they saturate loudly instead.
@@ -544,39 +365,6 @@ mod tests {
 
     use std::path::Path;
 
-    /// The record's posture words are the config's flag words. Two crates spell this vocabulary
-    /// because `tormoni-record` is dependency-free, so the pairing is asserted rather than assumed:
-    /// a record saying `read-only` for a writable root would misreport what a sandbox could do.
-    #[test]
-    fn the_record_and_the_config_spell_the_posture_alike() {
-        for rootfs in [
-            tormoni_supervisor::RootFs::ReadOnly,
-            tormoni_supervisor::RootFs::Writable,
-        ] {
-            assert_eq!(
-                rootfs.as_flag(),
-                record_rootfs(rootfs).as_word(),
-                "{rootfs:?}"
-            );
-        }
-        for net in [tormoni_supervisor::Net::None, tormoni_supervisor::Net::Tsi] {
-            assert_eq!(net.as_flag(), record_network(net).as_word(), "{net:?}");
-        }
-        let hd = std::num::NonZeroU32::new(1920).expect("non-zero");
-        let vd = std::num::NonZeroU32::new(1080).expect("non-zero");
-        let hz = std::num::NonZeroU32::new(60).expect("non-zero");
-        for display in [
-            tormoni_supervisor::Display::new(hd, vd),
-            tormoni_supervisor::Display::new(hd, vd).with_refresh(hz),
-        ] {
-            assert_eq!(
-                display.as_spec(),
-                record_display(display).as_spec(),
-                "{display:?}"
-            );
-        }
-    }
-
     use clap::Parser;
 
     use super::*;
@@ -592,32 +380,6 @@ mod tests {
         };
         assert_eq!(args.command, ["sh", "-c", "echo hi"]);
         assert!(args.root.is_none());
-    }
-
-    /// Precedence is flag, then env, then the data-dir default, and the error path names all
-    /// three sources rather than reporting an empty hand.
-    #[test]
-    fn the_root_resolves_flag_then_env_then_data_dir() {
-        let flag = Some(PathBuf::from("/tmp"));
-        let env = Some(OsString::from("/nonexistent-env-root"));
-        let got = resolve_root_from(flag, env.clone(), None, None).expect("the flag wins");
-        assert_eq!(got, Path::new("/tmp"));
-        let got = resolve_root(Some(Path::new("/tmp"))).expect("the borrowed form agrees");
-        assert_eq!(got, Path::new("/tmp"));
-
-        let err = resolve_root_from(None, env, None, None)
-            .expect_err("an env root that is not a directory is refused");
-        assert!(err.contains("/nonexistent-env-root"), "{err}");
-
-        let err = resolve_root_from(None, None, None, None)
-            .expect_err("nothing to resolve from is an error, not a guess");
-        assert!(err.contains("--root"), "{err}");
-        assert!(err.contains("TORMONI_GUEST_ROOT"), "{err}");
-
-        let home = Some(OsString::from("/nonexistent-home"));
-        let err = resolve_root_from(None, None, None, home)
-            .expect_err("the derived default is still checked for existence");
-        assert!(err.contains(".local/share/tormoni/rootfs"), "{err}");
     }
 
     /// Every flag lands in the config field it names, and the command splits into the guest
@@ -782,7 +544,7 @@ mod tests {
             "the guest is given the whole entry"
         );
 
-        let posture = posture_of(&cfg, false);
+        let posture = tormoni::posture_of(&cfg, false);
         assert_eq!(posture.env, ["AWS_SECRET_ACCESS_KEY", "CI"]);
         let record = tormoni_record::Record::begin(
             "vm-under-test",
@@ -874,19 +636,5 @@ mod tests {
         };
         let err = to_config(&args, PathBuf::from("/r")).expect_err("half a share is refused");
         assert!(err.contains("nopath"), "{err}");
-    }
-
-    /// The guest's code passes through; a signalled VM is `128 + signal`, so the two never
-    /// collide silently with each other's range unannounced.
-    #[test]
-    fn the_exit_code_carries_the_guests_answer() {
-        assert_eq!(exit_code_of(Exit::Code(0)), 0);
-        assert_eq!(exit_code_of(Exit::Code(7)), 7);
-        assert_eq!(exit_code_of(Exit::Signal(9)), 137);
-        assert_eq!(
-            exit_code_of(Exit::Code(-1)),
-            u8::MAX,
-            "impossible, but loud"
-        );
     }
 }
