@@ -3,7 +3,7 @@
 This project is a sandbox: hardware isolation is the product, so security reports are taken
 seriously even this early. The security **model** (what is trusted, what counts as a security bug
 and what does not, and how a fix ships) is documented in
-[`docs/security.md`](docs/security.md).
+[the book's Security page](https://docs.boxdesk.dev/security/).
 
 **The tree boots sandboxes on libkrun, and there is no supported release yet.** Until the first
 supported release (`v0.1.0`), every version is a development snapshot: no version receives

@@ -58,7 +58,7 @@ boots the same sandboxes under Hypervisor.framework.
 
 **Status.** Pre-release: one maintainer, no external review. A release installs with
 `curl -fsSL https://raw.githubusercontent.com/kendricklawton/boxdesk/main/install.sh | sh` on macOS ARM64 and Linux x86_64 (the
-[documentation](docs/SUMMARY.md) says what it does and cannot do). macOS's
+[documentation](https://docs.boxdesk.dev) says what it does and cannot do). macOS's
 libkrun builds neither the `--sound` nor the guest input backend, and the display helper's own
 window is compiled out there, so a display on macOS is viewed in `Boxdesk`. `--gpu` offers a guest
 the 3D path (virgl + Venus) where libkrun reports the feature, but no host measured so far carries a
@@ -67,7 +67,8 @@ Venus-built renderer, so guest acceleration is unproven.
 ## Design rules
 
 Five rules. A change that breaks one is a design error, not a trade-off. Each states an intent and
-the mechanism serving it; the full text is [docs/architecture.md](docs/architecture.md#design-rules).
+the mechanism serving it; the full text is
+[Architecture and design](https://docs.boxdesk.dev/architecture/#design-rules).
 
 * **Isolation is hardware, not software**: untrusted code runs in a VM under KVM or
   Hypervisor.framework, never behind a guest-side check.

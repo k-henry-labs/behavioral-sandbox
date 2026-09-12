@@ -3,9 +3,10 @@
 //!
 //! 1. **Repo paths in backticks.** A comment naming `` `crates/channel/src/lib.rs` `` must point at
 //!    something in the tree, or a rename leaves it lying about where things live.
-//! 2. **Relative links in Markdown.** A `[text](./file.md)` target must exist on disk, since `mdbook`
-//!    silently *creates* a missing `SUMMARY.md` chapter as an empty stub and a deleted page would ship
-//!    as a blank one.
+//! 2. **Links in Markdown.** A `[text](./file.md)` target must exist on disk. A book page instead links
+//!    by the site path Starlight serves it at (`/architecture/`), so those resolve against the content
+//!    collection: a renamed page is a 404 the site build does not notice, since nothing it compiles
+//!    mentions the link.
 //! 3. **The `#fragment` on those links.** It must name a heading on the page it points at, since a moved
 //!    section leaves the file resolving and the anchor dead, which check 2 cannot see.
 //! 4. **Cargo package names.** A `cargo … -p <name>` handed to a reader must name a workspace package.
@@ -80,8 +81,22 @@ pub fn check(root: &Path) -> Result<()> {
         }
         if is_md {
             let dir = Path::new(rel).parent().unwrap_or(Path::new(""));
+            let in_book = rel.starts_with(BOOK);
             for (line_no, target) in markdown_links(&text) {
                 links += 1;
+                if target.starts_with('/') {
+                    if !in_book {
+                        violations.push(format!(
+                            "{rel}:{line_no}: links to {target}, a site path that resolves \
+                             only inside the book"
+                        ));
+                    } else if !book_page(root, &target).exists() {
+                        violations.push(format!(
+                            "{rel}:{line_no}: links to {target}, which is no page in the book"
+                        ));
+                    }
+                    continue;
+                }
                 if !root.join(dir).join(&target).exists() {
                     violations.push(format!("{rel}:{line_no}: links to missing file {target}"));
                 }
@@ -91,6 +106,8 @@ pub fn check(root: &Path) -> Result<()> {
             for (line_no, target, frag) in markdown_anchor_links(&text) {
                 let page = if target.is_empty() {
                     root.join(rel)
+                } else if in_book && target.starts_with('/') {
+                    book_page(root, &target)
                 } else {
                     root.join(dir).join(&target)
                 };
@@ -131,6 +148,16 @@ pub fn check(root: &Path) -> Result<()> {
          {anchor_links} anchor(s), {pkg_refs} cargo package reference(s) all resolve"
     );
     Ok(())
+}
+
+/// Where the book's pages live: the Starlight content collection, one flat `.md` per page.
+const BOOK: &str = "docs/src/content/docs";
+
+/// The page a book's site path names: `/` is the collection's index, `/name/` is `name.md`.
+fn book_page(root: &Path, target: &str) -> PathBuf {
+    let slug = target.trim_matches('/');
+    let name = if slug.is_empty() { "index" } else { slug };
+    root.join(BOOK).join(format!("{name}.md"))
 }
 
 /// Every package name in the workspace, read from the tracked `Cargo.toml` files rather than from
@@ -342,7 +369,7 @@ fn markdown_anchor_links(text: &str) -> Vec<(usize, String, String)> {
     found
 }
 
-/// The anchors a Markdown file offers, derived as mdbook and GitHub derive them: strip code and
+/// The anchors a Markdown file offers, derived as GitHub and Astro derive them: strip code and
 /// link syntax, lowercase, drop all but alphanumerics, `-`, `_` and spaces, then spaces to `-`. A
 /// repeated slug takes a `-1`, `-2` suffix. A rule this misses is a loud false positive.
 fn heading_anchors(text: &str) -> BTreeSet<String> {
@@ -581,7 +608,7 @@ mod tests {
     /// book carries. Getting one wrong is a false positive on a link that works, so these are the
     /// cases that decide whether the check can be trusted to block the gate.
     #[test]
-    fn heading_anchors_match_how_mdbook_slugs_them() {
+    fn heading_anchors_match_how_the_renderers_slug_them() {
         let text = "\
 # Configuration of `boxdesk`
 ## The `BOXDESK_RUNS_DIR` default

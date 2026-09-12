@@ -1,4 +1,7 @@
-# Running a sandbox
+---
+title: "Running a sandbox"
+description: "What a sandbox gets with no flags, and what each flag opens."
+---
 
 A sandbox with no flags gets three things: its root image, read-only; loopback; and one empty
 directory at `/results` for what it produces. Nothing else is shared, everything past that is opted
@@ -15,7 +18,7 @@ is where `cargo xtask init` puts one. The flag and the variable are for a tree s
 ## Installing
 
 ```console
-curl -fsSL https://raw.githubusercontent.com/kendricklawton/boxdesk/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/boxdesk/boxdesk/main/install.sh | sh
 ```
 
 The address redirects to the latest release's `install.sh` on GitHub, as Ollama's does. The script
@@ -263,7 +266,7 @@ readable.
 - **The cookbook**: runs worth trying, on five shelves, each one press from a filled form. A press
   fills the form and stops there, so its posture is read before it boots, and the `boxdesk` line a
   card shows is built from the same fields the form takes
-  (`the_line_an_entry_shows_is_the_posture_it_fills_in`). [Examples](./examples.md) has the same
+  (`the_line_an_entry_shows_is_the_posture_it_fills_in`). [Examples](/examples/) has the same
   runs with their output.
 - **Settings** (the platform's command with `,`, from any screen): light,
   dark or the desktop's own mode, and the interface scale, both applied live, the screen a plain
@@ -297,5 +300,5 @@ carries none of: that plist, the identifier `ai.boxdesk.app`, the icon, and the 
 `target/debug/boxdesk-app` has no plist, so it is named for the build: `cargo xtask app` builds the
 pair, assembles the bundle and starts the copy inside it, with its output still on the terminal. `--gpu` boots here and the
 guest sees `card0` and `renderD128`; this host's virglrenderer carries no Venus, so the offer ends
-at the device. The [Architecture](./architecture.md) page carries the fuller status and the
+at the device. The [Architecture](/architecture/) page carries the fuller status and the
 measurements.

@@ -1,4 +1,7 @@
-# Examples
+---
+title: "Examples"
+description: "Eight things to try after an install, each showing one property, with the output they printed."
+---
 
 Eight things to try after `cargo xtask init` (or an install), each one showing a single property.
 Every command below was run on macOS 26.6.2 ARM64 on 2026-09-10 against the tree `cargo xtask init`

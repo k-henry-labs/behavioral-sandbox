@@ -173,7 +173,13 @@ fn panel_grip<'a>() -> Element<'a, Message> {
         container(rule::vertical(RULE).style(divider))
             .width(GRIP)
             .height(Fill)
-            .align_x(iced::alignment::Horizontal::Center),
+            .align_x(iced::alignment::Horizontal::Center)
+            // Wider than its line, so without the panes' own surface the reach either side of it
+            // shows as a band of the page colour between them.
+            .style(|theme: &iced::Theme| container::Style {
+                background: Some(crate::theme::raised(theme).into()),
+                ..container::Style::default()
+            }),
     )
     .interaction(iced::mouse::Interaction::ResizingHorizontally)
     .on_press(Message::PanelGrabbed)
@@ -1333,8 +1339,9 @@ fn card(theme: &iced::Theme) -> container::Style {
     container::Style {
         background: Some(iced::Background::Color(crate::theme::raised(theme))),
         border: iced::Border {
+            color: hairline(theme),
+            width: 1.0,
             radius: CORNER.into(),
-            ..iced::Border::default()
         },
         ..container::Style::default()
     }
@@ -1725,14 +1732,7 @@ fn registry_row(registry: &boxdesk_record::Registry) -> Element<'static, Message
     )
     .width(Fill)
     .padding(12)
-    .style(|theme: &iced::Theme| container::Style {
-        background: Some(crate::theme::raised(theme).into()),
-        border: iced::Border {
-            radius: CORNER.into(),
-            ..iced::Border::default()
-        },
-        ..container::Style::default()
-    })
+    .style(card)
     .into()
 }
 
@@ -1851,14 +1851,7 @@ fn volume_row(volume: &boxdesk_record::Volume, held: u64) -> Element<'static, Me
     )
     .width(Fill)
     .padding(12)
-    .style(|theme: &iced::Theme| container::Style {
-        background: Some(crate::theme::raised(theme).into()),
-        border: iced::Border {
-            radius: CORNER.into(),
-            ..iced::Border::default()
-        },
-        ..container::Style::default()
-    })
+    .style(card)
     .into()
 }
 
@@ -2064,13 +2057,13 @@ pub(crate) const GUTTER: f32 = 24.0;
 /// that the room a reader sees does not follow the head's height.
 const PAGE_TOP: f32 = 82.0;
 
-/// A screen the sidebar opened: its name at the pane's own edge, its content in a column centred
-/// under it at the width a row is still taken in at one glance.
+/// A screen the sidebar opened: its name at the pane's own edge, its content centred under it at
+/// the width a row is still taken in at one glance, on the surface the band and the panel share.
 fn framed<'a>(
     head: Element<'a, Message>,
     body: iced::widget::Column<'a, Message>,
 ) -> Element<'a, Message> {
-    column![
+    container(column![
         head_bar(head),
         container(body.max_width(PAGE))
             .width(Fill)
@@ -2081,7 +2074,13 @@ fn framed<'a>(
                 bottom: GUTTER,
                 left: GUTTER,
             }),
-    ]
+    ])
+    .width(Fill)
+    .height(Fill)
+    .style(|theme: &iced::Theme| container::Style {
+        background: Some(crate::theme::raised(theme).into()),
+        ..container::Style::default()
+    })
     .into()
 }
 
@@ -2351,7 +2350,7 @@ fn run_row<'a>(app: &'a App, record: &'a Record) -> Element<'a, Message> {
         .into()
 }
 
-/// A card that is a row you click: the raised surface, a step under the pointer, no edge.
+/// A card that is a row you click: the raised surface, a step under the pointer, a hairline edge.
 fn row_card(theme: &iced::Theme, status: button::Status) -> button::Style {
     let surface = match status {
         button::Status::Hovered | button::Status::Pressed => crate::theme::raised_hovered(theme),
@@ -2360,7 +2359,7 @@ fn row_card(theme: &iced::Theme, status: button::Status) -> button::Style {
     let mut style = role(
         surface,
         theme.extended_palette().background.base.text,
-        None,
+        Some(hairline(theme)),
         status,
     );
     style.border.radius = CORNER.into();
@@ -3180,9 +3179,9 @@ mod tests {
             ),
             "the slider's handle, which the toolkit draws round as a Circle: {handle:?}"
         );
-        // The one exception, named rather than hidden, as `CLOSE` is in the icon set: the fold's
-        // control is drawn on a rule rather than on a surface, where a square reads as a break in
-        // the line and a circle reads as something set on it.
+        // The one exception, named rather than hidden: the fold's control is drawn on a rule
+        // rather than on a surface, where a square reads as a break in the line and a circle reads
+        // as something set on it.
         assert_eq!(
             divider_toggle(&theme, button::Status::Active).border.radius,
             (DIVIDER_TOGGLE / 2.0).into(),

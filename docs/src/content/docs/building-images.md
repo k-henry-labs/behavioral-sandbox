@@ -1,4 +1,7 @@
-# Building guest images
+---
+title: "Building guest images"
+description: "How a guest rootfs is built without root, and what --verify compares."
+---
 
 Boxdesk uses minimal Alpine Linux guest images containing only the components
 required to run workloads and the static guest agent. Guest rootfs trees are built without root

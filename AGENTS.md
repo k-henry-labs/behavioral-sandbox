@@ -128,7 +128,7 @@ list of packages. Therefore a stale `-p` fails the gate, not the terminal of a r
 | `crates/test-support` | `boxdesk-test-support` | Test fixtures: a self-reclaiming scratch dir, a log sink, and the deterministic generator the in-gate fuzz suites use. |
 | `xtask` | `xtask` | Dev orchestration: the gate, artifact builds, benchmarks, and packaging. It is never shipped and never renamed (`cargo xtask` is a `--package xtask` alias). |
 | `sdk/` | | The client libraries, each its own workspace so a consumer's lockfile is not this one's: `rust`, `python` and `js` bind the crates directly, and `go` builds an argv for the `boxdesk` binary. That last one is why a flag added to the run verb has to reach `sdk/go/options.go`, which `every_run_flag_is_one_the_sdks_know` holds it to. |
-| `docs/` | | mdBook. `SUMMARY.md` is the index. The names are flat `topic-subtopic.md`. The hierarchy is in `SUMMARY.md`, not in directories. |
+| `docs/` | | The book, on [Starlight](https://starlight.astro.build): an Astro project whose pages are `src/content/docs/*.md`, flat and named `topic-subtopic.md`. The order is the `sidebar` in `astro.config.mjs`, checked against the pages on disk at build time. A page links to another by the path the site serves it at (`/architecture/`), never by a file beside it. |
 
 **Two binaries ship**, from one workspace, in the shape Ollama ships its own: `boxdesk` (the CLI,
 which also carries the hidden helper subcommand that becomes a VM) and `Boxdesk` (the GUI, package

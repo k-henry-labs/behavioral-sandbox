@@ -50,7 +50,7 @@ who this is for.
 Cheap, and nothing downstream reads right until it is done. In this repository today the word
 "agent" always means the in-guest helper process; nothing names an AI agent as the caller.
 
-**Phase 1. Name the audience.** Rewrite the README's opening and `docs/introduction.md` around the
+**Phase 1. Name the audience.** Rewrite the README's opening and the book's `docs/src/content/docs/index.md` around the
 case: an agent, on this machine, running code it wrote. Keep the hardware-isolation claim as the
 reason to believe, not the headline. *Done when* a reader who arrived from an agent framework
 knows in one paragraph whether this is for them.

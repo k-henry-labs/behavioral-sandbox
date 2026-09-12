@@ -1,4 +1,7 @@
-# Serving sandboxes
+---
+title: "Serving sandboxes"
+description: "boxdesk serve: one box, one token, sandboxes for a caller over HTTP."
+---
 
 `boxdesk serve` turns an installed copy into a box that runs sandboxes for a caller over HTTP,
 instead of only for the person at the keyboard. It is for somebody who has a machine with a

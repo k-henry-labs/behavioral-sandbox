@@ -1,4 +1,7 @@
-# Architecture
+---
+title: "Architecture"
+description: "What Boxdesk is, the rules it holds itself to, and what is in the tree today."
+---
 
 What Boxdesk is, the rules it holds itself to, and what is in the tree today.
 
@@ -108,7 +111,7 @@ One verb, end to end, with the boundary each step sits on:
    end state land in the run's directory, which both binaries read afterwards.
 
 The control socket and the wire framing are on their own page: [Control socket &
-IPC](./control-ipc.md).
+IPC](/control-ipc/).
 
 ## What a sandbox costs on an M1
 
@@ -157,7 +160,7 @@ $ awk '{print $6}' /proc/$(pgrep -f 'boxdesk __vmm')/maps | grep -E 'libEGL|libG
 
 So `--display` is what brings the host GPU into a sandbox's blast radius. This is a property of the
 host renderer, not a capability granted to the guest, and it is the reason virglrenderer belongs in
-the trusted set on the [Security](./security.md) page.
+the trusted set on the [Security](/security/) page.
 
 ### What the guest is offered
 

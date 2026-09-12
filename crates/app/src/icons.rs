@@ -75,14 +75,18 @@ icons! {
 
 /// The font size an icon is drawn at to put `apparent` of its ink on the screen.
 ///
-/// **A glyph's stroke weight travels with this.** Most of the set is drawn within an eighth of
-/// [`INK`], and so within an eighth of one weight; a glyph drawn well inside its box is scaled up
-/// far enough that its strokes read heavier than its neighbours'.
-/// `the_set_is_drawn_within_an_eighth_of_one_stroke_weight` is the bound, and names the one glyph
-/// outside it.
+/// **A glyph's stroke weight travels with this.** The ratio is capped at [`WEIGHT_CAP`], so a
+/// glyph drawn well inside its box trades a smaller apparent ink for strokes that match the rest
+/// of the set rather than reading as a second weight beside it.
 fn drawn_size(icon: &Icon, apparent: f32) -> f32 {
-    apparent * INK / f32::from(icon.ink)
+    let ratio = INK / f32::from(icon.ink);
+    apparent * ratio.min(WEIGHT_CAP)
 }
+
+/// The largest ratio [`drawn_size`] applies: the 1/8 bound the set is drawn within. Past it the
+/// strokes read heavier than their neighbours', which is the mismatch the user sees as a size
+/// difference.
+const WEIGHT_CAP: f32 = 1.125;
 
 /// One icon at [`SIZE`], in the icon grey, drawn to the same apparent size as every other and in
 /// a cell of that width, so a row of them shares one left edge.
@@ -130,12 +134,9 @@ mod tests {
     }
 
     /// One apparent size for the whole set means the correction moves the variation into stroke
-    /// weight instead: a glyph drawn inside its box is scaled up, and its strokes with it. The set
-    /// holds within an eighth of one weight, which is what lets a row of them read as one set.
-    ///
-    /// [`CLOSE`] is the exception and is named rather than hidden: Lucide draws `x` at 0.7 of the
-    /// box, so it is scaled up by nearly half. On this panel that is 1.50 px of stroke against a
-    /// standard 1.25, which is the price of the two standing on the head's line at one size.
+    /// weight instead: a glyph drawn inside its box is scaled up, and its strokes with it.
+    /// [`WEIGHT_CAP`] limits the ratio so no glyph's strokes exceed an eighth of the standard's,
+    /// and this test holds the whole set to that bound.
     ///
     /// The standard is [`INK`] itself rather than a chosen icon's: an icon drawn to exactly the
     /// extent every other is corrected to needs no correction, so it is the weight the set is
@@ -144,9 +145,6 @@ mod tests {
     fn the_set_is_drawn_within_an_eighth_of_one_stroke_weight() {
         let standard = SIZE;
         for (name, icon) in ALL {
-            if name == "CLOSE" {
-                continue;
-            }
             let ratio = drawn_size(&icon, SIZE) / standard;
             assert!(
                 (0.875..=1.125).contains(&ratio),

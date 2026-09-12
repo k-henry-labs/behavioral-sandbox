@@ -14,13 +14,13 @@ mod tests {
 
     /// Every fenced block in the book carries a language tag.
     ///
-    /// **rustdoc compiles an untagged fence as Rust**, so one takes `mdbook test` down with it and
-    /// the Docs workflow deploys nothing. Measured: a fence of probe output in `architecture.md`
-    /// left the book undeployed from 7894540 until it was found. Checked here rather than by
-    /// running `mdbook`, because the gate must need no tool the workflow installs for itself.
+    /// **An untagged fence renders as grey text beside highlighted neighbours**, and nothing in
+    /// the site build fails on one, so it ships looking like a mistake. Checked here rather than
+    /// by running the site build, because the gate must need no tool the workflow installs for
+    /// itself, and this one would need a Node toolchain.
     #[test]
     fn every_book_fence_is_tagged() {
-        let docs = workspace_root().join("docs");
+        let docs = workspace_root().join("docs/src/content/docs");
         let mut untagged: Vec<String> = Vec::new();
         let mut fences = 0usize;
         let entries = std::fs::read_dir(&docs).expect("the book directory");
@@ -56,8 +56,8 @@ mod tests {
         assert!(fences > 0, "no fences found, so this lint proves nothing");
         assert!(
             untagged.is_empty(),
-            "untagged code fence(s); rustdoc compiles these as Rust and `mdbook test` fails, \
-             which stops the book deploying. Tag them (```text, ```console, ```rust): {untagged:?}"
+            "untagged code fence(s); these ship unhighlighted and nothing in the site build \
+             says so. Tag them (```text, ```console, ```rust): {untagged:?}"
         );
     }
 

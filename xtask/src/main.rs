@@ -1232,7 +1232,7 @@ exclude = ["fuzz"]
         let real: BTreeMap<String, String> = workspace_packages(root);
         assert!(real.len() >= 5, "expected the full workspace, got {real:?}");
 
-        for page in ["README.md", "docs/architecture.md"] {
+        for page in ["README.md", "docs/src/content/docs/architecture.md"] {
             let text = std::fs::read_to_string(root.join(page)).unwrap();
             let mut seen = BTreeSet::new();
             for line in text.lines().filter(|l| l.starts_with('|')) {

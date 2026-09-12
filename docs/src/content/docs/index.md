@@ -1,4 +1,7 @@
-# Introduction
+---
+title: "Introduction"
+description: "A local-first desktop sandbox: untrusted code in a virtual machine, on one person's machine."
+---
 
 **Boxdesk** is a local-first desktop sandbox for running untrusted code in
 hardware isolation. Untrusted code runs inside a virtual machine, so the isolation boundary is the
@@ -35,8 +38,8 @@ Both platforms run the same sandboxes: KVM on Linux, and Hypervisor.framework on
 the tree also signs itself (`cargo xtask sign`) and bundles as `Boxdesk.app` (`cargo xtask bundle`).
 
 **Status.** Pre-release: one maintainer, no external review. A release installs with
-`curl -fsSL https://raw.githubusercontent.com/kendricklawton/boxdesk/main/install.sh | sh` on macOS ARM64 and Linux x86_64; [Running a
-sandbox](./running.md#installing) says what that does and cannot do. macOS's
+`curl -fsSL https://raw.githubusercontent.com/boxdesk/boxdesk/main/install.sh | sh` on macOS ARM64 and Linux x86_64; [Running a
+sandbox](/running/#installing) says what that does and cannot do. macOS's
 libkrun builds neither the `--sound` nor the guest input backend, so a display there is viewed in
 `Boxdesk`. `--gpu` offers a guest the 3D path where libkrun reports the feature, but no host
 measured so far carries a Venus-built renderer, so guest acceleration is unproven.
@@ -46,15 +49,15 @@ that are actually in the tree, and how a sandbox is run.
 
 ## Reading this book
 
-- **[Running a sandbox](./running.md)**, the verbs, posture flags, configuration layering, what a
+- **[Running a sandbox](/running/)**, the verbs, posture flags, configuration layering, what a
   run leaves behind, and the notebook.
-- **[Architecture](./architecture.md)**, the five design rules with the mechanism serving each, and
+- **[Architecture](/architecture/)**, the five design rules with the mechanism serving each, and
   what is in the tree.
-- **[Control socket & IPC](./control-ipc.md)**, local process discovery, display leasing, zero-copy
+- **[Control socket & IPC](/control-ipc/)**, local process discovery, display leasing, zero-copy
   memfd sharing, and host↔guest wire framing.
-- **[Building guest images](./building-images.md)**, unprivileged rootfs assembly with `apk.static`
+- **[Building guest images](/building-images/)**, unprivileged rootfs assembly with `apk.static`
   and `fakeroot`, desktop closures, and lockfile verification.
-- **[Security](./security.md)**, what is trusted, what counts as a security bug, and how to report
+- **[Security](/security/)**, what is trusted, what counts as a security bug, and how to report
   one.
 
 ## License

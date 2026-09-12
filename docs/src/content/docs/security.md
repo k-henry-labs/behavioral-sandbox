@@ -1,9 +1,12 @@
-# Security
+---
+title: "Security"
+description: "What is trusted, what counts as a security bug, and how to report one."
+---
 
 Boxdesk's whole reason to exist is running code you don't trust. This page states what is trusted, what
 counts as a security bug (and what does not), how to report one, and what happens after a report.
 The reporting mechanism also lives in
-[`SECURITY.md`](https://github.com/kendricklawton/boxdesk/blob/main/SECURITY.md) at the
+[`SECURITY.md`](https://github.com/boxdesk/boxdesk/blob/main/SECURITY.md) at the
 repo root (GitHub surfaces it in the Security tab).
 
 ## The tree runs guests, and has never been audited
@@ -28,7 +31,7 @@ inside the guest, including the in-guest agent, is not.
 The monitor process is one trusted component with a large surface, and `--display` widens it: a VM
 given a display loads virglrenderer and Mesa into the monitor and opens the host GPU's render node,
 so guest-controlled data reaches a renderer running with the operator's privileges. That is measured
-in [Architecture](./architecture.md) under "What crosses the GPU boundary". A headless VM does not
+in [Architecture](/architecture/) under "What crosses the GPU boundary". A headless VM does not
 open it. `--gpu` widens the surface differently and further: a display's guest data reaches
 virglrenderer as pixels to decode, while a `--gpu` guest is handed the 3D submission path, so
 untrusted code composes virgl (and, where the host renderer carries Venus, Vulkan) commands that a
@@ -86,7 +89,7 @@ The mirror list, so reports stay signal:
 ## After a report: how a fix ships
 
 The reporting mechanics and response expectations live in
-[`SECURITY.md`](https://github.com/kendricklawton/boxdesk/blob/main/SECURITY.md) (private
+[`SECURITY.md`](https://github.com/boxdesk/boxdesk/blob/main/SECURITY.md) (private
 GitHub advisory, acknowledgement within about a week, no bounty). What happens next, honestly scoped
 to a pre-`v0.1.0` single-maintainer project:
 
@@ -101,6 +104,6 @@ to a pre-`v0.1.0` single-maintainer project:
 ## Reporting a vulnerability
 
 Report privately via GitHub's security advisories: the [Security
-tab](https://github.com/kendricklawton/boxdesk/security), or [this direct
-link](https://github.com/kendricklawton/boxdesk/security/advisories/new) to the reporting
+tab](https://github.com/boxdesk/boxdesk/security), or [this direct
+link](https://github.com/boxdesk/boxdesk/security/advisories/new) to the reporting
 form. Please do not open a public issue for a suspected vulnerability.

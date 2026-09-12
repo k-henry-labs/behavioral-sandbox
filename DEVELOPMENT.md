@@ -4,9 +4,9 @@ Everything needed to build, test and release Boxdesk from source.
 
 For contribution process — issue first, commit sign-off, what a pull request needs, and the five
 design rules every change is reviewed against — see [CONTRIBUTING.md](CONTRIBUTING.md). For what the
-product does and how a person uses it, read the book under [`docs/`](docs/SUMMARY.md), which
-`.github/workflows/docs.yml` publishes to <https://kendricklawton.github.io/boxdesk/> on every
-push to `main` that touches it.
+product does and how a person uses it, read the book at <https://docs.boxdesk.dev>. Its pages are
+`docs/src/content/docs/`, one flat `.md` each, and `.github/workflows/docs.yml` builds and publishes
+them on every push to `main` that touches `docs/`.
 
 ## Prerequisites
 

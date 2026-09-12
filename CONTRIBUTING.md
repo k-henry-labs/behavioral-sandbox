@@ -12,7 +12,7 @@ discovery API, and the crate names all change without notice until the first sup
 you.
 
 **Five design rules govern every change**, and the first question in review is which rule a change
-touches. They are in [Architecture and design](docs/architecture.md), with the reasoning behind
+touches. They are in [Architecture and design](https://docs.boxdesk.dev/architecture/), with the reasoning behind
 each. A change that breaks one is declined as a design error rather than weighed as a trade-off,
 however good the code is, so they are worth reading before starting anything large.
 
@@ -41,9 +41,9 @@ private advisory form described in [`SECURITY.md`](SECURITY.md), never to a publ
 request.
 
 **Building it** is [DEVELOPMENT.md](DEVELOPMENT.md): prerequisites, the xtask verbs, testing, and
-how a release is cut. **What it is and why it is shaped this way** is the book under
-[`docs/`](docs/SUMMARY.md) — the design rules, the architecture, the guest image build, and the two
-protocols. This file is the process.
+how a release is cut. **What it is and why it is shaped this way** is the book at
+[docs.boxdesk.dev](https://docs.boxdesk.dev) — the design rules, the architecture, the guest image
+build, and the two protocols; its pages are `docs/src/content/docs/`. This file is the process.
 
 **If you drive a coding agent here, point it at [`AGENTS.md`](AGENTS.md)**, the same ground rules
 written as standing instructions for a machine. One rule there is worth repeating to the person

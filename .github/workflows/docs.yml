@@ -1,21 +1,16 @@
-# Deploy mdBook documentation to GitHub Pages (kendricklawton.github.io/boxdesk).
+# Deploy the Starlight documentation to GitHub Pages, served at the domain in `docs/public/CNAME`.
 name: Docs
 
-# The paths are every input this workflow reads, not just the book source. `mdbook test` compiles
-# the book's Rust blocks under the pinned toolchain, so an untagged fence (which rustdoc compiles as
-# Rust) fails here rather than shipping broken. A redeploy of byte-identical output is cheaper than a
-# book whose examples stopped compiling.
+# Only the book's own inputs: the site build compiles no Rust, so a Rust change cannot change what
+# this publishes. `every_book_fence_is_tagged` in the gate is what holds the pages' fences, and it
+# runs there rather than here because the gate must need no tool this workflow installs for itself.
 on:
   push:
     branches: [main]
     paths:
       - 'docs/**'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - 'rust-toolchain.toml'
       - '.github/workflows/docs.yml'
   workflow_dispatch:
-
 
 # Read-only at the top, so a job added here starts with no write it did not ask for; the deploy
 # job below raises exactly the two Pages needs. OpenSSF's least-privilege guidance: a write granted
@@ -38,38 +33,35 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: docs
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
-      - name: Install mdBook
-        uses: taiki-e/install-action@v2
+      # The version comes from `docs/.nvmrc` rather than a literal here, so this cannot drift from
+      # what a contributor's `nvm use` picks.
+      - uses: actions/setup-node@v7
         with:
-          tool: mdbook
+          node-version-file: docs/.nvmrc
+          cache: npm
+          cache-dependency-path: docs/package-lock.json
 
-      # `mdbook build` renders; it never compiles a single Rust block, so every one of them would
-      # ship as unchecked prose. `mdbook test` compiles them. Its rustdoc must be the *pinned* rustc,
-      # because mdbook runs doctests from a temp dir where rustup can no longer see
-      # `rust-toolchain.toml` and silently falls back to the default toolchain. The toolchain is read
-      # back from rustup rather than restated here, so this cannot drift from `rust-toolchain.toml`.
-      #
-      # The book has no Rust blocks today; what this catches is an untagged fence, which rustdoc
-      # compiles as Rust.
-      - name: Test the book's Rust blocks
-        run: |
-          rustup run "$(rustup show active-toolchain | cut -d' ' -f1)" mdbook test docs
+      # `ci`, never `install`: the lockfile is the input, and a resolution that differs from a
+      # contributor's is a different site than the one they reviewed.
+      - name: Install
+        run: npm ci
 
-      - name: Build mdBook
-        run: mdbook build docs
+      - name: Build
+        run: npm run build
 
-      - name: Setup Pages
-        uses: actions/configure-pages@v6
+      - uses: actions/configure-pages@v6
 
-      - name: Upload Pages Artifact
-        uses: actions/upload-pages-artifact@v5
+      - uses: actions/upload-pages-artifact@v5
         with:
-          path: docs/book
+          path: docs/dist
 
       - name: Deploy to GitHub Pages
         id: deployment

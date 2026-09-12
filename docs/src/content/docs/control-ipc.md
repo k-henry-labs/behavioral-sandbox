@@ -1,4 +1,7 @@
-# Control socket and host/guest IPC
+---
+title: "Control socket and host/guest IPC"
+description: "The host control socket for discovery and display leasing, and the vsock wire protocol."
+---
 
 Boxdesk uses a two-tier IPC design for host management and host↔guest
 communication: a host control socket for local process discovery and display leasing, and a
