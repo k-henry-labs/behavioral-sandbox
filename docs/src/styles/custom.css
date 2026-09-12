@@ -1,0 +1,103 @@
+/* The book wears the platform's palette, not Starlight's, so a reader moving
+   between the two does not cross a second design. The scope copied is
+   `.theme-paper` in `tormoni-cloud/web/app/globals.css`, which is the one the
+   platform's own `/docs` route wraps itself in, and not the console scope
+   beside it: paper's ground is a step lighter in both appearances. Three
+   things carry the look: the graphite scheme (the brand is black on white,
+   and white on black, with no accent hue), square corners, and Inter over
+   Geist Mono. */
+
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/geist-mono";
+
+/* Dark is Starlight's `:root`; light is the opt-in below. */
+:root {
+  --sl-font: "Inter Variable", var(--sl-font-system);
+  --sl-font-mono: "Geist Mono Variable", var(--sl-font-system-mono);
+
+  --sl-color-white: oklch(0.93 0.003 250);
+  --sl-color-gray-1: oklch(0.96 0.005 250);
+  --sl-color-gray-2: oklch(0.93 0.003 250);
+  --sl-color-gray-3: oklch(0.7 0.006 250);
+  --sl-color-gray-4: oklch(0.52 0.005 260);
+  --sl-color-gray-5: oklch(0.38 0.005 260);
+  --sl-color-gray-6: oklch(0.275 0.005 260);
+  --sl-color-gray-7: oklch(0.25 0.004 260);
+  --sl-color-black: oklch(0.22 0.002 260);
+
+  --sl-color-bg: oklch(0.22 0.002 260);
+  --sl-color-bg-nav: oklch(0.22 0.002 260);
+  --sl-color-bg-sidebar: oklch(0.22 0.002 260);
+  --sl-color-bg-inline-code: oklch(0.31 0.005 260);
+  --sl-color-bg-badge: oklch(0.275 0.005 260);
+
+  --sl-color-hairline: oklch(0.35 0.005 260);
+  --sl-color-hairline-light: oklch(0.35 0.005 260);
+  --sl-color-hairline-shade: oklch(0.35 0.005 260);
+  --sl-color-border-badge: oklch(0.35 0.005 260);
+
+  /* Ink, inverted: the scheme spends no hue, so `accent-high` is the near-white
+     the platform's `--primary` is in dark mode and `text-invert` is its ground. */
+  --sl-color-accent-low: oklch(0.34 0.005 260);
+  --sl-color-accent: oklch(0.6 0.004 260);
+  --sl-color-accent-high: oklch(0.92 0 0);
+  --sl-color-text-accent: oklch(0.92 0 0);
+  --sl-color-text-invert: oklch(0.2 0 0);
+  --sl-color-bg-accent: oklch(0.92 0 0);
+}
+
+:root[data-theme="light"] {
+  --sl-color-white: oklch(0.245 0.005 260);
+  --sl-color-gray-1: oklch(0.245 0.005 260);
+  --sl-color-gray-2: oklch(0.3 0.005 260);
+  --sl-color-gray-3: oklch(0.44 0.008 260);
+  --sl-color-gray-4: oklch(0.6 0.006 260);
+  --sl-color-gray-5: oklch(0.8 0.004 250);
+  --sl-color-gray-6: oklch(0.958 0.003 250);
+  --sl-color-gray-7: oklch(1 0 0);
+  --sl-color-black: oklch(0.985 0.002 250);
+
+  --sl-color-bg: oklch(0.985 0.002 250);
+  --sl-color-bg-nav: oklch(0.985 0.002 250);
+  --sl-color-bg-sidebar: oklch(0.985 0.002 250);
+  --sl-color-bg-inline-code: oklch(0.958 0.003 250);
+  --sl-color-bg-badge: oklch(1 0 0);
+
+  --sl-color-hairline: oklch(0.9 0.004 250);
+  --sl-color-hairline-light: oklch(0.9 0.004 250);
+  --sl-color-hairline-shade: oklch(0.9 0.004 250);
+  --sl-color-border-badge: oklch(0.9 0.004 250);
+
+  --sl-color-accent-low: oklch(0.945 0.004 250);
+  --sl-color-accent: oklch(0.55 0.005 260);
+  --sl-color-accent-high: oklch(0.2 0 0);
+  --sl-color-text-accent: oklch(0.2 0 0);
+  --sl-color-text-invert: oklch(0.99 0 0);
+  --sl-color-bg-accent: oklch(0.2 0 0);
+}
+
+/* Square, everywhere. The code block's frame is drawn from its own token, so
+   that is set at the source rather than left to the sweep below. */
+:root {
+  --ec-brdRad: 0;
+}
+
+*,
+*::before,
+*::after {
+  border-radius: 0;
+}
+
+/* A link is told by its underline, never by its colour: the scheme has one
+   hue for text and it is the body's. Headings self-link, so they are exempt. */
+.sl-markdown-content a:not(:where(.not-content *, .sl-anchor-link)) {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  text-decoration-thickness: 1px;
+}
+
+/* The code block as the console draws a raised surface: the card colour, held
+   by the same hairline every other edge on the page is drawn in. */
+.expressive-code .frame pre {
+  border: 1px solid var(--sl-color-hairline);
+}

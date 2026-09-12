@@ -10,6 +10,7 @@ export default defineConfig({
   integrations: [
     starlight({
       title: "Boxdesk",
+      customCss: ["./src/styles/custom.css"],
       description:
         "A local-first desktop sandbox. Untrusted code runs in a virtual machine, on one person's machine.",
       social: [
