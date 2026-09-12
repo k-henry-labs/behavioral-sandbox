@@ -1,0 +1,180 @@
+---
+/**
+ * The band across the top: the wordmark, the sections a reader jumps to, and
+ * the three controls on the right.
+ *
+ * Starlight's own header centres the search field in a three-column grid and
+ * carries no nav at all. This one is a flex row instead, because the nav sits
+ * beside the wordmark and everything else sits at the end.
+ */
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+
+import config from "virtual:starlight/user-config";
+import Search from "virtual:starlight/components/Search";
+import SiteTitle from "virtual:starlight/components/SiteTitle";
+import SocialIcons from "virtual:starlight/components/SocialIcons";
+import ThemeSelect from "virtual:starlight/components/ThemeSelect";
+
+/**
+ * The workspace version, read from the manifest at build time so the badge
+ * cannot drift from the crates it names.
+ *
+ * Found by walking up rather than by a fixed `../../..`: Astro rewrites
+ * `import.meta.url` for a bundled component, so a counted path silently
+ * resolves somewhere else.
+ */
+function workspaceVersion() {
+  for (let dir = process.cwd(); ; dir = dirname(dir)) {
+    try {
+      const manifest = readFileSync(join(dir, "Cargo.toml"), "utf8");
+      const after = manifest.split("[workspace.package]")[1];
+      const found = after?.match(/version\s*=\s*"([^"]+)"/)?.[1];
+      if (found) return found;
+    } catch {
+      // Not this directory's; keep climbing.
+    }
+    if (dirname(dir) === dir) {
+      throw new Error("no Cargo.toml with a [workspace.package] version above " + process.cwd());
+    }
+  }
+}
+
+const version = workspaceVersion();
+
+// Four destinations, each one a page or a file that exists. The book's own
+// order is the sidebar's; this is the shortcut for a reader who arrived with
+// one question.
+const NAV = [
+  { label: "Examples", href: "/examples/" },
+  { label: "Architecture", href: "/architecture/" },
+  { label: "Security", href: "/security/" },
+  { label: "Roadmap", href: "https://github.com/boxdesk/boxdesk/blob/main/ROADMAP.md" },
+];
+
+const shouldRenderSearch =
+  config.pagefind ||
+  config.components.Search !== "@astrojs/starlight/components/Search.astro";
+const here = Astro.url.pathname;
+---
+
+<div class="header sl-flex">
+  <div class="start sl-flex">
+    <div class="title-wrapper sl-flex"><SiteTitle /></div>
+    <span class="slash" aria-hidden="true">/</span>
+    <nav class="top-nav" aria-label="Sections">
+      {
+        NAV.map(({ label, href }) => (
+          <a href={href} aria-current={here === href ? "page" : undefined}>
+            {label}
+          </a>
+        ))
+      }
+    </nav>
+  </div>
+
+  <div class="end sl-flex">
+    <span class="version">v{version}</span>
+    <div class="search sl-flex print:hidden">{shouldRenderSearch && <Search />}</div>
+    <div class="sl-hidden md:sl-flex print:hidden right-group">
+      <div class="sl-flex social-icons"><SocialIcons /></div>
+      <ThemeSelect />
+    </div>
+  </div>
+</div>
+
+<style>
+  .header {
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sl-nav-gap);
+    height: 100%;
+  }
+
+  .start,
+  .end {
+    align-items: center;
+    gap: 1rem;
+    min-width: 0;
+  }
+
+  /* The wordmark is the one thing that never gives up room: everything else
+     in the row leaves before it is allowed to clip. */
+  .title-wrapper {
+    flex-shrink: 0;
+    /* Room for the focus ring. */
+    padding: 0.25rem;
+    margin: -0.25rem;
+  }
+
+  .slash {
+    display: none;
+    color: var(--sl-color-gray-4);
+    font-family: var(--sl-font-mono);
+    user-select: none;
+  }
+
+  /* The sections read as labels rather than as prose: mono, small, spaced, and
+     the body's colour only once the pointer is on one. */
+  .top-nav {
+    display: none;
+    gap: 1.25rem;
+    align-items: center;
+  }
+  .top-nav a {
+    color: var(--sl-color-gray-3);
+    font-family: var(--sl-font-mono);
+    font-size: var(--sl-text-xs);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .top-nav a:hover,
+  .top-nav a[aria-current="page"] {
+    color: var(--sl-color-white);
+  }
+
+  .version {
+    display: none;
+    color: var(--sl-color-gray-3);
+    font-family: var(--sl-font-mono);
+    font-size: var(--sl-text-xs);
+    white-space: nowrap;
+  }
+
+  /* Starlight's search grows to its container; at the end of a row it should
+     take only what it needs. */
+  .search {
+    max-inline-size: 16rem;
+    inline-size: 100%;
+  }
+
+  .right-group {
+    gap: 1rem;
+    align-items: center;
+  }
+  .social-icons {
+    gap: 1rem;
+    align-items: center;
+  }
+  .social-icons::after {
+    content: "";
+    height: 2rem;
+    border-inline-end: 1px solid var(--sl-color-gray-5);
+  }
+
+  /* Two widths, each the one at which the thing it shows stops crowding the
+     search field. Starlight's `md:` is 50rem, which is too early for both. */
+  @media (min-width: 60rem) {
+    .version {
+      display: flex;
+    }
+  }
+  @media (min-width: 64rem) {
+    .slash,
+    .top-nav {
+      display: flex;
+    }
+  }
+</style>

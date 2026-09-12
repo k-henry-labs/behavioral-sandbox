@@ -11,6 +11,7 @@ export default defineConfig({
     starlight({
       title: "Boxdesk",
       customCss: ["./src/styles/custom.css"],
+      components: { Header: "./src/components/Header.astro" },
       description:
         "A local-first desktop sandbox. Untrusted code runs in a virtual machine, on one person's machine.",
       social: [
