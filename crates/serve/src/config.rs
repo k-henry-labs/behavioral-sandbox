@@ -141,7 +141,7 @@ fn refuse_if_readable(path: &Path) -> Result<(), Refusal> {
 /// Compared in constant time over the whole of both: a comparison that stops at the first wrong
 /// byte tells an attacker how much of a guess was right.
 #[must_use]
-pub fn accepts(expected: &str, presented: &str) -> bool {
+pub(crate) fn accepts(expected: &str, presented: &str) -> bool {
     if expected.len() != presented.len() {
         return false;
     }

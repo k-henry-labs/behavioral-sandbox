@@ -42,10 +42,5 @@ softbuffer = { workspace = true }
 # The `/dev/kvm` probe, so the end-to-end tests skip with the same message everywhere.
 boxdesk-test-support = { path = "../test-support" }
 
-[features]
-# Exposes library items for the fuzz harness in `fuzz/`; without it the library target is empty and
-# the package is just the `boxdesk` binary. Nothing is behind it today (see `src/lib.rs`).
-fuzzing = []
-
 [lints]
 workspace = true

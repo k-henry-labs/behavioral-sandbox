@@ -12,15 +12,12 @@ description = "`boxdesk serve`: one box that runs sandboxes for a caller over HT
 [dependencies]
 # The record a served run leaves, byte for byte the one a local run leaves.
 boxdesk-record = { path = "../record" }
-# Spawning the helper that IS the VM, exactly as the local path spawns it.
-boxdesk-supervisor = { path = "../supervisor" }
 axum = { workspace = true }
 # The one trait `Body::from_stream` takes. No dependencies of its own.
 futures-core = "0.3"
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-tracing = { workspace = true }
 
 [dev-dependencies]
 boxdesk-test-support = { path = "../test-support" }

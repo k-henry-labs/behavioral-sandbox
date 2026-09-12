@@ -60,7 +60,6 @@ tracing = "0.1"
 # services already speak, so one idiom covers both repos.
 axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio"] }
 tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "net", "signal", "sync", "time", "io-util", "process", "fs"] }
-tokio-util = { version = "0.7", default-features = false, features = ["io"] }
 serde = { version = "1", features = ["derive"] }
 # The window a sandbox's `--display` is shown in, and the CPU-side blit that puts a frame on it.
 # Both open their display server at run time (`*-dlopen`), so a host without one still builds and

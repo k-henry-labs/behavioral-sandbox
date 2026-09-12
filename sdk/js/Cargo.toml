@@ -13,4 +13,3 @@ napi-derive = "2.14"
 boxdesk-core = { package = "boxdesk", path = "../../crates/cli" }
 boxdesk-record = { path = "../../crates/record" }
 boxdesk-supervisor = { path = "../../crates/supervisor" }
-serde_json = "1.0"
