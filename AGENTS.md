@@ -56,8 +56,7 @@ output, the guest's `/results`), which `boxdesk ls --all`, `show`, `rm` and `exp
 per run) read (4.12), and `Boxdesk` is the notebook of those runs: a sidebar over the
 list, one run's record with its display and output, a start form whose posture sentence is
 confirmed before anything boots, stop, re-run, delete, export, removing a selected set of ended
-runs, every delete behind a modal that names what would go, a Cookbook of runs worth trying that
-fill the start form rather than boot, a Settings screen whose palette, scale
+runs, every delete behind a modal that names what would go, a Settings screen whose palette, scale
 and landing screen persist beside the runs
 directory, and a shell through `boxdesk exec --tty` in the operator's terminal (4.13). Frame pacing
 through the app on this panel is measured (4.14). On macOS ARM64 (phase 6) the tree builds, signs

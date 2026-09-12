@@ -263,11 +263,6 @@ readable.
   to the guest), with Stop and Shell while it runs, Re-run and Delete after, and Export always.
 - **The start form**: every posture flag as a field, summarised in the record's own posture
   sentence ("This sandbox will: ..."), confirmed before anything boots.
-- **The cookbook**: runs worth trying, on five shelves, each one press from a filled form. A press
-  fills the form and stops there, so its posture is read before it boots, and the `boxdesk` line a
-  card shows is built from the same fields the form takes
-  (`the_line_an_entry_shows_is_the_posture_it_fills_in`). [Examples](/examples/) has the same
-  runs with their output.
 - **Settings** (the platform's command with `,`, from any screen): light,
   dark or the desktop's own mode, and the interface scale, both applied live, the screen a plain
   launch opens on, and what this machine has to run a sandbox with (the `boxdesk` binary and guest

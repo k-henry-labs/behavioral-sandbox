@@ -472,8 +472,6 @@ enum Screen {
     Run(RunId),
     /// The form for a new run.
     New,
-    /// Runs worth trying, each one press from a filled form.
-    Cookbook,
     /// The sandboxes worth making again, by name.
     Snapshots,
     /// Where images come from, and who this machine is when it asks.
@@ -554,299 +552,6 @@ pub(crate) struct Form {
     pub(crate) results: bool,
     pub(crate) vcpus: String,
     pub(crate) mem_mib: String,
-}
-
-/// What a cookbook entry is filed under. **A shelf names its subject, not its moral**, so a
-/// reader scanning the rail knows whether a run is about the network or the GPU before reading it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Shelf {
-    Basics,
-    Network,
-    Filesystem,
-    Results,
-    Gpu,
-    Sizing,
-    Failure,
-}
-
-impl Shelf {
-    /// Every shelf, in the order the cookbook lists them.
-    pub(crate) const ALL: [Self; 7] = [
-        Self::Basics,
-        Self::Network,
-        Self::Filesystem,
-        Self::Results,
-        Self::Gpu,
-        Self::Sizing,
-        Self::Failure,
-    ];
-
-    /// The subject over its entries.
-    pub(crate) fn title(self) -> &'static str {
-        match self {
-            Self::Basics => "THE BASICS",
-            Self::Network => "NETWORK",
-            Self::Filesystem => "THE FILESYSTEM",
-            Self::Results => "RESULTS AND OUTPUT",
-            Self::Gpu => "GPU",
-            Self::Sizing => "CPU AND MEMORY",
-            Self::Failure => "WHEN A RUN FAILS",
-        }
-    }
-
-    /// One line under the subject, saying what its runs do.
-    pub(crate) fn about(self) -> &'static str {
-        match self {
-            Self::Basics => "Whether it runs at all, and what the guest looks like from inside.",
-            Self::Network => "What a sandbox reaches, and what it cannot until --net grants it.",
-            Self::Filesystem => {
-                "Which directories are there, which are writable, and what of \
-                                 yours is not."
-            }
-            Self::Results => "Getting files and printed output back out of a run.",
-            Self::Gpu => "What --gpu offers a guest, and what is there without it.",
-            Self::Sizing => "What the posture gives the guest, which is not what this host has.",
-            Self::Failure => "How a bad command reads from outside the sandbox.",
-        }
-    }
-}
-
-/// One cookbook entry: a run worth trying, and the one thing trying it shows.
-///
-/// **The posture is the data; every rendering is derived from it.** [`Example::cli`] builds the
-/// `boxdesk` line from these fields rather than storing a string, so a second rendering (a
-/// `boxdesk-js` or `boxdesk-python` snippet) is a second function over the same table and cannot
-/// drift from the form a press fills.
-///
-/// `command` is plain argv: [`cli::start`] splits the form's field on whitespace and does no
-/// quoting, and the helper refuses an argument mixing a double quote with a space.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct Example {
-    pub(crate) shelf: Shelf,
-    pub(crate) title: &'static str,
-    pub(crate) shows: &'static str,
-    pub(crate) command: &'static str,
-    pub(crate) network: bool,
-    pub(crate) gpu: bool,
-    pub(crate) vcpus: Option<&'static str>,
-    pub(crate) mem_mib: Option<&'static str>,
-}
-
-/// An entry with the default posture, which most of them have.
-const fn plain(
-    shelf: Shelf,
-    title: &'static str,
-    shows: &'static str,
-    command: &'static str,
-) -> Example {
-    Example {
-        shelf,
-        title,
-        shows,
-        command,
-        network: false,
-        gpu: false,
-        vcpus: None,
-        mem_mib: None,
-    }
-}
-
-/// The same, with a network granted.
-const fn networked(title: &'static str, shows: &'static str, command: &'static str) -> Example {
-    Example {
-        network: true,
-        ..plain(Shelf::Network, title, shows, command)
-    }
-}
-
-impl Example {
-    /// Every entry, in the order its shelf lists them. Each was run against the tree
-    /// `cargo xtask init` writes before it was written down.
-    pub(crate) const ALL: [Self; 23] = [
-        plain(
-            Shelf::Basics,
-            "Hello from a virtual machine",
-            "The guest answers Linux, whatever this host is.",
-            "uname -a",
-        ),
-        plain(
-            Shelf::Basics,
-            "Look around the guest",
-            "Its root is the guest tree, not this machine's.",
-            "ls -la /",
-        ),
-        plain(
-            Shelf::Basics,
-            "Who the guest thinks you are",
-            "Root inside the VM, which is nobody out here.",
-            "id",
-        ),
-        plain(
-            Shelf::Network,
-            "Nothing reaches out, by default",
-            "There is no resolver and no route, so this fails.",
-            "wget -T5 -qO- http://example.com",
-        ),
-        networked(
-            "A network, once granted",
-            "The same command with --net tsi reaches what this host reaches.",
-            "wget -T5 -qO- http://example.com",
-        ),
-        networked(
-            "Names resolve too",
-            "A granted network brings a resolver with it, not just a route.",
-            "nslookup example.com",
-        ),
-        networked(
-            "TLS works",
-            "Certificates come from the guest tree, so https needs nothing extra.",
-            "wget -T5 -qO- https://example.com",
-        ),
-        networked(
-            "Fetch something and keep it",
-            "The download lands in /results, so the record carries what came back.",
-            "wget -T5 -O /results/page.html http://example.com",
-        ),
-        networked(
-            "It is sockets, not the network",
-            "tsi impersonates connections, so a raw ping has nothing to send on.",
-            "ping -c1 -W2 1.1.1.1",
-        ),
-        networked(
-            "Its loopback is your loopback",
-            "With tsi the guest's 127.0.0.1 is this machine's: whatever you have bound there is \
-             reachable from inside.",
-            "wget -T5 -qO- http://127.0.0.1:8000/",
-        ),
-        plain(
-            Shelf::Filesystem,
-            "The root is read-only",
-            "A write outside the run's own places is refused by the mount.",
-            "touch /proof",
-        ),
-        plain(
-            Shelf::Filesystem,
-            "None of your directories are here",
-            "Nothing of yours is in the guest until a --mount names it.",
-            "ls -la /mnt",
-        ),
-        plain(
-            Shelf::Filesystem,
-            "Where a run can write",
-            "/results is the one place a run is expected to put things.",
-            "touch /results/proof",
-        ),
-        plain(
-            Shelf::Results,
-            "Bring a file back",
-            "What lands in /results is collected into the record.",
-            "cp /etc/hostname /results/hostname",
-        ),
-        plain(
-            Shelf::Results,
-            "Bring a directory back",
-            "One archive in /results, listed by the record with its size.",
-            "tar -cf /results/etc.tar /etc",
-        ),
-        plain(
-            Shelf::Results,
-            "Everything it prints is kept",
-            "stdout and stderr are captured, capped, and shown beside the run.",
-            "dmesg",
-        ),
-        plain(
-            Shelf::Gpu,
-            "No GPU, by default",
-            "There is no render node in the guest at all until --gpu asks for one.",
-            "ls -la /dev/dri",
-        ),
-        Example {
-            gpu: true,
-            ..plain(
-                Shelf::Gpu,
-                "The card the offer adds",
-                "--gpu gives the guest card0 and renderD128. A driver to use them is the guest's \
-                 own problem, and the stock tree has none.",
-                "ls -la /dev/dri",
-            )
-        },
-        plain(
-            Shelf::Sizing,
-            "What it was given",
-            "One vCPU and 512 MiB, until a posture says otherwise.",
-            "free -m",
-        ),
-        Example {
-            vcpus: Some("4"),
-            ..plain(
-                Shelf::Sizing,
-                "Give it four vCPUs",
-                "The guest counts what the posture gave it, not this host's cores.",
-                "nproc",
-            )
-        },
-        Example {
-            mem_mib: Some("2048"),
-            ..plain(
-                Shelf::Sizing,
-                "Give it two gigabytes",
-                "Guest RAM is what the posture says, and the record keeps the number.",
-                "free -m",
-            )
-        },
-        plain(
-            Shelf::Failure,
-            "A command that fails",
-            "The run's end is the command's status, so a pipeline can read it.",
-            "false",
-        ),
-        plain(
-            Shelf::Failure,
-            "A command that is not there",
-            "The guest resolves the first word on its own PATH, never this host's.",
-            "does-not-exist",
-        ),
-    ];
-
-    /// The entries on one shelf, in order.
-    pub(crate) fn on(shelf: Shelf) -> impl Iterator<Item = &'static Self> {
-        Self::ALL.iter().filter(move |e| e.shelf == shelf)
-    }
-
-    /// The `boxdesk` line this entry is, built from its posture rather than stored beside it.
-    pub(crate) fn cli(&self) -> String {
-        let mut line = String::from("boxdesk run");
-        if self.network {
-            line.push_str(" --net tsi");
-        }
-        if self.gpu {
-            line.push_str(" --gpu");
-        }
-        if let Some(vcpus) = self.vcpus {
-            line.push_str(&format!(" --vcpus {vcpus}"));
-        }
-        if let Some(mem) = self.mem_mib {
-            line.push_str(&format!(" --mem {mem}"));
-        }
-        format!("{line} -- {}", self.command)
-    }
-
-    /// The form a press leaves on the New run screen. What the entry does not name it leaves at
-    /// the blank form's own default, so a cookbook press and a hand-filled form differ in nothing
-    /// but the fields the entry is about.
-    pub(crate) fn form(&self) -> Form {
-        let mut form = Form::blank();
-        form.command = self.command.to_string();
-        form.network = self.network;
-        form.gpu = self.gpu;
-        if let Some(vcpus) = self.vcpus {
-            form.vcpus = vcpus.to_string();
-        }
-        if let Some(mem) = self.mem_mib {
-            form.mem_mib = mem.to_string();
-        }
-        form
-    }
 }
 
 impl Form {
@@ -1062,8 +767,6 @@ pub(crate) enum Message {
     /// The pointer arrived on the fold, or left it: whether to draw the control there.
     HoverDivider(bool),
     NewRun,
-    /// Open the cookbook.
-    Cookbook,
     /// Open the snapshots.
     Snapshots,
     /// Open the registries.
@@ -1092,8 +795,6 @@ pub(crate) enum Message {
     SaveSnapshot,
     /// Take a snapshot away. The sandboxes already made from it are untouched.
     ForgetSnapshot(String),
-    /// Fill the start form from a cookbook entry, and show it rather than start it.
-    Example(Example),
     Field(Field, String),
     Switch(Switch, bool),
     Start,
@@ -1311,7 +1012,6 @@ impl App {
         match &self.screen {
             Screen::List => format!("{NAME} › sandboxes"),
             Screen::New => format!("{NAME} › new run"),
-            Screen::Cookbook => format!("{NAME} › cookbook"),
             Screen::Snapshots => format!("{NAME} › snapshots"),
             Screen::Registries => format!("{NAME} › registries"),
             Screen::NewRegistry => format!("{NAME} › new registry"),
@@ -1557,8 +1257,7 @@ impl App {
     fn watches(&self) -> Vec<lease::Watch> {
         let open = match &self.screen {
             Screen::Run(id) => self.record(id).map(RunName::of),
-            Screen::Cookbook
-            | Screen::Snapshots
+            Screen::Snapshots
             | Screen::Registries
             | Screen::NewRegistry
             | Screen::Volumes
@@ -2026,10 +1725,6 @@ impl App {
                 }
                 Task::none()
             }
-            Message::Cookbook => {
-                self.set_screen(Screen::Cookbook);
-                Task::none()
-            }
             Message::Snapshots => {
                 self.set_screen(Screen::Snapshots);
                 Task::none()
@@ -2174,11 +1869,6 @@ impl App {
                     None => self.status = Some("there is nowhere to keep snapshots".to_string()),
                 }
                 self.refresh();
-                Task::none()
-            }
-            Message::Example(example) => {
-                self.form = example.form();
-                self.set_screen(Screen::New);
                 Task::none()
             }
             Message::Start => {
@@ -2437,7 +2127,6 @@ impl App {
         let content = match &self.screen {
             Screen::List => screens::list(self),
             Screen::New => screens::new_run(self, &self.form),
-            Screen::Cookbook => screens::cookbook(),
             Screen::Snapshots => screens::snapshots(self),
             Screen::Registries => screens::registries(self),
             Screen::NewRegistry => screens::new_registry(self),
@@ -2642,7 +2331,7 @@ mod tests {
 
     /// Every tab in the rail opens its own page and never another.
     ///
-    /// **This is the test that earned its keep.** `Registries` used to be wired to the cookbook:
+    /// **This is the test that earned its keep.** `Registries` used to be wired to a placeholder:
     /// a tab named after one thing opening a working screen about another. All four are real
     /// features now, so the check is that each one still goes where its word says.
     #[test]
@@ -3232,142 +2921,6 @@ mod tests {
             app.status.is_some(),
             "a pick with no sheet up reports what it wrote, or why it could not"
         );
-    }
-
-    /// A cookbook entry fills the form and stops there: the posture sentence is read before
-    /// anything boots, so a press starts no VM and writes no record.
-    #[test]
-    fn a_cookbook_entry_fills_the_form_and_starts_nothing() {
-        let dir = boxdesk_test_support::ScratchDir::created("app-cookbook");
-        let store = Store::at(dir.path().join("runs")).expect("a store");
-        let sinks = Arc::new(frame::Sinks::open(None, None).expect("sinks"));
-        let mut app = App::new(store.clone(), None, None, sinks, false);
-
-        let networked = Example::ALL
-            .iter()
-            .find(|e| e.network)
-            .expect("an entry that grants a network");
-        let _ = app.update(Message::Example(*networked));
-        assert_eq!(app.screen, Screen::New, "an entry shows the form");
-        assert_eq!(app.form.command, networked.command);
-        assert!(app.form.network, "the one that grants a network says so");
-        assert!(
-            store.list().expect("listed").is_empty(),
-            "filling a form records nothing"
-        );
-
-        // An entry that says nothing about a field leaves the blank form's own default there.
-        let plain = Example::ALL
-            .iter()
-            .find(|e| !e.network && !e.gpu && e.vcpus.is_none() && e.mem_mib.is_none())
-            .expect("a default-posture entry");
-        let _ = app.update(Message::Example(*plain));
-        assert!(!app.form.network, "and the default posture");
-        assert!(!app.form.gpu, "which offers no gpu either");
-        assert_eq!(app.form.vcpus, Form::blank().vcpus);
-        assert_eq!(app.form.mem_mib, Form::blank().mem_mib);
-    }
-
-    /// Every entry is plain argv. `cli::start` splits the command field on whitespace and does no
-    /// quoting, and the helper refuses an argument mixing a double quote with a space, so an entry
-    /// carrying either would be a button that cannot run.
-    #[test]
-    fn every_cookbook_entry_is_argv_the_form_can_split() {
-        for example in &Example::ALL {
-            let (title, command) = (example.title, example.command);
-            assert!(
-                !command.contains('"') && !command.contains('\''),
-                "{title}: {command} carries a quote the form does not honour"
-            );
-            assert!(
-                !command
-                    .split_whitespace()
-                    .next()
-                    .unwrap_or_default()
-                    .is_empty(),
-                "{title}: no command at all"
-            );
-            assert_eq!(
-                example.form().command,
-                command,
-                "{title}: the form carries the command the card shows"
-            );
-        }
-    }
-
-    /// The line an entry shows is the posture it fills in, so what a reader copies into a terminal
-    /// and what the form starts cannot say different things. The same table renders a `boxdesk-js`
-    /// or `boxdesk-python` snippet later, and this is what holds every rendering to the fields.
-    #[test]
-    fn the_line_an_entry_shows_is_the_posture_it_fills_in() {
-        for example in &Example::ALL {
-            let line = example.cli();
-            let form = example.form();
-            assert!(
-                line.starts_with("boxdesk run "),
-                "{}: {line} is not a run",
-                example.title
-            );
-            assert!(
-                line.ends_with(&format!(" -- {}", example.command)),
-                "{}: {line} does not end in its command",
-                example.title
-            );
-            assert_eq!(
-                line.contains("--net tsi"),
-                form.network,
-                "{}: the line and the form disagree about the network",
-                example.title
-            );
-            assert_eq!(
-                line.contains("--vcpus"),
-                example.vcpus.is_some(),
-                "{}: the line and the entry disagree about vcpus",
-                example.title
-            );
-            assert_eq!(
-                line.contains("--mem"),
-                example.mem_mib.is_some(),
-                "{}: the line and the entry disagree about memory",
-                example.title
-            );
-            assert_eq!(
-                line.contains("--gpu"),
-                form.gpu,
-                "{}: the line and the form disagree about the gpu",
-                example.title
-            );
-        }
-    }
-
-    /// Every shelf carries entries, and every entry is on a shelf the cookbook lists: a shelf
-    /// added without entries draws an empty heading, and an entry on no listed shelf is
-    /// unreachable from the screen.
-    #[test]
-    fn every_shelf_is_filled_and_every_entry_is_shelved() {
-        let mut counted = 0;
-        for shelf in Shelf::ALL {
-            let on = Example::on(shelf).count();
-            assert!(on > 0, "{:?} has no entries", shelf);
-            counted += on;
-        }
-        assert_eq!(
-            counted,
-            Example::ALL.len(),
-            "an entry is on no listed shelf"
-        );
-    }
-
-    /// A shelf names its subject and says what its runs do, which is the whole reason a reader can
-    /// scan the cookbook: a blank line under a heading leaves the entries to speak for themselves.
-    #[test]
-    fn every_shelf_says_what_its_runs_do() {
-        for shelf in Shelf::ALL {
-            let (title, about) = (shelf.title(), shelf.about());
-            assert_eq!(title, title.to_uppercase(), "{title} is not a heading");
-            assert!(about.len() > 20, "{title}: {about:?} says too little");
-            assert!(about.ends_with('.'), "{title}: {about:?} is not a sentence");
-        }
     }
 
     /// One run's Delete asks too, and a live run is never asked about: pressing it reports why

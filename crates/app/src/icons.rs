@@ -55,7 +55,6 @@ icons! {
     CLOSE = '\u{e1b2}', 582;
     SQUARE = '\u{e167}', 832;
     SQUARE_CHECK = '\u{e16a}', 874;
-    BOOK_OPEN = '\u{e05f}', 918;
     SEARCH = '\u{e151}', 832;
     CONTAINER = '\u{e4d5}', 916;
     BOX = '\u{e061}', 915;

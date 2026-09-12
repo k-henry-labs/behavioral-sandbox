@@ -192,11 +192,26 @@ fn panel_grip<'a>() -> Element<'a, Message> {
 /// before went, which is the whole reason the panel is worth having: a run that ended while you
 /// were reading another page used to be a sentence you missed.
 pub(crate) fn notices(app: &App) -> Element<'_, Message> {
-    let head = row![
-        text("Notifications").size(TAB).font(HEADING).width(Fill),
-        icon_action(icons::CLOSE, "Close", Some(Message::Notifications)),
-    ]
-    .align_y(iced::alignment::Vertical::Center);
+    let head = container(
+        row![
+            text("Notifications")
+                .size(TAB)
+                .font(HEADING)
+                .line_height(1.0)
+                .width(Fill),
+            icon_action(icons::CLOSE, "Close", Some(Message::Notifications)),
+        ]
+        .align_y(iced::alignment::Vertical::Center),
+    )
+    .height(HEAD_BAR)
+    .align_y(iced::alignment::Vertical::Center)
+    .padding(iced::Padding {
+        top: 0.0,
+        right: GUTTER,
+        bottom: 0.0,
+        left: GUTTER,
+    })
+    .width(Fill);
 
     let mut body = column![].spacing(8);
     if app.notices().is_empty() {
@@ -234,15 +249,16 @@ pub(crate) fn notices(app: &App) -> Element<'_, Message> {
         }
     }
 
-    let mut panel = column![head, rule::horizontal(RULE).style(divider)].spacing(12);
-    panel = panel.push(
+    let mut content = column![
+        rule::horizontal(RULE).style(divider),
         scrollable(body)
             .direction(lane())
             .style(scroll)
             .height(Fill),
-    );
+    ]
+    .spacing(12);
     if !app.notices().is_empty() {
-        panel = panel.push(
+        content = content.push(
             row![
                 space().width(Fill),
                 small_button("Clear", push).on_press(Message::ClearNotices),
@@ -251,10 +267,22 @@ pub(crate) fn notices(app: &App) -> Element<'_, Message> {
         );
     }
 
+    let panel = column![
+        head,
+        container(content)
+            .width(Fill)
+            .height(Fill)
+            .padding(iced::Padding {
+                top: 0.0,
+                right: GUTTER,
+                bottom: GUTTER,
+                left: GUTTER,
+            }),
+    ];
+
     container(panel)
         .width(Length::Fixed(app.panel()))
         .height(Fill)
-        .padding(GUTTER)
         .style(|theme: &iced::Theme| container::Style {
             background: Some(crate::theme::raised(theme).into()),
             ..container::Style::default()
@@ -286,10 +314,8 @@ fn header(app: &App) -> Element<'_, Message> {
         space().width(Fill),
         search_field(app),
         space().width(Fill),
-        // The cookbook lost its sidebar tab to the four features; this is its door, beside the
-        // other two things that are settings rather than features.
+        // The troubleshoot door, beside the other two things that are settings rather than features.
         header_icon(icons::LIFE_BUOY, Message::Troubleshoot),
-        header_icon(icons::BOOK_OPEN, Message::Cookbook),
         // Two glyphs, not a number: a count on a bell this small is a smudge, and what a reader
         // needs to know is whether there is anything at all.
         header_icon(
@@ -520,7 +546,7 @@ fn sidebar(app: &App, width: f32) -> Element<'_, Message> {
     let running = app.runs.iter().filter(|r| app.is_live(r)).count();
     let on_list = matches!(app.screen, crate::Screen::List | crate::Screen::Run(_));
     // Four features and no verbs. Starting a run is a button on the notebook and ⌘N; settings and
-    // the cookbook are icons in the band. Three of the four are not built, and each opens a page
+    // troubleshoot are icons in the band. Three of the four are not built, and each opens a page
     // that says so rather than borrowing a screen that works.
     let mut nav = column![tab(
         icons::CONTAINER,
@@ -1347,64 +1373,6 @@ fn card(theme: &iced::Theme) -> container::Style {
     }
 }
 
-/// The cookbook: runs worth trying, on shelves, each one press from a filled form.
-///
-/// **A press fills the form and stops there.** Starting is the form's own button, so an entry from
-/// here is read before it boots like every other run. Each entry shows the `boxdesk` line it is,
-/// built by [`crate::Example::cli`] from the same fields the form takes.
-pub(crate) fn cookbook<'a>() -> Element<'a, Message> {
-    let mut body = column![].spacing(20);
-    for shelf in crate::Shelf::ALL {
-        // The subject, then one line on what its runs do: enough to skip a shelf or stop at it
-        // without opening an entry.
-        let mut stack = column![
-            section(shelf.title(), crate::Example::on(shelf).count()),
-            muted_line(shelf.about(), SMALL),
-            space().height(8),
-        ]
-        .spacing(8);
-        for example in crate::Example::on(shelf) {
-            stack = stack.push(
-                button(
-                    column![
-                        text(example.title).size(BODY).font(HEADING),
-                        text(example.shows).size(SMALL).style(|t| text::Style {
-                            color: Some(muted(t)),
-                        }),
-                        text(example.cli())
-                            .size(SMALL)
-                            .font(MONO)
-                            .style(|t| text::Style {
-                                color: Some(muted(t)),
-                            }),
-                    ]
-                    .spacing(4),
-                )
-                .width(Fill)
-                .padding(12)
-                .style(row_card)
-                .on_press(Message::Example(*example)),
-            );
-        }
-        body = body.push(stack);
-    }
-    framed(
-        head_title("Cookbook"),
-        column![
-            muted_line(
-                "Each one fills the start form and stops there, so its posture is read before it \
-                 boots. They run against the tree `cargo xtask init` writes.",
-                BODY,
-            ),
-            scrollable(body)
-                .direction(lane())
-                .style(scroll)
-                .height(Fill),
-        ]
-        .spacing(14),
-    )
-}
-
 /// The snapshots: sandboxes worth making again, by name.
 ///
 /// A row is a template, not a run. Pressing one fills the start form from it — the same form a
@@ -2017,18 +1985,14 @@ pub(crate) fn list(app: &App) -> Element<'_, Message> {
     }
     if app.runs.is_empty() {
         rows = rows.push(
-            column![
-                text(
-                    "No sandboxes yet. Create one here, or with `boxdesk run`, `boxdesk shell` \
-                     or `boxdesk up`."
-                )
-                .size(BODY)
-                .style(|t| text::Style {
-                    color: Some(muted(t)),
-                }),
-                small_button("Open the cookbook", push).on_press(Message::Cookbook),
-            ]
-            .spacing(12),
+            text(
+                "No sandboxes yet. Create one here, or with `boxdesk run`, `boxdesk shell` \
+                 or `boxdesk up`.",
+            )
+            .size(BODY)
+            .style(|t| text::Style {
+                color: Some(muted(t)),
+            }),
         );
     }
     // A card is read left to right, so it stops where reading does: a row stretched across a wide

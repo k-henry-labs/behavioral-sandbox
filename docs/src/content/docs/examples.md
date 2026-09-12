@@ -147,15 +147,3 @@ macOS 26.6.2 ARM64, 2026-09-10, the `cargo xtask init` tree, one vCPU and 512 Mi
 snapshot surface, so every one of those is a cold boot: there is no warm pool and no reuse behind
 the number. Measure your own host before repeating it; this one says nothing about yours.
 
-## In the application
-
-`Boxdesk` carries these and more under **Cookbook** in the sidebar, on five shelves: first steps,
-what a sandbox cannot reach, getting work back, what it is given, and what a failure looks like.
-A press fills the start form rather than booting, so the posture sentence is read before anything
-runs, and each entry shows the `boxdesk` line it is.
-
-That line is built from the entry's posture rather than stored beside it, so the card and the form
-cannot say different things: `the_line_an_entry_shows_is_the_posture_it_fills_in` is what holds
-them together, and a second rendering of the same table is where an SDK snippet will come from.
-Every run started there is the same `boxdesk` binary with the same flags, and lands in the same
-record this page has been reading.
