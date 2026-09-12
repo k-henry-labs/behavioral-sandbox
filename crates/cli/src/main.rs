@@ -93,7 +93,6 @@ enum Cmd {
     Volume(volume::VolumeArgs),
     /// Run sandboxes for a caller over HTTP: one box, one token, one tenant.
     Serve(serve::ServeArgs),
-    /// Send runs to the console and read back what it holds.
     /// Become a virtual machine. Not a verb: the supervisor re-executes this binary with it.
     ///
     /// Hidden rather than removed from the parser, so a boot that fails can be reproduced by hand

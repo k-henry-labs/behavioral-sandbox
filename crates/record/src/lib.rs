@@ -202,7 +202,7 @@ impl Verb {
         }
     }
 
-    /// The verb a word names, for a reader of a record or of a console's answer about one.
+    /// The verb a word names, for a reader of a record.
     #[must_use]
     pub fn from_word(word: &str) -> Option<Self> {
         match word {

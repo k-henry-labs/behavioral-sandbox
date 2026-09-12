@@ -27,7 +27,7 @@ boxdesk-record = { path = "../record" }
 boxdesk-serve = { path = "../serve" }
 boxdesk-supervisor = { path = "../supervisor" }
 clap = { workspace = true }
-# The cloud's answers and its RFC 9457 refusals. The lanes are JSON; nothing else here parses any.
+# Machine-readable `--json` output for runs, snapshots, images, and volumes.
 serde_json = { workspace = true }
 axum = { workspace = true }
 tokio = { workspace = true }

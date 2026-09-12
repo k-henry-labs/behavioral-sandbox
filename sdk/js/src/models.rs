@@ -62,7 +62,7 @@ pub struct JsRun {
 /// The record, and the directory's contents when there is still a directory.
 ///
 /// Spelled to match `crates/cli/src/json.rs` key for key, so a caller reading a local run and one
-/// pulled from a console deserialises into one type.
+/// served over HTTP deserialises into one type.
 pub fn convert_record(record: &Record, dir: Option<&RunDir>, live: Option<bool>) -> JsRun {
     let (end_kind, end_code) = match record.end {
         Some(End::Exit(code)) => (Some("exit"), Some(i64::from(code))),

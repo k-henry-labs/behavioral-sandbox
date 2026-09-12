@@ -18,7 +18,7 @@
 
 use std::ffi::OsString;
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use crate::{ParseError, checked_id, id_rule, line, now_ms, temp_name, unescape, valid_id};
 
@@ -157,12 +157,6 @@ impl VolumeStore {
         builder.mode(0o700);
         builder.create(&dir)?;
         Ok(Self { dir })
-    }
-
-    /// Where the store is.
-    #[must_use]
-    pub fn dir(&self) -> &Path {
-        &self.dir
     }
 
     /// Every volume in the store, by name. A directory that will not parse is skipped rather than

@@ -295,7 +295,6 @@ dependencies = [
  "objc2-foundation 0.2.2",
  "rustix 1.1.4",
  "ttf-parser",
- "zeroize",
 ]
 
 [[package]]

@@ -42,14 +42,32 @@ function workspaceVersion() {
 
 const version = workspaceVersion();
 
-// Four destinations, each one a page or a file that exists. The book's own
-// order is the sidebar's; this is the shortcut for a reader who arrived with
-// one question.
+const REPO = "https://github.com/boxdesk/boxdesk/tree/main";
+
+/**
+ * The band's own shortcuts, for a reader who arrived with one question. Each
+ * destination is a page or a directory that exists; the book's reading order
+ * is the sidebar's job, not this one's.
+ *
+ * Reference is a menu because the four SDKs are not pages here: each is a
+ * README beside the code it documents, which is the copy that cannot go stale
+ * against it.
+ */
 const NAV = [
   { label: "Examples", href: "/examples/" },
   { label: "Architecture", href: "/architecture/" },
+  {
+    label: "Reference",
+    items: [
+      { label: "Rust SDK", href: `${REPO}/sdk/rust` },
+      { label: "Python SDK", href: `${REPO}/sdk/python` },
+      { label: "JavaScript SDK", href: `${REPO}/sdk/js` },
+      { label: "Go SDK", href: `${REPO}/sdk/go` },
+      { label: "CLI", href: "/running/#the-verbs", divide: true },
+      { label: "Protocols", href: "/control-ipc/" },
+    ],
+  },
   { label: "Security", href: "/security/" },
-  { label: "Roadmap", href: "https://github.com/boxdesk/boxdesk/blob/main/ROADMAP.md" },
 ];
 
 const shouldRenderSearch =
@@ -64,11 +82,38 @@ const here = Astro.url.pathname;
     <span class="slash" aria-hidden="true">/</span>
     <nav class="top-nav" aria-label="Sections">
       {
-        NAV.map(({ label, href }) => (
-          <a href={href} aria-current={here === href ? "page" : undefined}>
-            {label}
-          </a>
-        ))
+        NAV.map((entry) =>
+          entry.items ? (
+            <div class="menu-wrap">
+              <button
+                type="button"
+                class="nav-item"
+                aria-expanded="false"
+                aria-controls={`menu-${entry.label.toLowerCase()}`}
+              >
+                {entry.label}
+                <svg class="chev" viewBox="0 0 10 6" aria-hidden="true" focusable="false">
+                  <path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" />
+                </svg>
+              </button>
+              <ul class="menu" id={`menu-${entry.label.toLowerCase()}`} hidden>
+                {entry.items.map((item) => (
+                  <li class={item.divide ? "divide" : undefined}>
+                    <a href={item.href}>{item.label}</a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <a
+              class="nav-item"
+              href={entry.href}
+              aria-current={here === entry.href ? "page" : undefined}
+            >
+              {entry.label}
+            </a>
+          )
+        )
       }
     </nav>
   </div>
@@ -121,7 +166,13 @@ const here = Astro.url.pathname;
     gap: 1.25rem;
     align-items: center;
   }
-  .top-nav a {
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0;
+    border: 0;
+    background: none;
     color: var(--sl-color-gray-3);
     font-family: var(--sl-font-mono);
     font-size: var(--sl-text-xs);
@@ -129,9 +180,61 @@ const here = Astro.url.pathname;
     text-transform: uppercase;
     text-decoration: none;
     white-space: nowrap;
+    cursor: pointer;
   }
-  .top-nav a:hover,
-  .top-nav a[aria-current="page"] {
+  .nav-item:hover,
+  .nav-item[aria-current="page"],
+  .nav-item[aria-expanded="true"] {
+    color: var(--sl-color-white);
+  }
+
+  .chev {
+    width: 0.625rem;
+    height: 0.375rem;
+    transition: transform 0.15s;
+  }
+  .nav-item[aria-expanded="true"] .chev {
+    transform: rotate(180deg);
+  }
+
+  .menu-wrap {
+    position: relative;
+  }
+
+  /* The menu hangs off the band on the surface a raised thing wears, held by
+     the same hairline every other edge is drawn in. */
+  .menu {
+    position: absolute;
+    inset-block-start: calc(100% + 0.75rem);
+    inset-inline-start: -0.75rem;
+    z-index: 1;
+    min-inline-size: 13rem;
+    margin: 0;
+    padding: 0.35rem 0;
+    list-style: none;
+    background: var(--sl-color-gray-6);
+    border: 1px solid var(--sl-color-hairline);
+  }
+  .menu[hidden] {
+    display: none;
+  }
+  .menu li.divide {
+    margin-block-start: 0.35rem;
+    border-block-start: 1px solid var(--sl-color-hairline);
+    padding-block-start: 0.35rem;
+  }
+  .menu a {
+    display: block;
+    padding: 0.4rem 0.9rem;
+    color: var(--sl-color-gray-2);
+    font-family: var(--sl-font-mono);
+    font-size: var(--sl-text-xs);
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .menu a:hover,
+  .menu a:focus-visible {
+    background: var(--sl-color-accent-low);
     color: var(--sl-color-white);
   }
 
@@ -178,3 +281,32 @@ const here = Astro.url.pathname;
     }
   }
 </style>
+
+<script>
+  // A disclosure, not a menubar: the contents are links, so the button only
+  // has to open the list and hand the keyboard back. Escape and a press
+  // outside close it, because a panel with no way out is the one bug every
+  // hand-written dropdown ships with.
+  for (const button of document.querySelectorAll<HTMLButtonElement>(".top-nav .nav-item[aria-controls]")) {
+    const menu = document.getElementById(button.getAttribute("aria-controls")!);
+    if (!menu) continue;
+
+    const setOpen = (open: boolean) => {
+      button.setAttribute("aria-expanded", String(open));
+      menu.hidden = !open;
+    };
+
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      setOpen(button.getAttribute("aria-expanded") !== "true");
+    });
+    menu.addEventListener("click", (event) => event.stopPropagation());
+    document.addEventListener("click", () => setOpen(false));
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && button.getAttribute("aria-expanded") === "true") {
+        setOpen(false);
+        button.focus();
+      }
+    });
+  }
+</script>

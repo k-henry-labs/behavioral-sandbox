@@ -1492,9 +1492,6 @@ impl App {
             .unwrap_or_default();
         let mut runs = self.store.list().unwrap_or_default();
         settle_gone(&self.store, &mut runs, &self.live);
-        // A console's runs are merged in rather than replacing anything: a person signed in on a
-        // laptop still has their own, and a run that is in both places is this machine's, because
-        // only this machine's copy can be stopped, shelled into or watched.
         runs.sort_by(|a, b| b.started_ms.cmp(&a.started_ms).then(b.id.cmp(&a.id)));
         self.runs = runs;
         if let Screen::Run(id) = &self.screen {
@@ -1787,7 +1784,6 @@ impl App {
         self.displays.retain(|name, _| wanted.contains(name));
     }
 
-    /// Makes a device key, opens the console's page on it, and asks once whether it was
     /// The record with `name`, from the last tick.
     fn record_by_name(&self, name: &RunName) -> Option<&Record> {
         self.runs.iter().find(|r| r.name == name.as_str())
@@ -2771,10 +2767,6 @@ mod tests {
         app
     }
 
-    /// The pairing loop as the window drives it: a claim nobody has approved keeps the block
-    /// waiting, one that is refused stops and says why, and a claim that lands after Cancel is
-    /// dropped rather than signing a window in that gave up.
-    ///
     /// Only the newest open run of a name is the one a VM answering under it belongs to. An
     /// older one is an abandoned run whose name a later sandbox took: shown as running, and
     /// leased for a display it does not have, until it is written back as gone.

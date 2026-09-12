@@ -24,10 +24,6 @@ boxdesk-record = { path = "../record" }
 boxdesk-supervisor = { path = "../supervisor" }
 clap = { workspace = true }
 iced = { workspace = true }
-# The console's answer to a sign-in, `/v1/account`, is the one JSON this reads.
-# The token is wiped when dropped, and so is a device key read off disk.
-zeroize = { workspace = true }
-# The device keypair pairing makes, and the SHA-256 its fingerprint is.
 # The monotonic clock the frame logs share with the helper's `--frame-log`.
 rustix = { workspace = true, features = ["time"] }
 

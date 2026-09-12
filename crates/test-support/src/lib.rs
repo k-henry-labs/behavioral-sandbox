@@ -201,12 +201,6 @@ impl ScratchDir {
         this
     }
 
-    /// Adopts an existing dir (one the code under test produced) so it is reclaimed on drop.
-    #[must_use]
-    pub fn adopt(dir: PathBuf) -> Self {
-        Self(dir)
-    }
-
     #[must_use]
     pub fn path(&self) -> &Path {
         &self.0
