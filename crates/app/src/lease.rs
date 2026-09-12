@@ -367,13 +367,15 @@ mod tests {
         // Other tests' threads come and go beside this one, so the count is a ceiling, not a
         // number: the lease thread is gone when the process holds no more than it did.
         let deadline = std::time::Instant::now() + Duration::from_secs(5);
-        while threads().is_some_and(|now| now > before) && std::time::Instant::now() < deadline {
+        let mut gone = false;
+        while !gone && std::time::Instant::now() < deadline {
+            if threads().is_some_and(|now| now <= before) {
+                gone = true;
+                break;
+            }
             std::thread::sleep(Duration::from_millis(20));
         }
-        assert!(
-            threads().is_some_and(|now| now <= before),
-            "the lease thread is gone"
-        );
+        assert!(gone, "the lease thread is gone");
     }
 
     /// A scripted record source: hands out `events` in order, then reports nothing readable and
